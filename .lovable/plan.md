@@ -1,60 +1,37 @@
-## What the error means
+## Assumptions
+- Request refers to the **Password** tab of the user access sheet (`UserAccessSheet.tsx`), which today renders only "Last rollout".
+- History should be **per-user** (this sheet's user), newest first, and include who performed it.
+- No schema change is required: `password_rollout_logs` already stores every attempt (`created_at`, `status`, `email_sent`, `email_error`, `error_message`, `generated_by`).
 
-The toast `stage dept_head is not enabled for this instance` comes from
-`advance_annual_review_status()` — it refuses to submit a stage that is not
-present in `annual_review_instances.enabled_stages`.
+## Clarifications
+None blocking. If you also want a global (all-users) rollout history screen, say so — that is a separate surface (`PasswordPolicyTab`) and not in this plan.
 
-## Confirmed current state (verified by query)
-
-Exactly **4** instances in the whole cycle are in this dead-end — their
-`overall_status` points at a stage that their own `enabled_stages` no longer
-contains. All four are the same shape:
-
-| Emp code | Name | overall_status | enabled_stages | dept_head_id | bu_head_id |
-|---|---|---|---|---|---|
-| 101851 | Rupesh Kumar Sharma | pending_dept | `[self, bu_head]` | 102050 | 102050 |
-| 101769 | Prince Prakash | pending_dept | `[self, bu_head]` | 102050 | 102050 |
-| 101149 | Preeti Jain | pending_dept | `[self, bu_head]` | 102050 | 102050 |
-| 100010 | Ashok Kumar Mahto | pending_dept | `[self, bu_head]` | 102050 | 102050 |
-
-`dept_head_id` and `bu_head_id` are the **same person** — Amit Kumar Sharma
-(102050, active). He is the one hitting the error: the UI routes him to the
-Dept Head form because `overall_status = 'pending_dept'`, but the RPC rejects
-the submit because `dept_head` was removed from `enabled_stages`.
-100010 already has an unlocked `dept_head` response row with 10 criteria
-scored; the other three have only the locked `self` row.
-
-All four were last touched at the same instant (`2026-07-27 04:55:51`), i.e. a
-single bulk stage-contraction (dept/BU dedup family, ADR-198/§AR-BU-HEAD-TERMINAL
-lineage) removed `dept_head` from `enabled_stages` **without re-anchoring
-`overall_status`** — violating POLICY §AR-STAGE-REVERT-NO-DEAD-END. I have not
-yet pinned the exact mutator; step 1 confirms it from the audit log before any
-guard is written.
-
-No other status/enabled_stages mismatch exists anywhere else in the table.
-
-## Risk & impact
-
-- **Data**: touches only these 4 rows plus one response row (role rename). No schema drop; additive trigger only.
-- **Workflow**: 100010's already-entered Dept Head scores are preserved by re-labelling the row to `bu_head` (same reviewer, so no ownership change and ADR-142 rebind stays satisfied).
-- **Regression risk**: the new invariant trigger could reject legitimate stage edits made by `annual_review_edit_workflow` / `set_annual_review_enabled_stages`; mitigated by having those RPCs re-anchor first and by writing the trigger as a re-anchor (self-heal) rather than a hard raise.
-- **Rollback**: snapshot table `annual_review_dept_deadend_repair_2026_07` holds pre-change rows; `DROP TRIGGER` reverts the guard.
+## Risk & Impact Report
+- **Data impact**: None. Read-only additional query; no schema, RLS or trigger change.
+- **Workflow impact**: None. Generate buttons behave exactly as before.
+- **UI/UX impact**: The "Last rollout" block becomes "Rollout history" — a compact, scrollable, paginated list inside the same panel; latest entry still first and visually emphasised.
+- **Regression risk**: Low, isolated to `PasswordPanel`. The existing `['password-rollout-last', user.id]` cache key is replaced, so the post-generate invalidation must be updated in the same edit or the list will look stale.
+- **Scalability**: Server-side pagination with `.range()` (page size 10) plus `count: 'exact'` — never loads the full log. Query is indexed by `user_id` + `created_at` ordering.
 
 ## Plan
+1. **Data hook** — add `usePasswordRolloutHistory(userId, page)` (in `src/hooks/usePasswordRollout.ts`) that selects `id, created_at, status, email_sent, email_error, error_message, generated_by` from `password_rollout_logs` where `user_id = :id`, ordered `created_at desc`, with `.range(page*10, page*10+9)` and exact count.
+   *Verification*: hook returns rows + `totalCount`; unit test with a mocked client asserts range math and ordering.
+2. **Performer names** — resolve distinct `generated_by` ids to `full_name`/`employee_code` via a single `profiles` `in()` lookup for the current page only, falling back to "System" when unresolved.
+   *Verification*: unit test covers unresolved id → "System".
+3. **UI** — replace the "Last rollout" section in `PasswordPanel` with "Rollout history": a bordered list of rows (timestamp · status badge · email sent / error · performed by), the newest row highlighted as "Latest", empty state kept ("No rollout has been performed for this user."), and a footer with `Showing X–Y of N` plus Prev/Next buttons (disabled at bounds, spinner while fetching).
+   *Verification*: manual check on a user with multiple rollouts; empty state check on a user with none.
+4. **Cache correctness** — after a successful generate, invalidate `['password-rollout-history', user.id]` and reset to page 0.
+   *Verification*: generate a password and confirm the new entry appears at top without reload.
+5. **Docs & policy** — add ADR-201 (per-user rollout history visibility, pagination mandatory) and append the version history entry in `DOCUMENTATION.md`; add a line to `POLICY.md` under credential-rollout governance stating rollout logs are immutable and fully visible to admins with `pms.users.password_rollout`.
 
-1. **Confirm the mutator** — read `system_audit_logs` around `2026-07-27 04:55:51` for these instance ids to identify which RPC/trigger stripped `dept_head`.
-2. **Snapshot** the 4 instances and their responses into `annual_review_dept_deadend_repair_2026_07` (id, overall_status, enabled_stages, reason).
-3. **Repair data (migration)**
-   - For 100010: `UPDATE annual_review_responses SET reviewer_role='bu_head' WHERE instance_id=… AND reviewer_role='dept_head'` (reviewer_id is already 102050 = bu_head_id), only if no `bu_head` row exists.
-   - For all 4: `overall_status := 'pending_bu'` (first enabled pending stage per `annual_review_first_pending_status`), `updated_at = now()`.
-   - Audit-log each as `annual_review.deadend_reanchor` with previous status, new status and reason.
-4. **Prevent recurrence (invariant)** — add `tg_ar_status_within_enabled_stages` (BEFORE UPDATE on `annual_review_instances`): when `overall_status` is a `pending_*` value whose role is not in `enabled_stages`, re-anchor it to the first enabled pending stage via the existing `annual_review_first_pending_status` helper (and log to `system_audit_logs`) instead of leaving a dead end. Raise only if no enabled stage can host the review.
-5. **Close the loop in the stage-contraction path** — make the dept/BU-terminal contraction routine call the same re-anchor helper explicitly, so the trigger is a safety net rather than the mechanism.
-6. **Tests** — extend `src/lib/annualReview/stageChain.ts` coverage with a case asserting that a status whose role is disabled resolves to the first enabled pending stage; add a SQL-contract test/mock covering the trigger's re-anchor and the raise-on-no-stage path.
-7. **Docs** — new `docs/adr/ADR-200.md` (dead-end re-anchor invariant), POLICY §AR-STAGE-REVERT-NO-DEAD-END extended to cover `enabled_stages` contraction, DOCUMENTATION.md version bump, and a `mem://` memory note.
+## UI Changes
+- **Location**: user access sheet → **Password** tab, bottom section (currently "Last rollout").
+- **Visual**: heading becomes "Rollout history"; card list of up to 10 entries, max-height with internal scroll on mobile; each row: date-time (muted, xs), status badge (`success` outline / else destructive), "Email: sent / not sent / <error>", "By: <name>".
+- **Interaction**: Prev/Next pagination; buttons disabled during fetch; no change to the two generate buttons above.
+- **Responsiveness**: single-column stack, list rows wrap; touch targets ≥ 40px for pagination buttons.
 
-## Verification
+## Tests
+- `src/hooks/__tests__/passwordRolloutHistory.test.ts`: range/pagination math, descending order, empty result, error propagation, performer-name fallback.
 
-- Re-run the mismatch query: expect **0** rows with `overall_status` outside `enabled_stages`.
-- Confirm the four instances read `pending_bu` with Amit Kumar Sharma (102050) as the active BU Head reviewer, and that 100010's 10 criteria scores are intact under `bu_head`.
-- Ask 102050 to submit one of them (or simulate via the RPC) and confirm no error.
+## Post-implementation notes
+Rollout logs are append-only; nothing in this change writes to them. Rollback = revert the `PasswordPanel` section and hook (no data migration).

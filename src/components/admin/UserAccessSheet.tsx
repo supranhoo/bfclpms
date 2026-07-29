@@ -21,6 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, UserPlus, Trash2, Mail, KeyRound, ShieldCheck, History, Inbox, Search, ExternalLink, AlertTriangle } from 'lucide-react';
 import { useIacAssignments, useIacRoles, useGrantRole, useRevokeAssignment } from '@/hooks/useIac';
 import { CanAction } from '@/components/platform/CanAction';
+import { usePasswordRolloutHistory, ROLLOUT_HISTORY_PAGE_SIZE } from '@/hooks/usePasswordRollout';
 
 export interface UserAccessSheetUser {
   id: string;
@@ -308,34 +309,17 @@ function RolesPanel({ user }: { user: UserAccessSheetUser }) {
 // ============================================================
 // Password
 // ============================================================
-interface RolloutLog {
-  id: string;
-  created_at: string;
-  email_sent: boolean;
-  status: string;
-  email_error: string | null;
-  error_message: string | null;
-}
-
 function PasswordPanel({ user }: { user: UserAccessSheetUser }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [busy, setBusy] = useState<'email' | 'no_email' | null>(null);
+  const [page, setPage] = useState(0);
 
-  const { data: lastLog } = useQuery<RolloutLog | null>({
-    queryKey: ['password-rollout-last', user.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('password_rollout_logs')
-        .select('id, created_at, email_sent, status, email_error, error_message')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return (data as RolloutLog | null) ?? null;
-    },
-  });
+  const { data: history, isFetching: historyLoading } = usePasswordRolloutHistory(user.id, page);
+  const rows = history?.rows ?? [];
+  const total = history?.totalCount ?? 0;
+  const rangeStart = total === 0 ? 0 : page * ROLLOUT_HISTORY_PAGE_SIZE + 1;
+  const rangeEnd = Math.min((page + 1) * ROLLOUT_HISTORY_PAGE_SIZE, total);
 
   const run = async (sendEmail: boolean) => {
     setBusy(sendEmail ? 'email' : 'no_email');
@@ -354,7 +338,8 @@ function PasswordPanel({ user }: { user: UserAccessSheetUser }) {
           ? 'Credentials emailed to the user.'
           : 'Share the password manually — user logs in via Employee Code.',
       });
-      qc.invalidateQueries({ queryKey: ['password-rollout-last', user.id] });
+      setPage(0);
+      qc.invalidateQueries({ queryKey: ['password-rollout-history', user.id] });
     } catch (e) {
       toast({ title: 'Rollout failed', description: (e as Error).message, variant: 'destructive' });
     } finally {
@@ -402,23 +387,62 @@ function PasswordPanel({ user }: { user: UserAccessSheetUser }) {
       </section>
 
       <section>
-        <h3 className="text-sm font-semibold mb-2">Last rollout</h3>
-        {!lastLog ? (
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-semibold">Rollout history</h3>
+          {historyLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+        </div>
+
+        {total === 0 && !historyLoading ? (
           <p className="text-sm text-muted-foreground">No rollout has been performed for this user.</p>
         ) : (
-          <div className="border rounded-md p-3 text-sm space-y-1">
-            <p className="text-muted-foreground text-xs">
-              {new Date(lastLog.created_at).toLocaleString()}
-            </p>
-            <p>
-              Status:{' '}
-              <Badge variant={lastLog.status === 'success' ? 'outline' : 'destructive'} className="ml-1">
-                {lastLog.status}
-              </Badge>
-            </p>
-            <p>Email: {lastLog.email_sent ? 'sent' : (lastLog.email_error || 'not sent')}</p>
-            {lastLog.error_message && <p className="text-destructive text-xs">{lastLog.error_message}</p>}
-          </div>
+          <>
+            <div className="border rounded-md divide-y max-h-[320px] overflow-y-auto">
+              {rows.map((log, idx) => (
+                <div key={log.id} className="p-3 text-sm space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-muted-foreground text-xs">
+                      {new Date(log.created_at).toLocaleString()}
+                    </span>
+                    {page === 0 && idx === 0 && (
+                      <Badge variant="secondary" className="text-[10px]">Latest</Badge>
+                    )}
+                    <Badge variant={log.status === 'success' ? 'outline' : 'destructive'}>
+                      {log.status}
+                    </Badge>
+                  </div>
+                  <p>Email: {log.email_sent ? 'sent' : (log.email_error || 'not sent')}</p>
+                  <p className="text-xs text-muted-foreground">By: {log.generated_by_name}</p>
+                  {log.error_message && <p className="text-destructive text-xs">{log.error_message}</p>}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between gap-2 mt-2">
+              <span className="text-xs text-muted-foreground">
+                Showing {rangeStart}–{rangeEnd} of {total}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-10 min-w-[72px]"
+                  disabled={page === 0 || historyLoading}
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                >
+                  Prev
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-10 min-w-[72px]"
+                  disabled={rangeEnd >= total || historyLoading}
+                  onClick={() => setPage(p => p + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </>
         )}
       </section>
     </div>
