@@ -20,6 +20,7 @@ const VAR_DEFAULT_FIELDS = [
   { field_key: 'company',          default_label: 'Company',          default_sort: 10 },
   { field_key: 'employee_code',    default_label: 'Employee Code',    default_sort: 20, is_required: true },
   { field_key: 'employee_name',    default_label: 'Employee Name',    default_sort: 30, is_required: true },
+  { field_key: 'employee_status',  default_label: 'Employee Status',  default_sort: 35 },
   { field_key: 'department',       default_label: 'Department',       default_sort: 40 },
   { field_key: 'category',         default_label: 'Category',         default_sort: 50 },
   { field_key: 'kra',              default_label: 'KRA',              default_sort: 60 },
@@ -42,6 +43,7 @@ interface VarianceRow {
   employeeId: string;
   employeeCode: string;
   employeeName: string;
+  employeeIsActive: boolean | null;
   department: string;
   category: string;
   kraName: string;
@@ -60,6 +62,7 @@ export default function VarianceReport() {
   const [page, setPage] = useState(0);
   const { canDownload } = useReportAccess();
   const { getCompanyCode } = useCompanyFilter();
+  const { mode: empStatus } = useEmployeeStatusFilter();
 
   const { data: rawData, isLoading } = useQuery({
     queryKey: ['variance-report', month, year],
@@ -69,7 +72,7 @@ export default function VarianceReport() {
         .select(`
           id, kra_name, kpi_name, category_id, employee_id, review_period,
           review_submissions(auditor_score, management_score),
-          profiles!kpis_employee_id_fkey(employee_code, full_name, department_id,
+          profiles!kpis_employee_id_fkey(employee_code, full_name, department_id, is_active,
             departments!profiles_department_fk(name)),
           kra_categories!kpis_category_id_fkey(name)
         `)
@@ -106,6 +109,7 @@ export default function VarianceReport() {
         employeeId: kpi.employee_id || '',
         employeeCode: profile?.employee_code || '—',
         employeeName: profile?.full_name || 'Unknown',
+        employeeIsActive: profile?.is_active ?? null,
         department: (Array.isArray(dept) ? dept[0]?.name : dept?.name) || '—',
         category: cat?.name || '—',
         kraName: kpi.kra_name || '—',
@@ -121,9 +125,11 @@ export default function VarianceReport() {
   }, [rawData, month]);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return rows;
+    // ADR-199 — employee active/inactive scope.
+    const scoped = applyEmployeeStatusFilter(rows, empStatus, r => r.employeeIsActive);
+    if (!search.trim()) return scoped;
     const q = search.toLowerCase();
-    return rows.filter(
+    return scoped.filter(
       (r) =>
         r.employeeName.toLowerCase().includes(q) ||
         r.employeeCode.toLowerCase().includes(q) ||
@@ -131,7 +137,7 @@ export default function VarianceReport() {
         r.kraName.toLowerCase().includes(q) ||
         r.department.toLowerCase().includes(q)
     );
-  }, [rows, search]);
+  }, [rows, search, empStatus]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -169,6 +175,7 @@ export default function VarianceReport() {
       return row;
     });
     const ws = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
+    appendEmployeeScopeNote(ws, empStatus);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Variance Report');
     XLSX.writeFile(wb, `Variance_Report_${month}_${year}.xlsx`);
