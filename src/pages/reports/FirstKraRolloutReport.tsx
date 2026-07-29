@@ -14,6 +14,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Download, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { useEmployeeStatusFilter } from '@/hooks/useEmployeeStatusFilter';
+import { employeeStatusCell } from '@/lib/reportEmployeeFilter';
 
 type Row = {
   employee_id: string;
@@ -52,6 +55,8 @@ export default function FirstKraRolloutReport() {
   const [from, setFrom] = useState<string>('');
   const [to, setTo] = useState<string>('');
   const [page, setPage] = useState(0);
+  // ADR-199 — employee active/inactive scope (server-side, report is paged).
+  const { mode: empStatus } = useEmployeeStatusFilter();
 
   const filters = useMemo(() => ({
     p_search: search.trim() || null,
@@ -62,9 +67,10 @@ export default function FirstKraRolloutReport() {
     p_to: to ? new Date(to + 'T23:59:59').toISOString() : null,
     p_source: source === 'all' ? null : source,
     p_only_missing: onlyMissing,
+    p_emp_status: empStatus,
     p_limit: PAGE_SIZE,
     p_offset: page * PAGE_SIZE,
-  }), [search, source, onlyMissing, from, to, page]);
+  }), [search, source, onlyMissing, from, to, page, empStatus]);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['first-kra-rollout', filters],
@@ -91,7 +97,7 @@ export default function FirstKraRolloutReport() {
       if (error) throw error;
       const all = (data ?? []) as Row[];
       const headers = [
-        'Employee','Employee Code','Designation','Department','Business Unit','Company',
+        'Employee','Employee Code','Employee Status','Designation','Department','Business Unit','Company',
         'DOJ','First KRA Period','First KRA At','Rolled Out By','Source','KPIs (first batch)','Total KPIs',
       ];
       const csv = [
@@ -99,6 +105,7 @@ export default function FirstKraRolloutReport() {
         ...all.map(r => [
           r.full_name ?? '',
           r.employee_code ?? '',
+          employeeStatusCell(r.is_active),
           r.designation ?? '',
           r.department_name ?? '',
           r.business_unit_name ?? '',
@@ -145,6 +152,10 @@ export default function FirstKraRolloutReport() {
             <div className="md:col-span-2 space-y-2">
               <Label>Search (name or code)</Label>
               <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="e.g. 100017 or Satyam" />
+            </div>
+            <div className="space-y-2">
+              <Label>Employees</Label>
+              <EmployeeStatusFilter />
             </div>
             <div className="space-y-2">
               <Label>Source</Label>
