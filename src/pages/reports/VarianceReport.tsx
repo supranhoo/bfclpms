@@ -4,6 +4,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
 import { CompanyFilter } from '@/components/reports/CompanyFilter';
+import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
+import { useEmployeeStatusFilter } from '@/hooks/useEmployeeStatusFilter';
+import { applyEmployeeStatusFilter, employeeStatusCell } from '@/lib/reportEmployeeFilter';
+import { appendEmployeeScopeNote } from '@/lib/reportExportScope';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -158,6 +162,7 @@ export default function VarianceReport() {
         case 'company':          return getCompanyCode(r.employeeId);
         case 'employee_code':    return r.employeeCode;
         case 'employee_name':    return r.employeeName;
+        case 'employee_status':  return employeeStatusCell(r.employeeIsActive);
         case 'department':       return r.department;
         case 'category':         return r.category;
         case 'kra':              return r.kraName;
@@ -217,6 +222,7 @@ export default function VarianceReport() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="flex items-end pb-0.5"><EmployeeStatusFilter /></div>
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
