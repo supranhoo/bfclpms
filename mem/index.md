@@ -32,6 +32,7 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [review-evidence on-behalf upload (ADR-096)](mem://architecture/security/review-evidence-onbehalf-upload) — admin + hr_pms permissive INSERT/UPDATE/DELETE on storage.objects scoped to `review-evidence`; fixes Admin Data Entry "row-level security" upload failures while keeping employee-folder paths so the reporting chain can read what was uploaded
 
 ## Memories
+- [Password Rollout History](mem://features/admin/password-rollout-history) — Append-only rollout log; Password tab shows the full per-user history, paginated 10/page
 - [Annual Review System](mem://features/annual-review/overview) — Phase 1 module: 5 tables, snapshot reviewer chain, advance RPC, multilingual + XLSX, feature-flag gated
 - [Annual Review Per-Employee Template Override](mem://features/annual-review/per-employee-template-override) — template_override_id, resolveTemplateId SSOT, override-safe seeder, set RPC
 - [Annual Review Admin Exports](mem://features/annual-review/exports) — Download menu (Excel + PDF) on Admin → Progress: blank template, bulk results, seeding, per-employee PDF; role-gated, filter-aware, capped
