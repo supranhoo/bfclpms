@@ -281,25 +281,23 @@ export default function TNIReport() {
         default: return '';
       }
     };
-    const exportData = trainingNeeds.map((tn) => {
+    const exportData = scopedNeeds.map((tn) => {
       const row: Record<string, string | number> = {};
       for (const fld of visible) row[fld.label] = valueFor(tn, fld.field_key);
       return row;
     });
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) }),
-      'Detail',
-    );
+    const detailWs = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
+    appendEmployeeScopeNote(detailWs, empStatus);
+    XLSX.utils.book_append_sheet(wb, detailWs, 'Detail');
 
     // Monthly Summary sheet — pivot by (Year, Month)
     const buckets = new Map<string, {
       Year: number; Month: string; SkillGaps: number; ComplianceGaps: number;
       HighPriority: number; Employees: Set<string>;
     }>();
-    trainingNeeds.forEach(tn => {
+    scopedNeeds.forEach(tn => {
       const key = `${tn.review_year}|${tn.review_period}`;
       if (!buckets.has(key)) {
         buckets.set(key, {
