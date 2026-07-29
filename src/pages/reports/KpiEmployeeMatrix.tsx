@@ -145,13 +145,16 @@ export default function KpiEmployeeMatrix() {
   // Company-filter employees
   const filteredEmployees = useMemo(() => {
     if (!data) return [];
-    if (selectedCompanyId === 'all') return data.employees;
-    return data.employees.filter(e => filterByCompany(e.id));
-  }, [data, selectedCompanyId, filterByCompany]);
+    const byCompany =
+      selectedCompanyId === 'all'
+        ? data.employees
+        : data.employees.filter(e => filterByCompany(e.id));
+    // ADR-199 — employee active/inactive scope.
+    return applyEmployeeStatusFilter(byCompany, empStatus, e => e.isActive);
+  }, [data, selectedCompanyId, filterByCompany, empStatus]);
 
   const filteredRows = useMemo(() => {
     if (!data) return [];
-    if (selectedCompanyId === 'all') return data.rows;
     // Keep only rows that have at least one filtered employee mapped
     const empIds = new Set(filteredEmployees.map(e => e.id));
     return data.rows.map(row => ({
@@ -164,7 +167,7 @@ export default function KpiEmployeeMatrix() {
       ),
       employeeCount: Object.keys(row.employeeScores).filter(eid => empIds.has(eid)).length,
     }));
-  }, [data, selectedCompanyId, filteredEmployees]);
+  }, [data, filteredEmployees]);
 
   // Hide-unmapped: keep only employees who appear in at least one filtered row.
   const visibleEmployees = useMemo(() => {
