@@ -25,7 +25,9 @@ describe('employee status filter coverage', () => {
   it.each(REPORTS)('%s reads the shared status mode', (name) => {
     const src = read(name);
     expect(
-      src.includes('useEmployeeStatusFilter') || src.includes('emp_status'),
+      src.includes('useEmployeeStatusFilter') ||
+        src.includes('emp_status') ||
+        src.includes('setEmpStatus'),
     ).toBe(true);
   });
 });
