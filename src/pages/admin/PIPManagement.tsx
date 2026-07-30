@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,10 +18,10 @@ import {
   type PIPStatus,
 } from '@/lib/pip/pipVocabulary';
 import { useAuth } from '@/contexts/AuthContext';
-import { PIPCreateDialog } from '@/components/pip/PIPCreateDialog';
 import { PIPDetailSheet } from '@/components/pip/PIPDetailSheet';
 import { PIPSuggestionsPanel } from '@/components/pip/PIPSuggestionsPanel';
 import type { PIPCandidate } from '@/hooks/usePIPCandidates';
+import type { MonthKey } from '@/hooks/useMonthlyTrend';
 import { 
   AlertTriangle, 
   CheckCircle2, 
@@ -46,32 +47,34 @@ const STATUS_ICONS: Record<PIPStatus, React.ElementType> = {
 
 export default function PIPManagement() {
   const { role } = useAuth();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<PIPStatus | 'all'>('all');
-  const [createOpen, setCreateOpen] = useState(false);
   const [selectedPipId, setSelectedPipId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [view, setView] = useState<'plans' | 'suggestions'>('plans');
-  const [prefill, setPrefill] = useState<{
-    employeeId: string;
-    reason: string;
-    triggerSource: 'monthly_trend' | 'annual_rating';
-    triggerContext: Record<string, unknown>;
-  } | null>(null);
 
-  const handleInitiateFromSuggestion = (c: PIPCandidate) => {
-    setPrefill({
-      employeeId: c.employeeId,
-      reason: c.reason,
-      triggerSource: c.triggers[0] ?? 'monthly_trend',
-      triggerContext: {
-        triggers: c.triggers,
-        months: c.monthly.months,
-        worst_score: c.monthly.worstScore,
-        annual_rating: c.annualRating,
+  /** ADR-208 — creation is a full page; the suggestion travels in the URL + state. */
+  const handleInitiateFromSuggestion = (c: PIPCandidate, months: MonthKey[]) => {
+    const params = new URLSearchParams({
+      employee: c.employeeId,
+      trigger: c.triggers[0] ?? 'monthly_trend',
+    });
+    if (months.length > 0) {
+      params.set('from', months[0].key);
+      params.set('to', months[months.length - 1].key);
+    }
+    navigate(`/admin/pip/new?${params.toString()}`, {
+      state: {
+        reason: c.reason,
+        triggerContext: {
+          triggers: c.triggers,
+          months: c.monthly.months,
+          worst_score: c.monthly.worstScore,
+          annual_rating: c.annualRating,
+        },
       },
     });
-    setCreateOpen(true);
   };
 
   // Reset to the first page whenever the result set changes shape.
@@ -115,7 +118,7 @@ export default function PIPManagement() {
         description="Manage and track employee performance improvement plans"
         backTo="/admin"
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button onClick={() => navigate('/admin/pip/new')}>
             <Plus className="h-4 w-4 mr-2" />
             New PIP
           </Button>
@@ -338,16 +341,6 @@ export default function PIPManagement() {
       </Tabs>
         </TabsContent>
       </Tabs>
-
-      {/* Create Dialog */}
-      <PIPCreateDialog
-        open={createOpen}
-        onOpenChange={(open) => { setCreateOpen(open); if (!open) setPrefill(null); }}
-        preselectedEmployeeId={prefill?.employeeId}
-        prefillReason={prefill?.reason}
-        triggerSource={prefill?.triggerSource}
-        triggerContext={prefill?.triggerContext}
-      />
 
       {/* Detail Sheet */}
       <PIPDetailSheet 
