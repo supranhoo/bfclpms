@@ -499,6 +499,44 @@ export function useExtendPIP() {
   });
 }
 
+// Cancel PIP (POLICY §13.1 "Cancelled" — enum value `terminated`)
+export function useCancelPIP() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ pipId, reason }: { pipId: string; reason: string }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('performance_improvement_plans')
+        .update({
+          status: 'terminated',
+          completion_remarks: reason,
+        } as any)
+        .eq('id', pipId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await writePipAudit(pipId, 'CANCELLED', null, { status: 'terminated', reason });
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pips'] });
+      queryClient.invalidateQueries({ queryKey: ['pip'] });
+      queryClient.invalidateQueries({ queryKey: ['pip-summary'] });
+      toast({ title: 'PIP cancelled' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Failed to cancel PIP', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
 // Update milestone
 export function useUpdateMilestone() {
   const queryClient = useQueryClient();
