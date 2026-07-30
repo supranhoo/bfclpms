@@ -1361,7 +1361,7 @@ export function EmployeeSelectorGrid({
         totalKpis: relevantKpis.length,
       };
     }
-  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipIdSet, directIdSet, submissionScoreMap, isFullAccess]);
+  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipIdSet, directIdSet, functionalIdSet, submissionScoreMap, isFullAccess]);
   // v2.66.11.17 — RCA closed. The HR PMS Reviewed tile is mathematically
   // correct (see DOCUMENTATION v2.66.11.17). The visible-list gap was a
   // symptom of zero-scored KPIs stuck at pre-HR-PMS stages, addressed by
@@ -1555,6 +1555,18 @@ export function EmployeeSelectorGrid({
           />
           <StatCard icon={Clock} label="Direct Pending" value={stats.stat1} color="yellow" subtitle="Awaiting manager review" onClick={() => toggleStatusFilter('pending_direct')} active={statusFilter === 'pending_direct'} />
           <StatCard icon={UserCheck} label="Skip-Level Pending" value={stats.stat2} color="amber" subtitle="Awaiting skip-level review" onClick={() => toggleStatusFilter('pending_skip')} active={statusFilter === 'pending_skip'} />
+          {(functionalIdSet.size > 0 || (stats.stat5 ?? 0) > 0) && (
+            <StatCard
+              icon={UserCheck}
+              label="Functional Pending"
+              value={stats.stat5 ?? 0}
+              color="blue"
+              subtitle="Awaiting functional manager review"
+              onClick={() => toggleStatusFilter('pending_functional')}
+              active={statusFilter === 'pending_functional'}
+              tooltip="KPIs sitting at the stage immediately before Functional Manager review for employees who report to you functionally."
+            />
+          )}
           <StatCard
             icon={CheckCircle2}
             label="Reviewed"
