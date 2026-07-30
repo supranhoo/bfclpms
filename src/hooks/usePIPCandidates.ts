@@ -51,11 +51,28 @@ export interface UsePIPCandidatesOptions {
   enabled: boolean;
   /** Reference "today" — injectable for tests. */
   today?: Date;
+  /**
+   * Optional anchor: the LAST month the window covers. Monthly KRA review can
+   * lag by up to two months, so admins may need to evaluate a window that ends
+   * on an older, fully-reviewed month. Defaults to the previous complete month.
+   */
+  anchor?: PipWindowAnchor;
 }
 
-/** Trailing complete months ending with the previous calendar month. */
-export function trailingWindow(windowMonths: number, today: Date) {
-  const end = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+export interface PipWindowAnchor {
+  month: string;
+  year: number;
+}
+
+/**
+ * `windowMonths` complete months ending at `anchor` (inclusive). When no anchor
+ * is supplied the window ends with the previous calendar month.
+ */
+export function trailingWindow(windowMonths: number, today: Date, anchor?: PipWindowAnchor) {
+  const anchorIdx = anchor ? MONTHS.indexOf(anchor.month) : -1;
+  const end = anchor && anchorIdx >= 0
+    ? new Date(anchor.year, anchorIdx, 1)
+    : new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const start = new Date(end.getFullYear(), end.getMonth() - (windowMonths - 1), 1);
   return {
     fromMonth: MONTHS[start.getMonth()],
@@ -65,9 +82,12 @@ export function trailingWindow(windowMonths: number, today: Date) {
   };
 }
 
-export function usePIPCandidates({ windowMonths, enabled, today }: UsePIPCandidatesOptions) {
+export function usePIPCandidates({ windowMonths, enabled, today, anchor }: UsePIPCandidatesOptions) {
   const now = today ?? new Date();
-  const range = useMemo(() => trailingWindow(windowMonths, now), [windowMonths, now.getFullYear(), now.getMonth()]);
+  const range = useMemo(
+    () => trailingWindow(windowMonths, now, anchor),
+    [windowMonths, now.getFullYear(), now.getMonth(), anchor?.month, anchor?.year],
+  );
 
   const thresholdQ = useQuery({
     queryKey: ['pip-threshold'],
