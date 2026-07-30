@@ -5340,3 +5340,12 @@ Rules:
 - Client-side pre-flight validation MUST mirror the server's acceptance rule exactly, including scoping predicates. For employee categories the rule is: accept when the category is global (`company_id IS NULL`) or bound to the row's resolved company. A name-only pre-flight that lets a cross-company row through is a policy violation.
 - Rejection messages must be actionable — distinguish "value does not exist" from "value exists but is out of scope", and name the admin screen that fixes it.
 - Regression: `src/test/edgeFunctionError.test.ts`, `src/test/importCategoryCompanyScope.test.ts`.
+
+## §AR-ASSISTED-SUBMISSION-VISIBILITY (ADR-203)
+- Every annual review self-stage submitted on an employee's behalf ("Assisted submission") MUST be recorded immutably in `annual_review_proxy_submissions` and MUST be inspectable by Admin / HR PMS without a database query.
+- Surface: **Annual Review → Admin → Assisted Submissions**. The view is strictly read-only; it never mutates a review.
+- Access is restricted to Admin and HR PMS via the `get_annual_review_assisted_submissions` / `get_annual_review_assisted_summary` RPCs (SECURITY DEFINER, role-checked). No client-side role gating is authoritative.
+- Listing is server-paginated (50 rows/page) with server-side filters: cycle, business unit, department, evidence completeness, capture date range, employee/assistant search. Loading the full audit set into the client is forbidden.
+- Evidence (live selfie, uploaded photograph) is exposed only through short-lived (5 minute) signed URLs minted when the evidence drawer opens for a single record. Signed URLs must never be minted for list rows.
+- Evidence completeness is an audit signal, not a blocker: rows missing a selfie and/or photograph MUST be visibly flagged (badge + summary counters) rather than hidden.
+- `profiles` has no `business_unit_id`; business unit for an assisted row is resolved via `departments.business_unit_id`.
