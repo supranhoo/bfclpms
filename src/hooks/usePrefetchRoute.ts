@@ -31,6 +31,7 @@ const ROUTE_LOADERS: Record<string, () => Promise<unknown>> = {
   '/admin/templates': () => import('@/pages/admin/KRALibrary'),
   '/admin/bundles': () => import('@/pages/admin/TemplateBundles'),
   '/admin/pip': () => import('@/pages/admin/PIPManagement'),
+  '/admin/pip/new': () => import('@/pages/admin/PIPCreate'),
   '/admin/observations': () => import('@/pages/admin/ObservationsOverview'),
   '/admin/email-logs': () => import('@/pages/admin/EmailLogs'),
   '/admin/rollback-requests': () => import('@/pages/admin/RollbackRequests'),
