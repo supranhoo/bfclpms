@@ -194,8 +194,7 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
 
   if (!pip) return null;
 
-  const statusConfig = STATUS_CONFIG[pip.status];
-  const StatusIcon = statusConfig.icon;
+  const StatusIcon = STATUS_ICONS[pip.status] ?? FileText;
   const effectiveEndDate = pip.extended_end_date || pip.end_date;
 
   return (
@@ -205,9 +204,9 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
           <SheetHeader>
             <div className="flex items-center justify-between">
               <SheetTitle>Performance Improvement Plan</SheetTitle>
-              <Badge variant={statusConfig.variant}>
+              <Badge variant={pipStatusVariant(pip.status)}>
                 <StatusIcon className="h-3 w-3 mr-1" />
-                {statusConfig.label}
+                {pipStatusLabel(pip.status)}
               </Badge>
             </div>
             <SheetDescription>
@@ -294,7 +293,6 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
                 {pip.milestones?.sort((a, b) => 
                   new Date(a.milestone_date).getTime() - new Date(b.milestone_date).getTime()
                 ).map((milestone, index) => {
-                  const msConfig = MILESTONE_STATUS_CONFIG[milestone.status];
                   return (
                     <div key={milestone.id} className="border rounded-lg p-3">
                       <div className="flex items-center justify-between mb-2">
@@ -302,8 +300,8 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
                           <span className="text-xs font-medium text-muted-foreground">
                             {format(new Date(milestone.milestone_date), 'dd MMM yyyy')}
                           </span>
-                          <Badge variant={msConfig.variant} className="text-xs">
-                            {msConfig.label}
+                          <Badge variant={pipMilestoneVariant(milestone.status)} className="text-xs">
+                            {pipMilestoneLabel(milestone.status)}
                           </Badge>
                         </div>
                         {canManage && (pip.status === 'active' || pip.status === 'extended') && (
@@ -361,8 +359,8 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
                   <CardTitle className="text-sm">Outcome</CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm">
-                  <Badge variant={pip.outcome === 'improved' ? 'default' : 'destructive'}>
-                    {pip.outcome?.replace('_', ' ')}
+                  <Badge variant={pipOutcomeVariant(pip.outcome)}>
+                    {pipOutcomeLabel(pip.outcome)}
                   </Badge>
                   {pip.completion_remarks && (
                     <p className="mt-2">{pip.completion_remarks}</p>
@@ -396,37 +394,46 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
 
             {/* Actions */}
             <div className="flex flex-wrap gap-2">
-              {pip.status === 'draft' && isInitiator && (
+              {can('submit_for_approval') && (
                 <Button onClick={() => submitForApproval.mutate(pip.id)} disabled={submitForApproval.isPending}>
                   <Send className="h-4 w-4 mr-2" />
                   Submit for Approval
                 </Button>
               )}
 
-              {pip.status === 'pending_hr_approval' && isHR && (
-                <>
-                  <Button onClick={() => setActionDialog('approve')}>
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Approve
-                  </Button>
-                  <Button variant="destructive" onClick={() => setActionDialog('reject')}>
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Reject
-                  </Button>
-                </>
+              {can('approve') && (
+                <Button onClick={() => setActionDialog('approve')}>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Approve
+                </Button>
               )}
 
-              {(pip.status === 'active' || pip.status === 'extended') && canManage && (
-                <>
-                  <Button onClick={() => setActionDialog('complete')}>
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Complete PIP
-                  </Button>
-                  <Button variant="outline" onClick={() => setActionDialog('extend')}>
-                    <Clock className="h-4 w-4 mr-2" />
-                    Extend
-                  </Button>
-                </>
+              {can('reject') && (
+                <Button variant="destructive" onClick={() => setActionDialog('reject')}>
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Reject
+                </Button>
+              )}
+
+              {can('complete') && (
+                <Button onClick={() => setActionDialog('complete')}>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Complete PIP
+                </Button>
+              )}
+
+              {can('extend') && (
+                <Button variant="outline" onClick={() => setActionDialog('extend')}>
+                  <Clock className="h-4 w-4 mr-2" />
+                  Extend
+                </Button>
+              )}
+
+              {can('cancel') && (
+                <Button variant="outline" className="text-destructive" onClick={() => setActionDialog('cancel')}>
+                  <Ban className="h-4 w-4 mr-2" />
+                  Cancel PIP
+                </Button>
               )}
 
               {pip.status !== 'draft' && (
