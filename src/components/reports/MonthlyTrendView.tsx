@@ -11,6 +11,9 @@ import * as XLSX from 'xlsx';
 import { useMonthlyTrend, buildMonthRange } from '@/hooks/useMonthlyTrend';
 import { MonthlyTrendTable } from './MonthlyTrendTable';
 import { getPipThreshold } from '@/lib/pmsSettings';
+import { isPipCandidate as isPipCandidateRule } from '@/lib/pip/pipCandidateRule';
+import { PIPCreateDialog } from '@/components/pip/PIPCreateDialog';
+import { useAuth } from '@/contexts/AuthContext';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -58,6 +61,12 @@ export function MonthlyTrendView({ canExport }: Props) {
   // BU filter (multi-select via comma). null/empty = all.
   const [buFilter, setBuFilter] = useState<string>('__all__');
   const [pipOnly, setPipOnly] = useState(false);
+  const [pipDialogEmployeeId, setPipDialogEmployeeId] = useState<string | null>(null);
+  const [showCandidateList, setShowCandidateList] = useState(false);
+
+  // ADR-205: only PIP initiators/approvers get the "Start PIP" shortcut.
+  const { effectiveRole } = useAuth();
+  const canStartPip = ['admin', 'management', 'manager', 'hr_pms'].includes(effectiveRole ?? '');
 
   const { data: pipThreshold } = useQuery({
     queryKey: ['pms-pip-threshold'],
@@ -118,23 +127,11 @@ export function MonthlyTrendView({ canExport }: Props) {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [allEmployees]);
 
-  // PIP rule: employee is a PIP candidate when EVERY month in the selected
-  // range has a score (using the same 8-stage fallback cascade shown in the
-  // table and Single-Month Scorecard) AND all those scores are strictly
-  // below the configured threshold. A missing month disqualifies the row.
-  // We deliberately do NOT gate on `final_score` alone — that column is
-  // often still NULL while the workflow is mid-stage, which produced a
-  // false "0 PIP candidates" even when the visible avg was < threshold.
-  const isPipCandidate = (emp: typeof allEmployees[number]): boolean => {
-    if (pipThreshold == null) return false;
-    if (months.length === 0) return false;
-    for (const m of months) {
-      const v = emp.monthlyScores[m.key];
-      if (v == null || !Number.isFinite(v)) return false;
-      if (v >= pipThreshold) return false;
-    }
-    return true;
-  };
+  // PIP rule lives in `@/lib/pip/pipCandidateRule` (ADR-205 SSOT) so the
+  // report, the PIP module and the unit tests cannot drift apart.
+  const monthKeys = useMemo(() => months.map(m => m.key), [months]);
+  const isPipCandidate = (emp: typeof allEmployees[number]): boolean =>
+    isPipCandidateRule(emp, monthKeys, pipThreshold);
 
   // Client-side search + BU + PIP filter (instant, no refetch)
   const filteredEmployees = useMemo(() => {
