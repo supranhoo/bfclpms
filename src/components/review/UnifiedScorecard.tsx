@@ -250,6 +250,29 @@ export function UnifiedScorecard({
   const { data: workflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(employee.id, selectedPeriod, selectedYear);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
 
+  // ADR-206 / POLICY §WF-FM-RELATIONSHIP-SSOT — mis-routing guardrail.
+  // If the viewer is the mapped Functional Manager for this employee but the
+  // scorecard resolved to a different (read-only) view level, surface it
+  // explicitly instead of rendering a silent read-only grid.
+  const { data: isMappedFunctionalManager } = useQuery({
+    queryKey: ['is-fm-of-employee', user?.id, employee.id],
+    enabled: !!user?.id && !!employee.id && viewLevel !== 'self' && viewLevel !== 'functional_manager',
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('functional_manager_id')
+        .eq('id', employee.id)
+        .maybeSingle();
+      if (error) return false;
+      return data?.functional_manager_id === user?.id;
+    },
+  });
+  const showFmMisroutingNotice =
+    !!isMappedFunctionalManager &&
+    viewLevel !== 'functional_manager' &&
+    effectiveStages.includes('functional_manager_check');
+
   // Build dynamic config from workflow stages
   const config = useMemo(() => {
     // Self mode doesn't need reviewer workflow config
