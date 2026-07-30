@@ -82,7 +82,7 @@ function useEmployeeProfileForPdf(employeeId: string | undefined) {
   });
 }
 
-type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
+type ViewLevel = 'employee' | 'manager' | 'functional_manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
 type JourneyStage = 'self' | 'manager' | 'functional_manager' | 'skip_level' | 'hr_pms' | 'auditor' | 'management';
 
 interface KpiJourneySectionProps {
