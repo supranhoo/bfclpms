@@ -1540,8 +1540,9 @@ export function EmployeeSelectorGrid({
       const orgEntered = (orgKpiCounts?.entered ?? 0) + (orgKpiCounts?.propagated ?? 0);
       const orgTotal = orgKpiCounts?.total ?? 0;
       const orgPending = orgKpiCounts?.pending ?? 0;
+      const showFunctionalTile = functionalIdSet.size > 0 || (stats.stat5 ?? 0) > 0;
       return (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+        <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 ${showFunctionalTile ? 'xl:grid-cols-7' : 'xl:grid-cols-6'} gap-3 sm:gap-4`}>
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
           <StatCard
             icon={Hourglass}
@@ -1555,7 +1556,7 @@ export function EmployeeSelectorGrid({
           />
           <StatCard icon={Clock} label="Direct Pending" value={stats.stat1} color="yellow" subtitle="Awaiting manager review" onClick={() => toggleStatusFilter('pending_direct')} active={statusFilter === 'pending_direct'} />
           <StatCard icon={UserCheck} label="Skip-Level Pending" value={stats.stat2} color="amber" subtitle="Awaiting skip-level review" onClick={() => toggleStatusFilter('pending_skip')} active={statusFilter === 'pending_skip'} />
-          {(functionalIdSet.size > 0 || (stats.stat5 ?? 0) > 0) && (
+          {showFunctionalTile && (
             <StatCard
               icon={UserCheck}
               label="Functional Pending"
