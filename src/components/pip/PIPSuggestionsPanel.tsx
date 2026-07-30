@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Label } from '@/components/ui/label';
 import { AlertTriangle, Info, RotateCw, Search, ShieldCheck } from 'lucide-react';
-import { usePIPCandidates, type PIPCandidate } from '@/hooks/usePIPCandidates';
+import { usePIPCandidates, recentMonthOptions, type PIPCandidate } from '@/hooks/usePIPCandidates';
 import { POLICY_PIP_RATING } from '@/lib/pip/pipTriggerRules';
 import { cn } from '@/lib/utils';
 
@@ -31,12 +31,18 @@ interface PIPSuggestionsPanelProps {
 
 export function PIPSuggestionsPanel({ active, onInitiate, onOpenPip }: PIPSuggestionsPanelProps) {
   const [windowMonths, setWindowMonths] = useState(3);
+  const monthOptions = useMemo(() => recentMonthOptions(18, new Date()), []);
+  const [anchorKey, setAnchorKey] = useState(() => `${monthOptions[0].month}-${monthOptions[0].year}`);
+  const anchor = useMemo(
+    () => monthOptions.find(o => `${o.month}-${o.year}` === anchorKey) ?? monthOptions[0],
+    [monthOptions, anchorKey],
+  );
   const [triggerFilter, setTriggerFilter] = useState<TriggerFilter>('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
   const { candidates, months, threshold, thresholdMatchesPolicy, isLoading, error, refetch } =
-    usePIPCandidates({ windowMonths, enabled: active });
+    usePIPCandidates({ windowMonths, enabled: active, anchor });
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -70,6 +76,20 @@ export function PIPSuggestionsPanel({ active, onInitiate, onOpenPip }: PIPSugges
         {/* Controls */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex flex-wrap gap-4">
+            <div className="space-y-1">
+              <Label htmlFor="pip-anchor">Up to month</Label>
+              <Select value={anchorKey} onValueChange={v => { setAnchorKey(v); setPage(1); }}>
+                <SelectTrigger id="pip-anchor" className="h-10 w-44"><SelectValue /></SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {monthOptions.map(o => (
+                    <SelectItem key={`${o.month}-${o.year}`} value={`${o.month}-${o.year}`}>
+                      {o.month} {o.year}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-1">
               <Label htmlFor="pip-window">Window</Label>
               <Select value={String(windowMonths)} onValueChange={v => { setWindowMonths(Number(v)); setPage(1); }}>

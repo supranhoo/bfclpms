@@ -15175,6 +15175,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      can_view_org_kpi_value: {
+        Args: {
+          _category_id: string
+          _employee_id: string
+          _kpi_name: string
+          _kra_name: string
+        }
+        Returns: boolean
+      }
       can_view_profile_for_annual_review_directory: {
         Args: { p_profile_id: string }
         Returns: boolean
