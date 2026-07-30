@@ -924,7 +924,7 @@ export default function ImportData() {
       }
     };
     reader.readAsArrayBuffer(file);
-  }, [toast, departments, divisions, businessUnits, designations, employeeCategories, employmentStatuses, profiles, allowUpdateExisting]);
+  }, [toast, departments, divisions, businessUnits, designations, employeeCategories, employmentStatuses, companiesList, profiles, allowUpdateExisting]);
 
   const handleImport = async () => {
     if (importData.length === 0) return;
