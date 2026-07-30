@@ -7,7 +7,8 @@ import {
 const base: AssistedSubmissionRow = {
   id: 'a1', instance_id: 'i1', cycle_id: 'c1',
   employee_id: 'e1', employee_name: 'Anup Kumar', employee_code: '101381',
-  department_name: 'DRI', business_unit_name: 'Steel',
+  department_id: 'd1', department_name: 'DRI',
+  business_unit_id: 'b1', business_unit_name: 'Steel',
   proxy_user_id: 'p1', proxy_name: 'Twinkle Kumar', proxy_code: '200679', proxy_role: 'manager',
   captured_at: '2026-07-01T10:00:00Z',
   selfie_path: 'selfies/a.jpg', photo_upload_path: 'photos/a.jpg',
@@ -17,8 +18,8 @@ const base: AssistedSubmissionRow = {
 };
 
 describe('ADR-203 assisted submissions', () => {
-  it('pages at 50 rows', () => {
-    expect(ASSISTED_PAGE_SIZE).toBe(50);
+  it('pages server-side in bounded chunks', () => {
+    expect(ASSISTED_PAGE_SIZE).toBe(25);
   });
 
   it('labels complete evidence', () => {
@@ -28,7 +29,7 @@ describe('ADR-203 assisted submissions', () => {
   it('flags each missing-evidence permutation distinctly', () => {
     expect(evidenceLabel({ ...base, has_photo: false })).toBe('Selfie only');
     expect(evidenceLabel({ ...base, has_selfie: false })).toBe('Photo only');
-    expect(evidenceLabel({ ...base, has_selfie: false, has_photo: false })).toBe('No evidence');
+    expect(evidenceLabel({ ...base, has_selfie: false, has_photo: false })).toBe('None');
   });
 
   it('exports a header plus one row per record', () => {
@@ -41,8 +42,16 @@ describe('ADR-203 assisted submissions', () => {
   });
 
   it('quotes fields containing commas so columns do not shift', () => {
+    const csv = assistedRowsToCsv([{ ...base, department_name: 'DRI, SMS' }]);
+    expect(csv).toContain('"DRI, SMS"');
+  });
+
+  it('never leaks storage object paths or declaration text into the export', () => {
     const csv = assistedRowsToCsv([base]);
-    expect(csv).toContain('"I confirm, on behalf of the employee, that the scores are accurate."');
+    expect(csv).not.toContain('selfies/a.jpg');
+    expect(csv).not.toContain('photos/a.jpg');
+    expect(csv).not.toContain('I confirm');
+    expect(csv).toContain('Yes,Yes,Selfie + photo');
   });
 
   it('renders empty export as header only', () => {
