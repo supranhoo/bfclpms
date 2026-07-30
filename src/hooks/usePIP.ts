@@ -1,10 +1,51 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import type { PIPStatus, PIPOutcome, PIPMilestoneStatus } from '@/lib/pip/pipVocabulary';
 
-export type PIPStatus = 'draft' | 'pending_hr_approval' | 'active' | 'completed' | 'extended' | 'terminated';
-export type PIPOutcome = 'improved' | 'not_improved' | 'escalated';
-export type MilestoneStatus = 'pending' | 'met' | 'partially_met' | 'not_met';
+// ADR-205: status/outcome vocabulary is owned by `@/lib/pip/pipVocabulary`.
+export type { PIPStatus, PIPOutcome } from '@/lib/pip/pipVocabulary';
+export type MilestoneStatus = PIPMilestoneStatus;
+
+/**
+ * ADR-205 / POLICY §PIP-NOTIFY-SSOT — every PIP notification goes through the
+ * `pip_notify` definer RPC. Direct `notifications` inserts are blocked by
+ * `can_send_notification_to()` whenever the sender (typically HR) is outside
+ * the employee's reporting chain.
+ */
+async function notifyPip(
+  pipId: string,
+  event: 'pip_initiated' | 'pip_completed' | 'pip_milestone_reminder',
+  recipient?: string,
+  metadata?: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabase.rpc('pip_notify', {
+    p_pip_id: pipId,
+    p_event: event,
+    p_recipient: recipient ?? null,
+    p_metadata: (metadata ?? {}) as never,
+  } as never);
+  // A failed notification must never roll back a completed workflow action.
+  if (error) console.error('[PIP] notification dispatch failed', event, error);
+}
+
+/** Audit rows are mandatory but must not mask the primary action's success. */
+async function writePipAudit(
+  pipId: string,
+  action: string,
+  oldValue: Record<string, unknown> | null,
+  newValue: Record<string, unknown> | null,
+): Promise<void> {
+  const { error } = await supabase.from('pip_audit_logs').insert({
+    pip_id: pipId,
+    action,
+    old_value: oldValue,
+    new_value: newValue,
+  } as never);
+  if (error) console.error('[PIP] audit write failed', action, error);
+}
+
+export const PIP_PAGE_SIZE = 25;
 
 export interface PIPMilestone {
   id: string;
@@ -83,15 +124,34 @@ export interface CreatePIPData {
   milestones?: Omit<PIPMilestone, 'id' | 'pip_id' | 'created_at' | 'updated_at' | 'actual_outcome' | 'status' | 'reviewed_by' | 'reviewed_at' | 'remarks'>[];
 }
 
-// Fetch all PIPs with filters
-export function usePIPs(filters?: {
+export interface PIPListFilters {
   status?: PIPStatus;
   employeeId?: string;
+  /** Restrict to a set of employees (used for server-side name/code search). */
+  employeeIds?: string[] | null;
   initiatedBy?: string;
-}) {
+  /** 1-based page index. Omit for the first page. */
+  page?: number;
+  pageSize?: number;
+  /** Server-side search across employee name / code. */
+  search?: string;
+}
+
+export interface PIPListResult {
+  rows: PIP[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// Fetch PIPs with filters + server-side pagination (ADR-205)
+export function usePIPs(filters?: PIPListFilters) {
+  const page = Math.max(1, filters?.page ?? 1);
+  const pageSize = filters?.pageSize ?? PIP_PAGE_SIZE;
+
   return useQuery({
-    queryKey: ['pips', filters],
-    queryFn: async () => {
+    queryKey: ['pips', filters, page, pageSize],
+    queryFn: async (): Promise<PIPListResult> => {
       let query = supabase
         .from('performance_improvement_plans')
         .select(`
@@ -106,7 +166,7 @@ export function usePIPs(filters?: {
             id, full_name
           ),
           milestones:pip_milestones(*)
-        `)
+        `, { count: 'exact' })
         .order('created_at', { ascending: false });
 
       if (filters?.status) {
@@ -115,13 +175,27 @@ export function usePIPs(filters?: {
       if (filters?.employeeId) {
         query = query.eq('employee_id', filters.employeeId);
       }
+      if (filters?.employeeIds) {
+        if (filters.employeeIds.length === 0) {
+          return { rows: [], total: 0, page, pageSize };
+        }
+        query = query.in('employee_id', filters.employeeIds);
+      }
       if (filters?.initiatedBy) {
         query = query.eq('initiated_by', filters.initiatedBy);
       }
 
-      const { data, error } = await query;
+      const from = (page - 1) * pageSize;
+      query = query.range(from, from + pageSize - 1);
+
+      const { data, error, count } = await query;
       if (error) throw error;
-      return data as PIP[];
+      return {
+        rows: (data ?? []) as PIP[],
+        total: count ?? 0,
+        page,
+        pageSize,
+      };
     },
   });
 }
@@ -222,27 +296,8 @@ export function useCreatePIP() {
         if (msError) throw msError;
       }
 
-      // Log creation
-      await supabase.from('pip_audit_logs').insert({
-        pip_id: pip.id,
-        action: 'CREATED',
-        performed_by: user.id,
-        new_value: pipData,
-      } as any);
-
-      // Notify the employee about PIP initiation
-      await supabase.from('notifications').insert({
-        user_id: pipData.employee_id,
-        type: 'pip_initiated',
-        title: 'Performance Improvement Plan Initiated',
-        message: 'A Performance Improvement Plan has been created for you.',
-        metadata: {
-          pip_id: pip.id,
-          pip_start_date: pipData.start_date,
-          pip_end_date: pipData.end_date,
-          pip_reason: pipData.reason,
-        },
-      });
+      await writePipAudit(pip.id, 'CREATED', null, pipData as Record<string, unknown>);
+      await notifyPip(pip.id, 'pip_initiated');
 
       return pip;
     },
@@ -275,13 +330,7 @@ export function useSubmitPIPForApproval() {
 
       if (error) throw error;
 
-      await supabase.from('pip_audit_logs').insert({
-        pip_id: pipId,
-        action: 'SUBMITTED_FOR_APPROVAL',
-        performed_by: user.id,
-        old_value: { status: 'draft' },
-        new_value: { status: 'pending_hr_approval' },
-      } as any);
+      await writePipAudit(pipId, 'SUBMITTED_FOR_APPROVAL', { status: 'draft' }, { status: 'pending_hr_approval' });
 
       return data;
     },
@@ -320,13 +369,7 @@ export function useApprovePIP() {
 
       if (error) throw error;
 
-      await supabase.from('pip_audit_logs').insert({
-        pip_id: pipId,
-        action: 'HR_APPROVED',
-        performed_by: user.id,
-        old_value: { status: 'pending_hr_approval' },
-        new_value: { status: 'active', hr_remarks: remarks },
-      } as any);
+      await writePipAudit(pipId, 'HR_APPROVED', { status: 'pending_hr_approval' }, { status: 'active', hr_remarks: remarks });
 
       return data;
     },
@@ -364,13 +407,7 @@ export function useRejectPIP() {
 
       if (error) throw error;
 
-      await supabase.from('pip_audit_logs').insert({
-        pip_id: pipId,
-        action: 'HR_REJECTED',
-        performed_by: user.id,
-        old_value: { status: 'pending_hr_approval' },
-        new_value: { status: 'draft', hr_remarks: remarks },
-      } as any);
+      await writePipAudit(pipId, 'HR_REJECTED', { status: 'pending_hr_approval' }, { status: 'draft', hr_remarks: remarks });
 
       return data;
     },
@@ -412,33 +449,8 @@ export function useCompletePIP() {
 
       if (error) throw error;
 
-      await supabase.from('pip_audit_logs').insert({
-        pip_id: pipId,
-        action: 'COMPLETED',
-        performed_by: user.id,
-        new_value: { status: 'completed', outcome, completion_remarks: remarks },
-      } as any);
-
-      // Notify the employee about PIP completion
-      const { data: pip } = await supabase
-        .from('performance_improvement_plans')
-        .select('employee_id')
-        .eq('id', pipId)
-        .single();
-
-      if (pip) {
-        await supabase.from('notifications').insert({
-          user_id: pip.employee_id,
-          type: 'pip_completed',
-          title: 'Performance Improvement Plan Completed',
-          message: `Your Performance Improvement Plan has been completed. Outcome: ${outcome}`,
-          metadata: {
-            pip_id: pipId,
-            pip_outcome: outcome,
-            pip_remarks: remarks,
-          },
-        });
-      }
+      await writePipAudit(pipId, 'COMPLETED', null, { status: 'completed', outcome, completion_remarks: remarks });
+      await notifyPip(pipId, 'pip_completed');
 
       return data;
     },
@@ -480,12 +492,7 @@ export function useExtendPIP() {
 
       if (error) throw error;
 
-      await supabase.from('pip_audit_logs').insert({
-        pip_id: pipId,
-        action: 'EXTENDED',
-        performed_by: user.id,
-        new_value: { status: 'extended', extended_end_date: newEndDate, remarks },
-      } as any);
+      await writePipAudit(pipId, 'EXTENDED', null, { status: 'extended', extended_end_date: newEndDate, remarks });
 
       return data;
     },
@@ -496,6 +503,44 @@ export function useExtendPIP() {
     },
     onError: (error: any) => {
       toast({ title: 'Failed to extend PIP', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+// Cancel PIP (POLICY §13.1 "Cancelled" — enum value `terminated`)
+export function useCancelPIP() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ pipId, reason }: { pipId: string; reason: string }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data, error } = await supabase
+        .from('performance_improvement_plans')
+        .update({
+          status: 'terminated',
+          completion_remarks: reason,
+        } as any)
+        .eq('id', pipId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await writePipAudit(pipId, 'CANCELLED', null, { status: 'terminated', reason });
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pips'] });
+      queryClient.invalidateQueries({ queryKey: ['pip'] });
+      queryClient.invalidateQueries({ queryKey: ['pip-summary'] });
+      toast({ title: 'PIP cancelled' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Failed to cancel PIP', description: error.message, variant: 'destructive' });
     },
   });
 }
@@ -537,12 +582,7 @@ export function useUpdateMilestone() {
 
       if (error) throw error;
 
-      await supabase.from('pip_audit_logs').insert({
-        pip_id: pipId,
-        action: 'MILESTONE_UPDATED',
-        performed_by: user.id,
-        new_value: { milestone_id: milestoneId, status, actual_outcome: actualOutcome },
-      } as any);
+      await writePipAudit(pipId, 'MILESTONE_UPDATED', null, { milestone_id: milestoneId, status, actual_outcome: actualOutcome });
 
       return data;
     },

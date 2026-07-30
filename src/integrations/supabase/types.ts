@@ -15068,8 +15068,16 @@ export type Database = {
         Args: { p_instance_id: string }
         Returns: boolean
       }
+      can_access_pip: {
+        Args: { _pip_id: string; _user_id: string }
+        Returns: boolean
+      }
       can_grant_access_profile: {
         Args: { _profile_id: string; _target_user: string; _uid: string }
+        Returns: boolean
+      }
+      can_manage_pip: {
+        Args: { _pip_id: string; _user_id: string }
         Returns: boolean
       }
       can_proxy_submit_annual_review: {
@@ -16612,6 +16620,22 @@ export type Database = {
       override_annual_review_rating: {
         Args: { p_instance_id: string; p_new_rating: string; p_reason: string }
         Returns: undefined
+      }
+      pip_notify: {
+        Args: {
+          p_event: string
+          p_metadata?: Json
+          p_pip_id: string
+          p_recipient?: string
+        }
+        Returns: string
+      }
+      pip_transition_allowed: {
+        Args: {
+          _from: Database["public"]["Enums"]["pip_status"]
+          _to: Database["public"]["Enums"]["pip_status"]
+        }
+        Returns: boolean
       }
       post_observation_reply: {
         Args: {

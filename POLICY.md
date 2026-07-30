@@ -5365,3 +5365,20 @@ Rules:
 - Evidence (live selfie, uploaded photograph) is exposed only through short-lived (5 minute) signed URLs minted when the evidence drawer opens for a single record. Signed URLs must never be minted for list rows.
 - Evidence completeness is an audit signal, not a blocker: rows missing a selfie and/or photograph MUST be visibly flagged (badge + summary counters) rather than hidden.
 - `profiles` has no `business_unit_id`; business unit for an assisted row is resolved via `departments.business_unit_id`.
+
+### §PIP-LIFECYCLE-GOVERNANCE — Performance Improvement Plan lifecycle (v2.66.131, 2026-07-30 / ADR-205)
+
+**Rule.**
+
+1. **Vocabulary is display-layer only.** POLICY §13 names outcomes *Successful / Partially Successful / Unsuccessful* and closing states *Completed / Cancelled*, while the live enums are `pip_outcome = improved | escalated | not_improved` and `pip_status = ... | terminated`. The drift is closed in `src/lib/pip/pipVocabulary.ts` — the enum value `terminated` **is** "Cancelled". No component may hardcode a PIP status, outcome or milestone label.
+2. **Legal transitions.** `draft → pending_hr_approval → active → (extended) → completed`, with cancellation (`terminated`) reachable from every live state. `completed` and `terminated` are terminal. Enforced server-side by `trg_pip_status_transition` and mirrored client-side by `src/lib/pip/pipTransitions.ts`; the two definitions MUST stay in lockstep.
+3. **Segregation of duties.** The initiator of a plan may never approve or reject it, even when they also hold `admin`, `management` or `hr_pms`. Approver roles are `hr_pms`, `admin`, `management`.
+4. **Audit is participation-scoped.** `pip_audit_logs` INSERT is open to PIP participants (was admin-only, which broke every manager/HR mutation); the acting user is forced server-side and cannot be spoofed by the client.
+5. **Pagination.** PIP lists are server-paginated (25/page). Dashboards that need the whole open set request it explicitly and MUST NOT rely on the UI page size.
+6. **Milestone reminders have a producer.** `pip_milestone_reminder` is emitted by `send-scheduled-emails` for pending milestones on `active`/`extended` plans within `pip_milestone_lead_days` ahead or `pip_milestone_overdue_days` behind, to the employee and the initiator. Enqueue is idempotent per `(milestone_id, recipient_id)` within 24h, so a re-run cannot double-send, and a producer failure MUST NOT break dispatch for other templates.
+7. **Thresholds are configuration, never code.** `pip_milestone_lead_days`, `pip_milestone_overdue_days`, `pip_sla_warning_days`, `pip_sla_critical_days` live in `system_settings`; code constants are fallback defaults only.
+8. **Candidate rule is one function.** An employee is a PIP candidate only when *every* month in the selected range has a score and all are strictly below the configured threshold — a missing month disqualifies the row. Defined once in `src/lib/pip/pipCandidateRule.ts` and shared by the Monthly Trend report and its tests.
+
+**Why.** The module was half-wired: an admin-only audit policy made every manager/HR action throw, `hr_pms` had zero access despite owning the approval stage, an initiating manager could approve their own plan, and the reminder template had no producer.
+
+**Guard.** `src/test/pip/pipLifecycle.test.ts` (18 tests: vocabulary, transition graph, segregation of duties, candidate rule).

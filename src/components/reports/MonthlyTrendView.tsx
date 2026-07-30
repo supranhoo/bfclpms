@@ -11,6 +11,9 @@ import * as XLSX from 'xlsx';
 import { useMonthlyTrend, buildMonthRange } from '@/hooks/useMonthlyTrend';
 import { MonthlyTrendTable } from './MonthlyTrendTable';
 import { getPipThreshold } from '@/lib/pmsSettings';
+import { isPipCandidate as isPipCandidateRule } from '@/lib/pip/pipCandidateRule';
+import { PIPCreateDialog } from '@/components/pip/PIPCreateDialog';
+import { useAuth } from '@/contexts/AuthContext';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -58,6 +61,12 @@ export function MonthlyTrendView({ canExport }: Props) {
   // BU filter (multi-select via comma). null/empty = all.
   const [buFilter, setBuFilter] = useState<string>('__all__');
   const [pipOnly, setPipOnly] = useState(false);
+  const [pipDialogEmployeeId, setPipDialogEmployeeId] = useState<string | null>(null);
+  const [showCandidateList, setShowCandidateList] = useState(false);
+
+  // ADR-205: only PIP initiators/approvers get the "Start PIP" shortcut.
+  const { effectiveRole } = useAuth();
+  const canStartPip = ['admin', 'management', 'manager', 'hr_pms'].includes(effectiveRole ?? '');
 
   const { data: pipThreshold } = useQuery({
     queryKey: ['pms-pip-threshold'],
@@ -118,23 +127,11 @@ export function MonthlyTrendView({ canExport }: Props) {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [allEmployees]);
 
-  // PIP rule: employee is a PIP candidate when EVERY month in the selected
-  // range has a score (using the same 8-stage fallback cascade shown in the
-  // table and Single-Month Scorecard) AND all those scores are strictly
-  // below the configured threshold. A missing month disqualifies the row.
-  // We deliberately do NOT gate on `final_score` alone — that column is
-  // often still NULL while the workflow is mid-stage, which produced a
-  // false "0 PIP candidates" even when the visible avg was < threshold.
-  const isPipCandidate = (emp: typeof allEmployees[number]): boolean => {
-    if (pipThreshold == null) return false;
-    if (months.length === 0) return false;
-    for (const m of months) {
-      const v = emp.monthlyScores[m.key];
-      if (v == null || !Number.isFinite(v)) return false;
-      if (v >= pipThreshold) return false;
-    }
-    return true;
-  };
+  // PIP rule lives in `@/lib/pip/pipCandidateRule` (ADR-205 SSOT) so the
+  // report, the PIP module and the unit tests cannot drift apart.
+  const monthKeys = useMemo(() => months.map(m => m.key), [months]);
+  const isPipCandidate = (emp: typeof allEmployees[number]): boolean =>
+    isPipCandidateRule(emp, monthKeys, pipThreshold);
 
   // Client-side search + BU + PIP filter (instant, no refetch)
   const filteredEmployees = useMemo(() => {
@@ -355,17 +352,44 @@ export function MonthlyTrendView({ canExport }: Props) {
 
       {hasLoaded && pipThreshold != null && (
         <Card className="border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-950/10">
-          <CardContent className="py-4 flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-            <div className="text-sm">
-              <span className="font-semibold text-red-700 dark:text-red-300">
-                {pipCandidates.length} PIP candidate{pipCandidates.length === 1 ? '' : 's'}
-              </span>
-              <span className="text-muted-foreground ml-1">
-                — employees whose score is below {pipThreshold.toFixed(2)} in every month of this range
-                {buFilter !== '__all__' ? ' (within selected BU)' : ''}.
-              </span>
+          <CardContent className="py-4 space-y-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              <div className="text-sm flex-1 min-w-[240px]">
+                <span className="font-semibold text-red-700 dark:text-red-300">
+                  {pipCandidates.length} PIP candidate{pipCandidates.length === 1 ? '' : 's'}
+                </span>
+                <span className="text-muted-foreground ml-1">
+                  — employees whose score is below {pipThreshold.toFixed(2)} in every month of this range
+                  {buFilter !== '__all__' ? ' (within selected BU)' : ''}.
+                </span>
+              </div>
+              {canStartPip && pipCandidates.length > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setShowCandidateList(v => !v)}>
+                  {showCandidateList ? 'Hide candidates' : 'Review & start PIP'}
+                </Button>
+              )}
             </div>
+
+            {canStartPip && showCandidateList && pipCandidates.length > 0 && (
+              <div className="max-h-72 overflow-y-auto rounded-md border bg-background divide-y">
+                {pipCandidates.map(emp => (
+                  <div key={emp.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {emp.fullName} <span className="text-muted-foreground">({emp.employeeCode})</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {emp.departmentName} · Avg {emp.avg == null ? '-' : emp.avg}
+                      </p>
+                    </div>
+                    <Button size="sm" onClick={() => setPipDialogEmployeeId(emp.id)}>
+                      Start PIP
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -450,6 +474,16 @@ export function MonthlyTrendView({ canExport }: Props) {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {canStartPip && (
+        <PIPCreateDialog
+          // Remount per employee so the form's defaultValues pick up the preselection.
+          key={pipDialogEmployeeId ?? 'none'}
+          open={!!pipDialogEmployeeId}
+          onOpenChange={(o) => { if (!o) setPipDialogEmployeeId(null); }}
+          preselectedEmployeeId={pipDialogEmployeeId ?? undefined}
+        />
       )}
     </div>
   );

@@ -1,87 +1,107 @@
+# Plug PIP Management into Full Functionality (ADR-205)
+
 ## 1. Assumptions
 
-- "Yesterday's backup" = scheduled run `71112b35…` started 2026-07-29 17:00 UTC (cron `weekly-database-backup`, 0 17 * * *).
-- Hard-fail-on-partial (Phase 9.2.a) must stay in force — a partial snapshot must never show as "completed".
-- No change to DB schema, RLS, or restore format is wanted.
+- PIP has never been used in production: `performance_improvement_plans`, `pip_milestones`, `pip_audit_logs` all contain **0 rows**. No historical data to migrate or protect.
+- Approvers = `hr_pms` + `admin` + `management`; the initiator may **not** approve their own PIP.
+- Outcome wording (Successful / Partially Successful / Unsuccessful) is a **display-layer** mapping over the existing `pip_outcome` enum. No enum migration.
+- `terminated` is displayed as **Cancelled**. No enum migration.
+- Fiscal/period conventions and the existing `system_settings` PIP threshold stay as-is.
 
-## 2. Verified facts (from `backup_logs` and `create-backup/index.ts`)
+## 2. Clarifications
 
-| Run | Status | Tables | Detail |
+Resolved in this turn. No open questions.
+
+## 3. Risk & Impact Report
+
+**Data Impact**
+- No table/column drops. Additive only: new RLS policies, a transition-guard trigger, a `pip_audit_logs` insert path, one new SECURITY DEFINER helper.
+- Zero existing rows → no backfill, no data-integrity exposure.
+- All three PIP tables are already covered by the automatic backup discovery RPC (`get_backup_table_order()`), and no entry exists in `backup_denylist`. No backup change needed; will re-confirm coverage after migration.
+
+**Workflow Impact**
+- Managers and HR can, for the first time, actually use the module (today every non-admin action fails).
+- Initiators lose the ability to approve their own PIP — intentional, closes a segregation-of-duties hole.
+- Status changes become guarded: illegal jumps (e.g. `draft` → `completed`) will be rejected server-side.
+
+**UI/UX Impact** — detailed in §5.
+
+**Regression Risk**
+- *Low* on existing modules: PIP RLS/trigger changes are scoped to three tables nothing else reads.
+- *Medium* on notifications: PIP inserts into `notifications` are gated by `can_send_notification_to`. An HR approver who is not in the employee's reporting chain would be blocked, reproducing the recurring "not authorized to send notifications" toast. Mitigated by routing all PIP notifications through a single SECURITY DEFINER RPC rather than direct client inserts (same pattern as ADR-189 `post_observation_reply`).
+- *Low–Medium* on the scheduled-email cron: a new reminder producer runs inside the existing `send-scheduled-emails` function. Mitigated by a feature flag and a per-PIP-per-day idempotency key so a re-run can never double-send.
+
+**Scalability Impact**
+- PIP volume is inherently small (low performers only, expected tens–low hundreds/year). Even so, the admin table gets **server-side pagination** (page size 25) rather than the current fetch-all, and the milestone reminder query is date-bounded and indexed.
+- New indexes: `pip_milestones(milestone_date, status)` and `performance_improvement_plans(status, employee_id)`.
+
+**Rollback Strategy**
+- Every step is additive and independently revertible: drop the new policies/trigger/RPC and restore the prior `pip_audit_logs` policy. Feature flag `pip_milestone_reminders_enabled` can disable the reminder producer instantly without a deploy.
+
+## 4. Step-by-step Plan
+
+### Phase A — Unblock the core workflow (server)
+
+**A1. Fix `pip_audit_logs` writes (the hard blocker).**
+Replace the admin-only INSERT policy with a participation-scoped one, so the acting manager/HR/management user can write their own audit row, while `performed_by` is forced to `auth.uid()` by a trigger (immutability guarantee).
+*Verify:* a manager-context insert against a PIP they initiated succeeds; an insert with a spoofed `performed_by` is rewritten to the caller; an unrelated user's insert is rejected.
+
+**A2. Grant `hr_pms` PIP access.**
+Add SELECT on all PIPs/milestones/audit-logs and UPDATE (approval fields) for `hr_pms`. Uses `has_role()` — no recursive subqueries.
+*Verify:* query the policy catalogue and confirm `hr_pms` now appears; confirm an hr_pms user can read a PIP for an employee outside their reporting chain.
+
+**A3. Segregation of duties + transition guard.**
+New trigger `trg_pip_status_transition`:
+- rejects approval where `hr_reviewer_id = initiated_by`;
+- enforces the legal transition graph `draft → pending_hr_approval → active → (extended) → completed | terminated`, with `pending_hr_approval → draft` allowed for rejection;
+- requires `outcome` + `completion_remarks` on `completed`;
+- requires `extended_end_date > end_date` on `extended`;
+- writes an audit row for every status change so the trail cannot be bypassed by a direct table update.
+Also adds the missing `WITH CHECK` to the UPDATE policy.
+*Verify:* attempt each illegal transition and confirm rejection; confirm a legal path writes exactly one audit row per step.
+
+**A4. Notification safety.**
+New `pip_notify(pip_id, event_type)` SECURITY DEFINER RPC that authorises the caller against the PIP, then inserts the `notifications` row with `performed_by`/relationship set correctly — bypassing the `can_send_notification_to` chain restriction that would otherwise break HR-initiated events. Register `pip_milestone_reminder` in `src/lib/notifications/edgeRegistry.ts` alongside the two existing events.
+*Verify:* an hr_pms approver outside the employee's chain triggers approval and no "not authorized" error appears.
+
+### Phase B — Client alignment
+
+**B1. `src/hooks/usePIP.ts`** — route audit-log writes and notifications through the new RPC; wrap each mutation in explicit error handling with a user-facing toast (no silent failures); add `useCancelPIP`; add server-side pagination params to `usePIPs`.
+
+**B2. New `src/lib/pip/pipVocabulary.ts` (SSOT)** — single mapping of enum → policy label: `improved → Successful`, `escalated → Partially Successful`, `not_improved → Unsuccessful`, `terminated → Cancelled`, plus status labels and badge variants. Every PIP surface imports from here; no literal status/outcome strings anywhere else.
+
+**B3. `src/lib/pip/pipTransitions.ts` (SSOT)** — the legal transition graph, mirrored exactly by the PL/pgSQL trigger from A3 (same dual-SSOT pattern as ADR-179 `kraStageDisplay`), with a test asserting the two definitions agree.
+
+**B4. `PIPDetailSheet.tsx`** — add the missing **Cancel PIP** action behind `ConfirmDestructiveDialog`; drive all action-button visibility from `pipTransitions.ts` + the caller's role; replace the inline milestone list with the existing `MilestoneTracker.tsx` (removing the dead code).
+
+### Phase C — Missing integrations
+
+**C1. Milestone reminders.** Add a PIP block to the existing `send-scheduled-emails` edge function: for every `active`/`extended` PIP, find milestones due within the configurable lead window or overdue, and emit `pip_milestone_reminder` to the initiator (cc employee) via `pip_notify`. Gated by a new `admin_feature_flags` row and an idempotency key of `pip_id|milestone_id|YYYY-MM-DD`. SLA thresholds move from the hardcoded `{warning: 0, critical: 7}` in `useSystemIssues.ts` into `system_settings` (Zero-Hardcoding rule), read by both the cron and the issues dashboard.
+**C2. Report → action.** Add a **Start PIP** row action to the Monthly Trend PIP-candidates report that opens `PIPCreateDialog` pre-filled with the employee and the failing months as the stated reason. Extract the duplicated candidate rule out of `MonthlyTrendView.tsx` into `src/lib/pip/pipCandidateRule.ts` and have the existing test import the real function instead of reimplementing it.
+**C3. Employee visibility.** Add a read-only **My PIP** card on the employee dashboard and a PIP tab on the employee profile (milestones, dates, outcome, letter download). Employees already have RLS SELECT on their own PIP.
+**C4. Discoverability.** Extend the sidebar entry to `admin`, `management`, `hr_pms` and `manager` (matching the route guard, which already allows more roles than the sidebar shows), keeping `menu_access_config` as the authority so admins can still restrict it per profile.
+
+### Phase D — Verification
+
+Unit tests + mock data covering: transition graph parity (TS vs PL/pgSQL), vocabulary mapping completeness, self-approval rejection, audit-row-per-action, reminder idempotency, candidate rule, and pagination. Plus an integration test walking the full lifecycle draft → HR approval → milestone update → completion as a **non-admin manager** — the exact path that fails today.
+
+## 5. UI Changes
+
+| Where | What changes | Interaction | Responsive |
 |---|---|---|---|
-| 29 Jul 17:00 | **failed** | 247 / 248 | `Batch 2/62 … transient HTTP 502; sub 2/4 [annual_review_bu_removal_repair_2026_07] failed after 2 retries: HTTP 502` |
-| 28 Jul | completed | 247 / 247 | — |
-| 27 Jul | completed | 244 / 244 | — |
-| 26 Jul | **failed** | 238 / 239 | `Skipping table annual_review_reviewer_resync_audit: Upload …part-000001.json failed: Gateway Timeout` |
-| 25 Jul | completed_with_errors | 239 | Batch 2 502, all four sub-batches recovered |
+| `/admin/pip` table | Server-side pagination footer (25/page); status chips relabelled via the vocabulary SSOT ("Cancelled" not "Terminated") | Page controls; filters/search unchanged and pagination-aware | Table already scrolls horizontally on mobile; footer stacks |
+| PIP Detail sheet | New **Cancel PIP** button (destructive, confirm dialog); Approve/Reject hidden for the initiator; milestone list replaced by `MilestoneTracker` timeline | Buttons appear only for legal transitions for that role | Sheet is full-width on mobile; action bar becomes sticky |
+| Monthly Trend report | New **Start PIP** action per candidate row | Opens the create dialog pre-filled | Action collapses into the row overflow menu on mobile |
+| Employee dashboard / profile | Read-only **My PIP** card + profile tab | Expand for milestones; letter download | Single-column stack below `md` |
+| Admin → System Settings | PIP milestone SLA (lead days / overdue days) + reminder feature toggle beside the existing threshold card | Standard settings form | Inherits settings grid |
+| Sidebar | PIP Management now visible to management / hr_pms / manager | — | — |
 
-Confirmed by query: `annual_review_bu_removal_repair_2026_07` holds **34 rows / 64 kB** — so this is not a size or memory problem. Data loss exposure of the failed run: one small one-off audit table; the other 247 tables did upload.
+## 6. Documentation & Policy Updates
 
-## 3. Root cause
+- **DOCUMENTATION.md** — new ADR-205 section: the transition graph, the vocabulary mapping table, the `pip_notify` RPC contract, reminder cron behaviour, and version-history entry.
+- **POLICY.md** — new `§PIP-LIFECYCLE-GOVERNANCE`: approver set and self-approval prohibition; canonical status/outcome vocabulary and its enum mapping (removing the current §13 wording drift); mandatory audit row per state change; configurable SLAs; and `§PIP-NOTIFY-SSOT` requiring all PIP notifications to route through the RPC.
 
-The self-invocation of the `create-backup` batch worker intermittently returns **HTTP 502 from the platform gateway**. The existing recovery envelope is too shallow to ride out that window:
+## 7. What I will *not* do
 
-- Only **2 retries**, backoff **5 s + 15 s** → the whole recovery attempt spans ~20 s, while the retry budget still had **427 s unused**.
-- Retries re-invoke the *whole* batch worker; there is **no retry around the storage `upload()` call itself** (`streamTableToStorage`, lines 134-139 / 181-186), which is why 26 Jul lost a table to a single `Gateway Timeout`.
-- Uploads use `upsert: false`, so any re-attempt after a partially-written part file fails permanently instead of overwriting.
-- There is **no post-loop reconciliation sweep**: once a batch's retries are exhausted mid-run, the missing table is never re-tried before finalize, even though minutes of budget remain.
-- The coverage guard then correctly flags 247/248 and hard-fails the run — correct policy, wrong upstream resilience.
-
-## 4. 5-Why
-
-1. Why did the backup fail? Coverage shrank to 247/248 and hard-fail-on-partial marked the run `failed`.
-2. Why did coverage shrink? `annual_review_bu_removal_repair_2026_07` was never uploaded.
-3. Why was it never uploaded? Its single-table batch invocation returned HTTP 502 three times (initial + 2 retries) inside a ~20 s window.
-4. Why did three attempts all land in the bad window? Backoffs are fixed at 5 s and 15 s and capped at 2 attempts, so recovery cannot outlast a gateway blip longer than ~20 s — despite 427 s of unused budget.
-5. Why was that never caught? The retry envelope was tuned in Phase 9.2 for OOM (546) and rate-limit (429), where fast retries work; gateway 502/504 blips were later added to the classifier (9.2.c) **without widening the backoff schedule**, and no end-of-run reconciliation pass exists as a safety net.
-
-## 5. Risk & Impact Report
-
-- **Data impact:** None. No schema, RLS, or manifest-format change. Backup artifacts keep the ADR-082 `<table>.part-NNNNNN.json` shape, so `restore-backup` and `useDownloadBackup` are untouched.
-- **Workflow impact:** None for users. Scheduled run wall-time may grow by up to ~2 min in the worst case (only when transients occur); nominal runs (~3-4 min) are unchanged.
-- **UI/UX impact:** None. Backup History pills, tooltips, and the Safety Drill action stay as-is.
-- **Regression risk:** Medium-low, concentrated in `create-backup`. The Phase-9 contract tests (I8–I15, `backupFinalizeMemoryContract`, `transient_classifier_test`) pin the constants that must not move — `BATCH_SIZE = 4`, `BATCH_SIZE_RETRY = 1`, hard-fail predicates, no-download-in-verify. All changes are additive around them.
-- **Scalability impact:** Upload retries are bounded per part file; the reconciliation sweep is bounded by the same `RETRY_BUDGET_MS` wall clock, so worst-case runtime remains capped.
-- **Mitigation:** keep every existing constant that a contract test asserts, add new constants alongside; extend the contract tests rather than rewrite them.
-
-## 6. Fix plan (step → verification)
-
-**Step 1 — Idempotent, retried part-file uploads**
-In `streamTableToStorage`, wrap both `.upload(...)` calls in a bounded retry (3 attempts, 1 s / 3 s / 8 s) that switches to `upsert: true` from the second attempt so a half-written part is overwritten rather than colliding. Retry only on transient signals (`isTransientChunkError` + `Gateway Timeout`/`Timeout`); re-throw immediately on 4xx/permission errors.
-*Verify:* new unit test asserting the upload is re-attempted on a simulated Gateway Timeout and succeeds with `upsert: true`.
-
-**Step 2 — Widen the retry schedule (keep counts contract-safe)**
-Change `RETRY_BACKOFFS_MS` from `[5s, 15s]` to `[5s, 15s, 45s, 90s]` — 4 attempts spanning ~2.6 min, still far inside `RETRY_BUDGET_MS = 8 min`. `BATCH_SIZE`, `BATCH_SIZE_RETRY`, and the budget constant are **unchanged**.
-*Verify:* existing I8/I9/I10 contract tests still pass; add an assertion that the schedule is monotonically increasing and its sum < `RETRY_BUDGET_MS`.
-
-**Step 3 — End-of-run coverage reconciliation sweep**
-After the batch loop and before `finalize`, diff `tableManifest` against `tablesToBackup`. For any missing table, if budget remains, re-invoke the worker one final time per table (sequentially, with `INTER_BATCH_DELAY_MS` spacing). Successful tables are appended to the manifest and counters; failures are appended to `errors` with a clear `reconcile:` prefix.
-*Verify:* unit test — a batch that drops one table results in a manifest containing it after the sweep; a table that fails the sweep still hard-fails the run.
-
-**Step 4 — Keep hard-fail authority intact**
-No change to `loadHardFailOnPartial` or the shrink predicate. If reconciliation cannot recover a table, the run still ends `failed`. Only the error message gains the reconciliation detail so admins see what was attempted.
-*Verify:* re-run the Phase-9 hard-fail contract test unchanged.
-
-**Step 5 — Recover the failed run**
-Trigger one manual scheduled-equivalent backup after deployment and confirm `tables_count = discovered_count` and `status = completed`. No repair of the 29-Jul artifact — a failed backup must be re-run, not "verified" (existing policy).
-*Verify:* `select status, tables_count from backup_logs order by created_at desc limit 1`.
-
-## 7. UI changes
-
-Not applicable — no component, route, or presentation change.
-
-## 8. Documentation & policy updates
-
-- New **ADR-204 — Backup transient resilience: upload-level retry, widened backoff, reconciliation sweep** (context = 26/29 Jul failures, decision, consequences, rollback).
-- **POLICY.md §BACKUP-TRANSIENT-RESILIENCE**: part-file uploads are retried idempotently; the batch retry schedule must fit inside `RETRY_BUDGET_MS`; every scheduled run must attempt a reconciliation sweep before finalize; hard-fail-on-partial remains terminal.
-- Update `mem://infrastructure/database/backup-batch-retry-policy` with the new backoff schedule and the sweep.
-- `DOCUMENTATION.md` version-history entry.
-
-## 9. Rollback
-
-Revert `supabase/functions/create-backup/index.ts` and the new tests to the pre-ADR-204 commit. No DB migration, no storage-layout change, so previously created artifacts remain restorable either way.
-
-## 10. Technical notes
-
-- Files touched: `supabase/functions/create-backup/index.ts` (only), plus new/extended tests under `src/test/infra/` and `supabase/functions/create-backup/`.
-- Constants asserted by contract tests and deliberately left alone: `BATCH_SIZE = 4`, `BATCH_SIZE_RETRY = 1`, `RETRY_BUDGET_MS = 8 * 60_000`, `ROWS_PER_CHUNK = 5000`, `PAGE_SIZE = 1000`, `loadHardFailOnPartial`.
-- `_shared/retry.ts` `withRetry` is close but treats any non-4xx as retryable and has a fixed doubling schedule; Step 1 uses a local wrapper that reuses `isTransientChunkError` so the classifier stays the single source of truth.
+- No enum migrations (per your answers) — the wording gap is closed at the display layer and documented in POLICY so the drift is recorded, not hidden.
+- No changes to the KPI/annual-review workflow engines, the backup engine, or `can_send_notification_to` itself — the PIP case is handled by its own definer RPC rather than by widening the global notification matrix again.

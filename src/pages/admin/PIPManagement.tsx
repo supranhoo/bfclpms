@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -7,7 +9,13 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
-import { usePIPs, usePIPSummary, PIPStatus } from '@/hooks/usePIP';
+import { usePIPs, usePIPSummary, PIP_PAGE_SIZE } from '@/hooks/usePIP';
+import {
+  PIP_STATUS_LABELS,
+  pipStatusLabel,
+  pipStatusVariant,
+  type PIPStatus,
+} from '@/lib/pip/pipVocabulary';
 import { useAuth } from '@/contexts/AuthContext';
 import { PIPCreateDialog } from '@/components/pip/PIPCreateDialog';
 import { PIPDetailSheet } from '@/components/pip/PIPDetailSheet';
@@ -24,13 +32,14 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 
-const STATUS_CONFIG: Record<PIPStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ElementType }> = {
-  draft: { label: 'Draft', variant: 'secondary', icon: FileText },
-  pending_hr_approval: { label: 'Pending HR', variant: 'outline', icon: Clock },
-  active: { label: 'Active', variant: 'default', icon: AlertTriangle },
-  completed: { label: 'Completed', variant: 'secondary', icon: CheckCircle2 },
-  extended: { label: 'Extended', variant: 'destructive', icon: Clock },
-  terminated: { label: 'Terminated', variant: 'destructive', icon: XCircle },
+/** Icons only — labels and badge variants come from the vocabulary SSOT (ADR-205). */
+const STATUS_ICONS: Record<PIPStatus, React.ElementType> = {
+  draft: FileText,
+  pending_hr_approval: Clock,
+  active: AlertTriangle,
+  completed: CheckCircle2,
+  extended: Clock,
+  terminated: XCircle,
 };
 
 export default function PIPManagement() {
@@ -39,23 +48,41 @@ export default function PIPManagement() {
   const [statusFilter, setStatusFilter] = useState<PIPStatus | 'all'>('all');
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedPipId, setSelectedPipId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
-  const { data: summary, isLoading: summaryLoading } = usePIPSummary();
-  const { data: pips, isLoading: pipsLoading } = usePIPs(
-    statusFilter !== 'all' ? { status: statusFilter } : undefined
-  );
+  // Reset to the first page whenever the result set changes shape.
+  useEffect(() => { setPage(1); }, [statusFilter, searchTerm]);
 
-  const filteredPips = pips?.filter(pip => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      pip.employee?.full_name?.toLowerCase().includes(term) ||
-      pip.employee?.employee_code?.toLowerCase().includes(term) ||
-      pip.initiator?.full_name?.toLowerCase().includes(term)
-    );
+  // Server-side search: resolve the term to employee ids first so paging stays
+  // correct across the whole result set rather than the visible page only.
+  const term = searchTerm.trim();
+  const { data: searchIds } = useQuery({
+    queryKey: ['pip-search-employees', term],
+    enabled: term.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .or(`full_name.ilike.%${term}%,employee_code.ilike.%${term}%`)
+        .limit(500);
+      if (error) throw error;
+      return (data ?? []).map(r => r.id);
+    },
   });
 
-  const isHR = role === 'admin' || role === 'management';
+  const { data: summary, isLoading: summaryLoading } = usePIPSummary();
+  const { data: pipPage, isLoading: pipsLoading } = usePIPs({
+    status: statusFilter !== 'all' ? statusFilter : undefined,
+    employeeIds: term.length > 0 ? (searchIds ?? []) : undefined,
+    page,
+    pageSize: PIP_PAGE_SIZE,
+  });
+
+  const pips = pipPage?.rows ?? [];
+  const total = pipPage?.total ?? 0;
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PIP_PAGE_SIZE)), [total]);
+
+  const isHR = role === 'admin' || role === 'management' || role === 'hr_pms';
 
   return (
     <div className="space-y-6">
@@ -165,8 +192,9 @@ export default function PIPManagement() {
             <CardHeader>
               <CardTitle>PIPs List</CardTitle>
               <CardDescription>
-                {statusFilter === 'all' ? 'All performance improvement plans' : 
-                  `Showing ${STATUS_CONFIG[statusFilter as PIPStatus]?.label || statusFilter} PIPs`}
+                {statusFilter === 'all'
+                  ? `All performance improvement plans (${total})`
+                  : `Showing ${PIP_STATUS_LABELS[statusFilter as PIPStatus] ?? statusFilter} PIPs (${total})`}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -187,9 +215,8 @@ export default function PIPManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredPips?.map(pip => {
-                      const statusConfig = STATUS_CONFIG[pip.status];
-                      const StatusIcon = statusConfig.icon;
+                    {pips.map(pip => {
+                      const StatusIcon = STATUS_ICONS[pip.status] ?? FileText;
                       const effectiveEndDate = pip.extended_end_date || pip.end_date;
                       const milestonesCompleted = pip.milestones?.filter(m => m.status === 'met').length || 0;
                       const totalMilestones = pip.milestones?.length || 0;
@@ -214,9 +241,9 @@ export default function PIPManagement() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={statusConfig.variant}>
+                            <Badge variant={pipStatusVariant(pip.status)}>
                               <StatusIcon className="h-3 w-3 mr-1" />
-                              {statusConfig.label}
+                              {pipStatusLabel(pip.status)}
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -230,7 +257,7 @@ export default function PIPManagement() {
                         </TableRow>
                       );
                     })}
-                    {(!filteredPips || filteredPips.length === 0) && (
+                    {pips.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                           <UserX className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -242,6 +269,31 @@ export default function PIPManagement() {
                 </Table>
               )}
             </CardContent>
+            {totalPages > 1 && (
+              <CardContent className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-0">
+                <div className="text-sm text-muted-foreground">
+                  Page {page} of {totalPages} · {total} plan{total === 1 ? '' : 's'}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page <= 1}
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </CardContent>
+            )}
           </Card>
         </TabsContent>
       </Tabs>

@@ -108,6 +108,111 @@ serve(async (req: Request) => {
 
     console.log(`Processing scheduled emails for templates: ${templateKeysToProcess.join(", ")}`);
 
+    // ------------------------------------------------------------------
+    // ADR-205 — PIP milestone reminder producer.
+    // The `pip_milestone_reminder` template existed with no producer, so the
+    // reminder never fired. When that template is due in this window we
+    // enqueue one row per milestone that is either approaching (within
+    // `pip_milestone_lead_days`) or overdue (up to `pip_milestone_overdue_days`).
+    // Idempotency: a milestone is skipped if a queue row for it already exists
+    // in the last 24h (sent or not), so a re-run cannot double-send.
+    // ------------------------------------------------------------------
+    if (templateKeysToProcess.includes("pip_milestone_reminder")) {
+      try {
+        const { data: slaRows } = await supabase
+          .from("system_settings")
+          .select("setting_key, setting_value")
+          .in("setting_key", ["pip_milestone_lead_days", "pip_milestone_overdue_days"]);
+
+        const num = (key: string, fallback: number) => {
+          const raw = slaRows?.find((r: any) => r.setting_key === key)?.setting_value;
+          const parsed = Number(typeof raw === "string" ? raw.replace(/"/g, "") : raw);
+          return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+        };
+        const leadDays = num("pip_milestone_lead_days", 3);
+        const overdueDays = num("pip_milestone_overdue_days", 7);
+
+        const day = 24 * 60 * 60 * 1000;
+        const fromDate = new Date(now.getTime() - overdueDays * day).toISOString().split("T")[0];
+        const toDate = new Date(now.getTime() + leadDays * day).toISOString().split("T")[0];
+
+        const { data: dueMilestones, error: msErr } = await supabase
+          .from("pip_milestones")
+          .select(
+            "id, milestone_date, description, expected_outcome, pip_id, performance_improvement_plans!inner(id, status, employee_id, initiated_by)"
+          )
+          .eq("status", "pending")
+          .gte("milestone_date", fromDate)
+          .lte("milestone_date", toDate)
+          .in("performance_improvement_plans.status", ["active", "extended"])
+          .limit(500);
+
+        if (msErr) throw msErr;
+
+        if (dueMilestones && dueMilestones.length > 0) {
+          const recipientIds = new Set<string>();
+          for (const ms of dueMilestones as any[]) {
+            recipientIds.add(ms.performance_improvement_plans.employee_id);
+            recipientIds.add(ms.performance_improvement_plans.initiated_by);
+          }
+
+          const { data: people } = await supabase
+            .from("profiles")
+            .select("id, full_name, email, is_active")
+            .in("id", Array.from(recipientIds));
+          const byId = new Map((people ?? []).map((p: any) => [p.id, p]));
+
+          const dedupeCutoff = new Date(now.getTime() - day).toISOString();
+          const { data: recentQueue } = await supabase
+            .from("email_dispatch_queue")
+            .select("metadata")
+            .eq("template_key", "pip_milestone_reminder")
+            .gte("created_at", dedupeCutoff)
+            .limit(2000);
+          const alreadyQueued = new Set(
+            (recentQueue ?? [])
+              .map((r: any) => `${r.metadata?.milestone_id}:${r.metadata?.recipient_id}`)
+              .filter(Boolean)
+          );
+
+          const rows: any[] = [];
+          for (const ms of dueMilestones as any[]) {
+            const plan = ms.performance_improvement_plans;
+            const overdue = ms.milestone_date < now.toISOString().split("T")[0];
+            for (const personId of [plan.employee_id, plan.initiated_by]) {
+              const person = byId.get(personId);
+              if (!person?.email || person.is_active === false) continue;
+              if (alreadyQueued.has(`${ms.id}:${personId}`)) continue;
+              alreadyQueued.add(`${ms.id}:${personId}`);
+              rows.push({
+                template_key: "pip_milestone_reminder",
+                recipient_email: person.email,
+                recipient_name: person.full_name,
+                metadata: {
+                  recipient_id: personId,
+                  milestone_id: ms.id,
+                  pip_id: plan.id,
+                  milestone_date: ms.milestone_date,
+                  milestone_description: ms.description,
+                  expected_outcome: ms.expected_outcome,
+                  is_overdue: overdue,
+                },
+              });
+            }
+          }
+
+          if (rows.length > 0) {
+            const { error: insErr } = await supabase.from("email_dispatch_queue").insert(rows);
+            if (insErr) throw insErr;
+            console.log(`Enqueued ${rows.length} PIP milestone reminder(s)`);
+          }
+        }
+      } catch (err) {
+        // Never let the producer break the dispatch loop for other templates.
+        console.error("PIP milestone reminder producer failed:", err);
+      }
+    }
+
     let totalProcessed = 0;
     let totalFailed = 0;
 
