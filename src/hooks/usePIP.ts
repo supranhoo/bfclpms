@@ -318,6 +318,113 @@ export function useCreatePIP() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pips'] });
+      queryClient.invalidateQueries({ queryKey: ['pip-live-plans'] });
+      toast({ title: 'PIP created successfully' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Failed to create PIP', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+/**
+ * POLICY §15.5 — skip-level (RM2) sign-off. The RPC enforces that the approver
+ * is the employee's skip-level manager (or HR/admin) and is not the initiator.
+ */
+export function useRM2ApprovePIP() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ pipId, remarks }: { pipId: string; remarks?: string }) => {
+      const { error } = await supabase.rpc('pip_rm2_approve', {
+        p_pip_id: pipId,
+        p_remarks: remarks ?? null,
+      } as never);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['pips'] });
+      queryClient.invalidateQueries({ queryKey: ['pip-details', vars.pipId] });
+      toast({ title: 'Skip-level approval recorded' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Approval failed', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+/** POLICY §15.9 — employee acknowledges receipt and discussion of the plan. */
+export function useAcknowledgePIP() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ pipId, comments }: { pipId: string; comments?: string }) => {
+      const { error } = await supabase.rpc('pip_acknowledge', {
+        p_pip_id: pipId,
+        p_comments: comments ?? null,
+      } as never);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['pips'] });
+      queryClient.invalidateQueries({ queryKey: ['pip-details', vars.pipId] });
+      toast({ title: 'Acknowledgement recorded' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Could not record acknowledgement', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+function useCreatePIPLegacy() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (data: CreatePIPData) => {
+      const { milestones, ...pipData } = data;
+
+      // Get current user ID
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Create PIP
+      const { data: pip, error: pipError } = await supabase
+        .from('performance_improvement_plans')
+        .insert({
+          ...pipData,
+          initiated_by: user.id,
+          status: 'draft',
+        } as any)
+        .select()
+        .single();
+
+      if (pipError) throw pipError;
+
+      // Create milestones if provided
+      if (milestones && milestones.length > 0) {
+        const milestonesWithPipId = milestones.map(m => ({
+          ...m,
+          pip_id: pip.id,
+          status: 'pending',
+        }));
+
+        const { error: msError } = await supabase
+          .from('pip_milestones')
+          .insert(milestonesWithPipId as any);
+
+        if (msError) throw msError;
+      }
+
+      await writePipAudit(pip.id, 'CREATED', null, pipData as Record<string, unknown>);
+      await notifyPip(pip.id, 'pip_initiated');
+
+      return pip;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pips'] });
       toast({ title: 'PIP created successfully' });
     },
     onError: (error: any) => {
