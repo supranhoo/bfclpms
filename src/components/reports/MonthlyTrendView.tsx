@@ -374,7 +374,7 @@ export function MonthlyTrendView({ canExport }: Props) {
             {canStartPip && showCandidateList && pipCandidates.length > 0 && (
               <div className="max-h-72 overflow-y-auto rounded-md border bg-background divide-y">
                 {pipCandidates.map(emp => (
-                  <div key={emp.employeeId} className="flex items-center justify-between gap-3 px-3 py-2">
+                  <div key={emp.id} className="flex items-center justify-between gap-3 px-3 py-2">
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">
                         {emp.fullName} <span className="text-muted-foreground">({emp.employeeCode})</span>
@@ -383,7 +383,7 @@ export function MonthlyTrendView({ canExport }: Props) {
                         {emp.departmentName} · Avg {emp.avg == null ? '-' : emp.avg}
                       </p>
                     </div>
-                    <Button size="sm" onClick={() => setPipDialogEmployeeId(emp.employeeId)}>
+                    <Button size="sm" onClick={() => setPipDialogEmployeeId(emp.id)}>
                       Start PIP
                     </Button>
                   </div>
