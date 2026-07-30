@@ -11,7 +11,7 @@ interface NaConfirmationCardProps {
   onConfirmChange: (confirmed: boolean) => void;
   remarks: string;
   onRemarksChange: (remarks: string) => void;
-  reviewerLevel: 'Manager' | 'Auditor' | 'Management';
+  reviewerLevel: 'Manager' | 'Functional Manager' | 'Auditor' | 'Management';
   /** If true, show the "Mark as N/A" toggle for reviewer-initiated N/A */
   canMarkNa?: boolean;
   /** Whether the reviewer has toggled N/A on */
