@@ -1943,7 +1943,7 @@ export function UnifiedScorecard({
                   onConfirmChange={setNaConfirmed}
                   remarks={naRemarks}
                   onRemarksChange={setNaRemarks}
-                  reviewerLevel={viewLevel === 'manager' ? 'Manager' : viewLevel === 'auditor' ? 'Auditor' : 'Management'}
+                  reviewerLevel={viewLevel === 'manager' ? 'Manager' : viewLevel === 'functional_manager' ? 'Functional Manager' : viewLevel === 'auditor' ? 'Auditor' : 'Management'}
                   naMarkedByRole={(submissionMap.get(selectedKpi.id) as any)?.na_marked_by_role || null}
                   naOverridden={naOverridden}
                   onOverrideNa={setNaOverridden}
@@ -1960,7 +1960,7 @@ export function UnifiedScorecard({
                   onConfirmChange={() => {}}
                   remarks=""
                   onRemarksChange={() => {}}
-                  reviewerLevel={viewLevel === 'manager' ? 'Manager' : viewLevel === 'auditor' ? 'Auditor' : 'Management'}
+                  reviewerLevel={viewLevel === 'manager' ? 'Manager' : viewLevel === 'functional_manager' ? 'Functional Manager' : viewLevel === 'auditor' ? 'Auditor' : 'Management'}
                   canMarkNa
                   reviewerMarkedNa={reviewerMarkNa}
                   onReviewerMarkNa={setReviewerMarkNa}

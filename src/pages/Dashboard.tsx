@@ -61,6 +61,12 @@ async function resolveRelationship(
     }
   }
 
+  // ADR-206 — functional reporting line: the FM acts on the stage preceding
+  // `functional_manager_check`, so tag the relationship before falling back.
+  if ((employee as { functional_manager_id?: string | null }).functional_manager_id === currentUserId) {
+    return { ...employee, relationship: 'functional' };
+  }
+
   // Default: treat as direct (admin/hr viewing non-chain employee)
   return { ...employee, relationship: 'direct' };
 }
@@ -358,6 +364,8 @@ export default function Dashboard() {
       let viewLevelForScorecard: string;
       if (viewMode === 'team' && selectedEmployee.relationship === 'indirect') {
         viewLevelForScorecard = 'skip_level';
+      } else if (viewMode === 'team' && selectedEmployee.relationship === 'functional') {
+        viewLevelForScorecard = 'functional_manager';
       } else {
         const viewLevelMap: Record<string, string> = { team: 'manager', audit: 'auditor', skip_level: 'skip_level', hr_pms: 'hr_pms', management: 'management', pending_self_review: 'hr_pms', pending_manager_review: 'hr_pms', pending_skip_review: 'hr_pms' };
         viewLevelForScorecard = viewLevelMap[viewMode] || viewMode;
