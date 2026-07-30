@@ -127,7 +127,7 @@ export function useSystemIssues() {
   const { data: pipPage, isLoading: pipsLoading } = usePIPs({ page: 1, pageSize: 500 });
   const pips = pipPage?.rows ?? [];
   const { thresholds: configuredThresholds, isLoading: thresholdsLoading } = useSlaThresholds();
-  const { data: pipSla } = useQuery({
+  const { data: pipSla } = useQuery<PipSlaSettings>({
     queryKey: ['pip-sla-settings'],
     queryFn: getPipSlaSettings,
     staleTime: 5 * 60 * 1000,
