@@ -12,8 +12,8 @@ import { useMonthlyTrend, buildMonthRange } from '@/hooks/useMonthlyTrend';
 import { MonthlyTrendTable } from './MonthlyTrendTable';
 import { getPipThreshold } from '@/lib/pmsSettings';
 import { isPipCandidate as isPipCandidateRule } from '@/lib/pip/pipCandidateRule';
-import { PIPCreateDialog } from '@/components/pip/PIPCreateDialog';
 import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -61,12 +61,22 @@ export function MonthlyTrendView({ canExport }: Props) {
   // BU filter (multi-select via comma). null/empty = all.
   const [buFilter, setBuFilter] = useState<string>('__all__');
   const [pipOnly, setPipOnly] = useState(false);
-  const [pipDialogEmployeeId, setPipDialogEmployeeId] = useState<string | null>(null);
   const [showCandidateList, setShowCandidateList] = useState(false);
 
   // ADR-205: only PIP initiators/approvers get the "Start PIP" shortcut.
+  const navigate = useNavigate();
   const { effectiveRole } = useAuth();
   const canStartPip = ['admin', 'management', 'manager', 'hr_pms'].includes(effectiveRole ?? '');
+
+  /** ADR-208 — PIP creation is a full page; carry employee + evaluation window. */
+  const startPipFor = (employeeId: string) => {
+    const params = new URLSearchParams({ employee: employeeId, trigger: 'monthly_trend' });
+    if (previewRange.length > 0) {
+      params.set('from', previewRange[0].key);
+      params.set('to', previewRange[previewRange.length - 1].key);
+    }
+    navigate(`/admin/pip/new?${params.toString()}`);
+  };
 
   const { data: pipThreshold } = useQuery({
     queryKey: ['pms-pip-threshold'],
@@ -383,7 +393,7 @@ export function MonthlyTrendView({ canExport }: Props) {
                         {emp.departmentName} · Avg {emp.avg == null ? '-' : emp.avg}
                       </p>
                     </div>
-                    <Button size="sm" onClick={() => setPipDialogEmployeeId(emp.id)}>
+                    <Button size="sm" onClick={() => startPipFor(emp.id)}>
                       Start PIP
                     </Button>
                   </div>
@@ -476,15 +486,6 @@ export function MonthlyTrendView({ canExport }: Props) {
         </Card>
       )}
 
-      {canStartPip && (
-        <PIPCreateDialog
-          // Remount per employee so the form's defaultValues pick up the preselection.
-          key={pipDialogEmployeeId ?? 'none'}
-          open={!!pipDialogEmployeeId}
-          onOpenChange={(o) => { if (!o) setPipDialogEmployeeId(null); }}
-          preselectedEmployeeId={pipDialogEmployeeId ?? undefined}
-        />
-      )}
     </div>
   );
 }
