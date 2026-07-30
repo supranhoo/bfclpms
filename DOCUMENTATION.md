@@ -7702,3 +7702,10 @@ Reviews such as employee 101279 showed a saved "Overall Recommendation" but blan
 - **UI**: `src/components/annual-review/AssistedSubmissionsTab.tsx` (server-paginated table, 6 filters, summary cards, per-page CSV export) and `AssistedEvidenceDrawer.tsx` (5-minute signed URLs, declaration text, device/IP, deep link to the full review). Registered as the **Assisted Submissions** tab in `AnnualReviewAdmin.tsx`.
 - **Policy**: §AR-ASSISTED-SUBMISSION-VISIBILITY.
 - **Tests**: `src/test/assistedSubmissions.test.ts`.
+
+## ADR-204 — Backup transient resilience (upload retry, widened backoff, reconciliation sweep)
+- **Problem**: scheduled backups failed on 26 Jul (238/239 — one `Gateway Timeout` on a part upload) and 29 Jul (247/248 — a 34-row table's sub-batch got `HTTP 502` on all 3 attempts inside ~20 s, with 427 s of retry budget unused). Both were recoverable transients, not capacity limits.
+- **Fix (edge function only)**: `supabase/functions/create-backup/index.ts` — new `uploadPartWithRetry` (1s/3s/8s, transient-only, `upsert: true` from attempt 2 so a half-written part cannot poison the retry); `RETRY_BACKOFFS_MS` widened `[5s, 15s]` → `[5s, 15s, 45s, 90s]`; new coverage reconciliation sweep in `runScheduledChunked` that re-attempts every missing table individually before `finalize` while budget remains.
+- **Unchanged**: `BATCH_SIZE = 4`, `BATCH_SIZE_RETRY = 1`, `RETRY_BUDGET_MS = 8 min`, `ROWS_PER_CHUNK = 5000`, `PAGE_SIZE = 1000`, hard-fail-on-partial, manifest/part-file format, `restore-backup`, `useDownloadBackup`, and all backup UI.
+- **Policy**: §BACKUP-TRANSIENT-RESILIENCE.
+- **Tests**: `src/test/infra/backupTransientResilienceContract.test.ts` (4), with the Phase-9 coverage (17) and finalize-memory (2) contracts re-verified.
