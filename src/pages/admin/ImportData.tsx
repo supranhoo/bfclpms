@@ -25,6 +25,7 @@ import { validateFileSize, IMPORT_LIMITS, sanitizeText, normalizeRole, VALID_ROL
 import { scoreToRatingLevel } from '@/lib/reviewConstants';
 import { fetchAllPaged } from '@/lib/fetchAll';
 import { CanAction } from '@/components/platform/CanAction';
+import { extractFunctionError } from '@/lib/edgeFunctionError';
 
 /** Map technical DB/edge-function errors to admin-friendly messages */
 function friendlyImportError(msg: string): string {
