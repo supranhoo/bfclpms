@@ -352,17 +352,44 @@ export function MonthlyTrendView({ canExport }: Props) {
 
       {hasLoaded && pipThreshold != null && (
         <Card className="border-red-200 dark:border-red-900/40 bg-red-50/50 dark:bg-red-950/10">
-          <CardContent className="py-4 flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
-            <div className="text-sm">
-              <span className="font-semibold text-red-700 dark:text-red-300">
-                {pipCandidates.length} PIP candidate{pipCandidates.length === 1 ? '' : 's'}
-              </span>
-              <span className="text-muted-foreground ml-1">
-                — employees whose score is below {pipThreshold.toFixed(2)} in every month of this range
-                {buFilter !== '__all__' ? ' (within selected BU)' : ''}.
-              </span>
+          <CardContent className="py-4 space-y-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              <div className="text-sm flex-1 min-w-[240px]">
+                <span className="font-semibold text-red-700 dark:text-red-300">
+                  {pipCandidates.length} PIP candidate{pipCandidates.length === 1 ? '' : 's'}
+                </span>
+                <span className="text-muted-foreground ml-1">
+                  — employees whose score is below {pipThreshold.toFixed(2)} in every month of this range
+                  {buFilter !== '__all__' ? ' (within selected BU)' : ''}.
+                </span>
+              </div>
+              {canStartPip && pipCandidates.length > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setShowCandidateList(v => !v)}>
+                  {showCandidateList ? 'Hide candidates' : 'Review & start PIP'}
+                </Button>
+              )}
             </div>
+
+            {canStartPip && showCandidateList && pipCandidates.length > 0 && (
+              <div className="max-h-72 overflow-y-auto rounded-md border bg-background divide-y">
+                {pipCandidates.map(emp => (
+                  <div key={emp.employeeId} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {emp.fullName} <span className="text-muted-foreground">({emp.employeeCode})</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {emp.departmentName} · Avg {emp.avg == null ? '-' : emp.avg}
+                      </p>
+                    </div>
+                    <Button size="sm" onClick={() => setPipDialogEmployeeId(emp.employeeId)}>
+                      Start PIP
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
