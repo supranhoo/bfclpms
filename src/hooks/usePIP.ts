@@ -1,10 +1,51 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import type { PIPStatus, PIPOutcome, PIPMilestoneStatus } from '@/lib/pip/pipVocabulary';
 
-export type PIPStatus = 'draft' | 'pending_hr_approval' | 'active' | 'completed' | 'extended' | 'terminated';
-export type PIPOutcome = 'improved' | 'not_improved' | 'escalated';
-export type MilestoneStatus = 'pending' | 'met' | 'partially_met' | 'not_met';
+// ADR-205: status/outcome vocabulary is owned by `@/lib/pip/pipVocabulary`.
+export type { PIPStatus, PIPOutcome } from '@/lib/pip/pipVocabulary';
+export type MilestoneStatus = PIPMilestoneStatus;
+
+/**
+ * ADR-205 / POLICY §PIP-NOTIFY-SSOT — every PIP notification goes through the
+ * `pip_notify` definer RPC. Direct `notifications` inserts are blocked by
+ * `can_send_notification_to()` whenever the sender (typically HR) is outside
+ * the employee's reporting chain.
+ */
+async function notifyPip(
+  pipId: string,
+  event: 'pip_initiated' | 'pip_completed' | 'pip_milestone_reminder',
+  recipient?: string,
+  metadata?: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabase.rpc('pip_notify', {
+    p_pip_id: pipId,
+    p_event: event,
+    p_recipient: recipient ?? null,
+    p_metadata: (metadata ?? {}) as never,
+  } as never);
+  // A failed notification must never roll back a completed workflow action.
+  if (error) console.error('[PIP] notification dispatch failed', event, error);
+}
+
+/** Audit rows are mandatory but must not mask the primary action's success. */
+async function writePipAudit(
+  pipId: string,
+  action: string,
+  oldValue: Record<string, unknown> | null,
+  newValue: Record<string, unknown> | null,
+): Promise<void> {
+  const { error } = await supabase.from('pip_audit_logs').insert({
+    pip_id: pipId,
+    action,
+    old_value: oldValue,
+    new_value: newValue,
+  } as never);
+  if (error) console.error('[PIP] audit write failed', action, error);
+}
+
+export const PIP_PAGE_SIZE = 25;
 
 export interface PIPMilestone {
   id: string;
