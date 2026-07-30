@@ -88,6 +88,7 @@ Deno.serve(async (req) => {
     }
 
     if (!authorised) {
+      console.warn(`[create-employee] REJECT 403 user=${user.id} code=${req.headers.get('x-employee-code') ?? 'n/a'} — no admin role and no 'admin-users/add' right`)
       return new Response(JSON.stringify({ error: "Unauthorized — 'Add User' permission required" }), {
         status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
@@ -129,6 +130,7 @@ Deno.serve(async (req) => {
         (!body.company_id || !r.company_id || r.company_id === body.company_id)
       );
       if (!match) {
+        console.warn(`[create-employee] REJECT 400 code=${body.employee_code} unknown employee_category='${body.employee_category}' company_id=${body.company_id ?? 'null'} candidates=${JSON.stringify((rows || []).map((r: any) => ({ name: r.name, company_id: r.company_id })))}`)
         return new Response(JSON.stringify({ error: `Unknown employee category: '${body.employee_category}'` }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
@@ -139,6 +141,7 @@ Deno.serve(async (req) => {
       const { data: rows } = await supabaseAdmin.from('employment_statuses').select('name').ilike('name', name);
       const match = (rows || []).find((r: any) => String(r.name).trim().toLowerCase() === name.toLowerCase());
       if (!match) {
+        console.warn(`[create-employee] REJECT 400 code=${body.employee_code} unknown employment_status='${body.employment_status}' candidates=${JSON.stringify((rows || []).map((r: any) => r.name))}`)
         return new Response(JSON.stringify({ error: `Unknown employment status: '${body.employment_status}'` }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
