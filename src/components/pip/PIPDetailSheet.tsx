@@ -456,6 +456,7 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
               {actionDialog === 'reject' && 'Reject PIP'}
               {actionDialog === 'complete' && 'Complete PIP'}
               {actionDialog === 'extend' && 'Extend PIP'}
+              {actionDialog === 'cancel' && 'Cancel PIP'}
               {actionDialog === 'milestone' && 'Update Milestone'}
             </DialogTitle>
             <DialogDescription>
@@ -463,6 +464,7 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
               {actionDialog === 'reject' && 'This will send the PIP back to draft for revision.'}
               {actionDialog === 'complete' && 'Mark this PIP as complete with an outcome.'}
               {actionDialog === 'extend' && 'Extend the PIP end date.'}
+              {actionDialog === 'cancel' && 'This closes the plan as Cancelled. A reason is required and is recorded in the audit trail.'}
               {actionDialog === 'milestone' && 'Update the milestone progress.'}
             </DialogDescription>
           </DialogHeader>
@@ -476,11 +478,12 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="improved">Improved</SelectItem>
-                    <SelectItem value="not_improved">Not Improved</SelectItem>
-                    <SelectItem value="escalated">Escalated</SelectItem>
+                    {PIP_OUTCOME_ORDER.map(o => (
+                      <SelectItem key={o} value={o}>{pipOutcomeLabel(o)}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">{PIP_OUTCOME_DESCRIPTIONS[outcome]}</p>
               </div>
             )}
 
@@ -529,7 +532,10 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
             )}
 
             <div className="space-y-2">
-              <Label>Remarks {actionDialog === 'reject' && '*'}</Label>
+              <Label>
+                {actionDialog === 'cancel' ? 'Reason' : 'Remarks'}
+                {(actionDialog === 'reject' || actionDialog === 'cancel') && ' *'}
+              </Label>
               <Textarea 
                 placeholder="Add any remarks..."
                 value={remarks}
@@ -544,6 +550,7 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
               onClick={handleAction}
               disabled={
                 (actionDialog === 'reject' && !remarks) ||
+                (actionDialog === 'cancel' && !remarks) ||
                 (actionDialog === 'extend' && !newEndDate)
               }
             >
