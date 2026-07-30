@@ -14,6 +14,7 @@ import { useEmployeeScoresForPeriod } from '@/hooks/useEmployeeScoresForPeriod';
 import { useOrgKpiPeriodCounts } from '@/hooks/useOrgKpiPeriodCounts';
 import { resolvePendingStatuses, resolveReviewableStatuses, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { matchesTeamTile, type TeamTile } from '@/lib/teamReviewTileFilter';
+import { resolveReviewerRelationship } from '@/lib/review/resolveReviewerRelationship';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -536,10 +537,22 @@ export function EmployeeSelectorGrid({
         // Admin/auditor/management see all profiles; tag based on reporting chain
         const skipIds = new Set(skipLevelMembers?.map(m => m.id) || []);
         const directIds = new Set(teamMembers?.map(m => m.id) || []);
-        resolved = allProfiles?.map(p => ({
-          ...p,
-          relationship: (skipIds.has(p.id) ? 'indirect' : directIds.has(p.id) ? 'direct' : undefined) as 'direct' | 'indirect' | undefined,
-        }));
+        // ADR-206 / POLICY §WF-FM-RELATIONSHIP-SSOT — functional reports must
+        // be tagged here too, otherwise a full-access viewer assisting a
+        // Functional Manager lands on the read-only Manager view.
+        resolved = allProfiles?.map(p => {
+          const rel = resolveReviewerRelationship({
+            viewerId: user?.id,
+            employee: p as any,
+            directIds,
+            skipIds,
+            functionalIds: functionalIdSet,
+          });
+          return {
+            ...p,
+            relationship: (rel === 'other' ? undefined : rel) as 'direct' | 'indirect' | 'functional' | undefined,
+          };
+        });
       } else {
         // v2.66.38 — Manager roster comes from server-side RPC with
         // relationship already tagged. Falls back to legacy direct/skip
@@ -574,7 +587,7 @@ export function EmployeeSelectorGrid({
     // already filter is_active=true, so this is a no-op for them.
     if (!isFullAccess) return withoutViewer;
     return applyEmployeeStatusFilter(withoutViewer, empStatus, (p) => p.is_active);
-  }, [viewLevel, teamMembers, skipLevelMembers, managerRoster, allProfiles, isFullAccess, requiredStage, stageFilteredProfiles, statusFilter, user?.id, empStatus]);
+  }, [viewLevel, teamMembers, skipLevelMembers, managerRoster, allProfiles, isFullAccess, requiredStage, stageFilteredProfiles, statusFilter, user?.id, empStatus, functionalIdSet]);
 
   // Auto-open KPI from URL
   useEffect(() => {
