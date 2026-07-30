@@ -45,7 +45,7 @@ import { SendBackOrgKpiDialog } from '@/components/review/SendBackOrgKpiDialog';
 import { scoreToRating } from '@/components/review/ScoreSelector';
 import { calculateRating } from '@/lib/ratingCalculation';
 import { buildCycleScopeLabel } from '@/lib/frequencyUtils';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
