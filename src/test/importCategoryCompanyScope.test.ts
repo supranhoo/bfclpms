@@ -58,7 +58,7 @@ describe('employee category company scoping', () => {
   });
 
   it('still rejects a category missing for the selected company', () => {
-    expect(categoryAllowedForCompany('Retainership', resolveCompanyId('Saibal'))).toBe(false);
+    expect(categoryAllowedForCompany('Trainee', resolveCompanyId('Saibal'))).toBe(false);
   });
 
   it('accepts a global (company_id NULL) category for any company', () => {
