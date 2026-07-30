@@ -1,97 +1,53 @@
 
-# Employee Import — 3 rows failed with "Edge Function returned a non-2xx status code"
+# Assisted (Proxy) Submission Tracking for Admins
 
-## 1. Assumptions
+## Current state (verified)
 
-- The screenshot is the **Import Data → Employees** result panel (4 total, 1 success, 3 failed).
-- Rows 2/4/5 are employee codes `101393`, `101395`, `101818`; row 3 (`101394`, Nitin Agarwal) succeeded.
-- The same spreadsheet is still available for a re-run.
+- Every assisted submission already writes an immutable audit row to `annual_review_proxy_submissions` — **2,037 rows exist today** (1,061 with a selfie, 992 with an uploaded photograph).
+- Columns captured: `instance_id`, `employee_user_id`, `proxy_user_id`, `proxy_role`, `selfie_path`, `photo_upload_path`, `declaration_text`, `user_agent`, `ip`, `captured_at`.
+- Read access is already correct: the `arps_select_visible` policy allows the employee, the assisting user, the employee's manager/skip manager, **admin**, and **hr_pms**. Storage has a matching `proxy_selfies_select` policy.
+- **Gap:** nothing in the app reads this table. `getProxyAuditForInstance()` and `createSignedSelfieUrl()` exist in `src/services/annualReview/proxySubmission.ts` but are called by no component. So the evidence is being collected and is invisible.
 
-## 2. What I verified (read-only)
+No database or security change is needed — this is a read-only surfacing job.
 
-| Check | Result |
-|---|---|
-| `profiles` for 101393 / 101395 / 101818 | **No rows** — nothing was created or partially written |
-| `profiles` for 101394 | Exists, `updated_at = 2026-07-30 05:54:05` (the 1 success) |
-| `create-employee` logs at 05:54 | 3 invocations, each logged `Auth header present` → `User validated: 535d9a14…` (admin) and then **nothing** |
+## Where it goes
 
-So the caller was authenticated and authorised, and the function returned a non-2xx **without logging anything**.
+Two entry points, both admin-facing:
 
-## 3. Root cause analysis
+**1. Primary — a new "Assisted Submissions" tab** in Annual Review → Admin (`src/pages/annual-review/AnnualReviewAdmin.tsx`), sitting alongside Orphaned Reviews and Unscored Stages. Same place admins already go for review governance.
 
-### The error message you see is not the real error
+**2. Secondary — an inline badge** on any review that was submitted with assistance, shown in the admin Progress grid row and on the review detail page. Clicking it opens the same evidence drawer. This answers "was *this* review self-submitted?" without leaving the record.
 
-`ImportData.tsx` calls `supabase.functions.invoke('create-employee', …)`. On a non-2xx response supabase-js returns `data = null` and a generic `FunctionsHttpError` whose `.message` is literally *"Edge Function returned a non-2xx status code"*; the JSON body sits unread on `fnError.context`. The code does `fnData?.error || fnError.message` — but `fnData` is always `null` in that branch, so the server's real message is discarded on every failure.
+## How it works
 
-### The server didn't log it either
+### The tab
 
-In `supabase/functions/create-employee/index.ts` there are exactly three early-return paths that produce a non-2xx **with no `console.*` call**:
+A filter bar + server-paginated table (25/page, `.range()`, `count: 'exact'` — no unbounded load):
 
-1. `400 Unknown employee category: '…'`
-2. `400 Unknown employment status: '…'`
-3. `403 Unauthorized` (ruled out — caller is the admin id)
+- **Filters:** cycle (defaults to active), date range on `captured_at`, assisting person, department / business unit, evidence completeness (has selfie / has photo / neither), free-text search on employee name or code.
+- **Columns:** Employee (name + code), Department/BU, Assisted by (name + code), Role at time of assistance (`proxy_role`), Captured at, Evidence (selfie / photo chips), Review status now, Actions.
+- **Row action → Evidence drawer:** selfie and uploaded photograph rendered from short-lived signed URLs (5 min), the exact `declaration_text` the assistant accepted, `captured_at`, `user_agent`, `ip`, and a deep link to the full review.
+- **Header summary:** total assisted this cycle, % of all submissions assisted, count missing selfie, count missing photo, top 5 assisting users by volume — so an admin can spot one person submitting for dozens of employees.
+- **Export CSV** of the filtered set (evidence paths are exported as presence flags, never as raw storage URLs).
 
-Given the logs, the 3 failures are one of the two 400 master-data rejections.
+### Verification angle
 
-### Most likely trigger: company-scoped category matching
+"Verify the assisted self-service records" is served by the completeness filter plus the top-assistor summary: an admin can pull every assisted submission with no selfie, or every submission made by one person, and open the evidence to confirm the employee was actually present.
 
-`employee_categories` currently holds 7 rows (`AGM and above`, `Casual`, `Consultant`, `ESI`, `Non ESI`, `Retainership`, `Trainee`) and **every one is bound to company `BFCL`**. There are 3 companies (`BFCL`, `Saibal`, `Aruna Industries`). The function accepts a category only when
-`!body.company_id || !row.company_id || row.company_id === body.company_id`.
+## Technical details
 
-So any import row whose **Company column resolves to Saibal or Aruna** is rejected for *every* category value, even a perfectly valid one. A spelling variant (`Non-ESI`, `NON ESI  `) or an employment status outside `Confirmed / Probation / Retainer / Superannuated / Trainee` would produce the same silent 400.
+- New RPC `get_annual_review_assisted_submissions(p_cycle_id, p_from, p_to, p_proxy_user_id, p_dept_id, p_bu_id, p_evidence, p_search, p_limit, p_offset)` — `SECURITY INVOKER` so the existing RLS policy stays the sole authority; returns rows plus `total_count`. Joins `profiles` for employee/assistant names and `annual_review_instances` for current status. A second RPC `get_annual_review_assisted_summary(p_cycle_id)` returns the header aggregates.
+- New files: `src/services/annualReview/assistedSubmissions.ts` (data layer), `src/hooks/annualReview/useAssistedSubmissions.ts` (React Query, keyed on all filters), `src/components/annual-review/admin/AssistedSubmissionsTab.tsx`, `src/components/annual-review/admin/AssistedEvidenceDrawer.tsx`.
+- Signed URLs are minted on drawer open only, never in the list — avoids 25 signing round-trips per page and limits URL exposure.
+- Tab is gated on `admin` / `hr_pms` exactly as the sibling governance tabs are; the menu entry is registered in `menu_access_config` so it can be mapped to other roles later without a code change (zero-hardcoding rule).
+- Tests: `assistedSubmissions.test.ts` (pagination range math, filter → RPC arg mapping, evidence-completeness classification, CSV shape with no raw paths) and a hook test asserting the query key changes with every filter.
+- Docs: ADR-203 + `POLICY.md §AR-ASSISTED-SUBMISSION-VISIBILITY` (assisted submissions must be auditable by admin/HR; evidence served only via short-lived signed URLs) + `DOCUMENTATION.md` version entry.
 
-**Honest limit:** the exact per-row string cannot be recovered — it was never logged and never returned to the UI. Step 1 below is what makes it knowable.
+## Risk & impact
 
-### 5 Whys
-
-1. Import showed a generic error → the UI printed the SDK's placeholder message.
-2. It printed the placeholder → `fnData` is `null` on non-2xx, so the server's `error` field was unreachable.
-3. Nobody caught it earlier → the server also returned those 400s without logging.
-4. The 400 fired at all → a master-data value failed strict validation, plausibly because categories are company-scoped to BFCL only.
-5. Company scoping bites silently → no ADR/policy required validation rejections to be observable.
-
-## 4. Risk & impact
-
-- **Data:** none. No partial writes; the 3 employees simply don't exist. No schema change proposed except optional seeding of master data (additive).
-- **Workflow:** unchanged; only error reporting improves.
-- **UI/UX:** the Issues table shows a real reason instead of a placeholder. No layout change.
-- **Regression risk:** low. Error-path-only edits in one client file and one edge function.
-- **Scalability:** unchanged (per-row calls, existing batching).
-- **Rollback:** revert the two files and redeploy; no data migration to undo.
-
-## 5. Plan
-
-**Step 1 — Surface the real error in the client (the actual fix for "why did it fail?")**
-In `src/pages/admin/ImportData.tsx`, add a shared helper that reads `fnError.context.json()` / `.text()` and extracts `error`/`message`, falling back to the SDK message. Use it in both `create-employee` call sites (the auto-create path at ~line 1050 already reads the body correctly via raw `fetch`; the `invoke` path at ~line 1497 does not).
-*Verification:* a deliberately bad category in a 1-row test file shows `Unknown employee category: 'X'` in the Issues table.
-
-**Step 2 — Make server rejections observable**
-Add `console.warn` with employee code + offending value before each of the two 400 returns, and before the 403. Include the resolved `company_id` in the category rejection log.
-*Verification:* edge logs show one line per rejected row.
-
-**Step 3 — Re-run the same 4-row file and read the real reason**
-With Steps 1–2 live, re-import. The Issues table plus edge logs will name the exact failing field and value for 101393 / 101395 / 101818.
-
-**Step 4 — Correct the underlying data (decided after Step 3)**
-Two likely outcomes:
-- *Spelling/whitespace variant* → fix the spreadsheet cells, re-import. No code change.
-- *Company-scoping mismatch* → either add the missing categories for `Saibal` / `Aruna Industries` in **Admin → Master Data → Employee Categories**, or relax the scope check to fall back to a global match when the company has no categories of its own. I will bring this back as an explicit decision rather than silently loosening validation.
-
-**Step 5 — Pre-flight validation in the importer (prevents recurrence)**
-The importer already validates departments and managers before dispatch. Extend the same pre-flight to `employeeCategory` and `employmentStatus` against the loaded master lists, so bad values are flagged as row errors in the preview step instead of costing a round-trip and a mystery 500.
-
-**Step 6 — Tests & docs**
-- Unit test: `invoke` error with a JSON body on `context` → helper returns the server's message, not the placeholder.
-- Unit test: pre-flight flags an unknown category/status before any network call.
-- Mock data covering valid, misspelled, and cross-company category rows.
-- `docs/adr/ADR-202.md` (edge-function error bodies must reach the import Issues table; validation rejections must be logged), plus `POLICY.md` §IMPORT-ERROR-TRANSPARENCY and a `DOCUMENTATION.md` version bump.
-
-## 6. UI changes
-
-Only inside the existing **Import Results → Issues** table: the `ERROR` cell shows the server's message (e.g. `Unknown employee category: 'Non-ESI'`) instead of `Edge Function returned a non-2xx status code`. Long messages wrap; the Download Error Report CSV carries the same text. No new components, no layout or responsiveness change.
-
-## 7. Technical detail
-
-- `src/pages/admin/ImportData.tsx` — new `extractFunctionError(fnError, fnData)` helper; used at the `invoke` call site; pre-flight master-data checks added to the employee row validator.
-- `supabase/functions/create-employee/index.ts` — `console.warn` before the two 400 returns and the 403; no behavioural change to the happy path.
-- No RLS, no schema, no trigger changes. Master-data rows (if Step 4 requires them) are additive inserts via the existing admin UI.
+- **Data:** none — read-only. No schema, RLS, or trigger change.
+- **Workflow:** none. Submission behaviour is untouched.
+- **UI/UX:** one new tab in an existing tab strip; the strip already scrolls horizontally on mobile.
+- **Regression risk:** low, isolated new components. Only shared touch is adding one `<TabsTrigger>` / `<TabsContent>` pair.
+- **Scalability:** 2,037 rows today and growing one row per assisted submission; server-side pagination and indexed filters keep it flat. Add an index on `(instance_id)` and `(captured_at DESC)` if the query plan warrants it.
+- **Rollback:** delete the new files, remove the tab pair, drop the two RPCs. No data migration to undo.
