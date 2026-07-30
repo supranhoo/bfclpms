@@ -64,6 +64,16 @@ export interface PipWindowAnchor {
   year: number;
 }
 
+/** Complete months, newest first, usable as anchor options. */
+export function recentMonthOptions(count: number, today: Date): PipWindowAnchor[] {
+  const out: PipWindowAnchor[] = [];
+  for (let i = 1; i <= count; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    out.push({ month: MONTHS[d.getMonth()], year: d.getFullYear() });
+  }
+  return out;
+}
+
 /**
  * `windowMonths` complete months ending at `anchor` (inclusive). When no anchor
  * is supplied the window ends with the previous calendar month.
