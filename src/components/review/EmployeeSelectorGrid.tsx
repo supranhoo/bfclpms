@@ -903,11 +903,13 @@ export function EmployeeSelectorGrid({
       // For merged team view, build direct + skip-level member sets for relationship detection
       const skipIds = viewLevel === 'team' ? skipIdSet : new Set<string>();
       const directIds = viewLevel === 'team' ? directIdSet : new Set<string>();
+      const functionalIds = viewLevel === 'team' ? functionalIdSet : new Set<string>();
       
       periodKpis.forEach(kpi => {
         const stages = getStages(kpi.employee_id);
         const isIndirect = skipIds.has(kpi.employee_id);
         const isDirect = directIds.has(kpi.employee_id);
+        const isFunctional = functionalIds.has(kpi.employee_id);
         const engineLevel = viewLevel === 'team' && isIndirect ? 'skip_level' as const : getEngineViewLevel();
         const reviewableStatuses = resolveReviewableStatuses(engineLevel, stages);
         
@@ -922,6 +924,7 @@ export function EmployeeSelectorGrid({
             tile === 'pending_kra_set' ||
             tile === 'pending_direct' ||
             tile === 'pending_skip' ||
+            tile === 'pending_functional' ||
             tile === 'reviewed'
           ) {
             if (matchesTeamTile(tile, {
@@ -929,6 +932,7 @@ export function EmployeeSelectorGrid({
               stages,
               isDirect,
               isIndirect,
+              isFunctional,
               isFullAccess,
             })) {
               employeeIds.add(kpi.employee_id);
