@@ -127,6 +127,8 @@ export interface CreatePIPData {
 export interface PIPListFilters {
   status?: PIPStatus;
   employeeId?: string;
+  /** Restrict to a set of employees (used for server-side name/code search). */
+  employeeIds?: string[] | null;
   initiatedBy?: string;
   /** 1-based page index. Omit for the first page. */
   page?: number;
@@ -172,6 +174,12 @@ export function usePIPs(filters?: PIPListFilters) {
       }
       if (filters?.employeeId) {
         query = query.eq('employee_id', filters.employeeId);
+      }
+      if (filters?.employeeIds) {
+        if (filters.employeeIds.length === 0) {
+          return { rows: [], total: 0, page, pageSize };
+        }
+        query = query.in('employee_id', filters.employeeIds);
       }
       if (filters?.initiatedBy) {
         query = query.eq('initiated_by', filters.initiatedBy);
