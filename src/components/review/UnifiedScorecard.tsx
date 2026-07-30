@@ -111,7 +111,10 @@ import {
 } from '@/lib/workflowEngine';
 
 // View level type - determines behavior and data access
-export type ScorecardViewLevel = 'self' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms';
+// ADR-206 §WF-FM-REVIEW-ACTION — every reviewer stage that can appear in a
+// resolved workflow chain MUST have a scorecard view level, otherwise that
+// reviewer falls back to another level and the KPI renders read-only.
+export type ScorecardViewLevel = 'self' | 'manager' | 'functional_manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms';
 
 interface EmployeeProfile {
   id: string;
@@ -164,6 +167,14 @@ const VIEW_LEVEL_STATIC: Record<ScorecardViewLevel, {
     previousScoreField: 'self_score',
     actionLabel: 'Approve',
     roleIcon: User,
+  },
+  functional_manager: {
+    title: 'Functional Manager Review',
+    description: 'Review as functional reporting manager',
+    scoreFieldPrefix: 'functional_manager',
+    previousScoreField: 'manager_score',
+    actionLabel: 'Forward',
+    roleIcon: UserCheck,
   },
   skip_level: {
     title: 'Skip-Level Review',

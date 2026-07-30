@@ -13,7 +13,7 @@ import { SubPeriodSubmission } from '@/hooks/useSubPeriodSubmissions';
 import { getMonthNumber } from '@/lib/frequencyUtils';
 import { calculateBinaryDailyScore, BinaryAggregationResult } from '@/lib/dailyAggregation';
 
-export type ReviewLevel = 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms';
+export type ReviewLevel = 'manager' | 'functional_manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms';
 
 interface ReviewLevelOverrideEditorProps {
   kpiId: string;
@@ -44,6 +44,7 @@ import { getScoreLabel, getScoreBadgeClass } from '@/lib/reviewConstants';
 
 const levelConfig: Record<ReviewLevel, { label: string; icon: typeof User; color: string; borderColor: string }> = {
   manager: { label: 'Manager', icon: Briefcase, color: 'text-amber-700 dark:text-amber-400', borderColor: 'border-amber-200 dark:border-amber-800' },
+  functional_manager: { label: 'Functional Manager', icon: Briefcase, color: 'text-fuchsia-700 dark:text-fuchsia-400', borderColor: 'border-fuchsia-200 dark:border-fuchsia-800' },
   skip_level: { label: 'Skip-Level', icon: User, color: 'text-teal-700 dark:text-teal-400', borderColor: 'border-teal-200 dark:border-teal-800' },
   hr_pms: { label: 'HR PMS', icon: User, color: 'text-rose-700 dark:text-rose-400', borderColor: 'border-rose-200 dark:border-rose-800' },
   auditor: { label: 'Auditor', icon: Shield, color: 'text-purple-700 dark:text-purple-400', borderColor: 'border-purple-200 dark:border-purple-800' },
