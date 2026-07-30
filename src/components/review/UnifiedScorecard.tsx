@@ -1545,6 +1545,16 @@ export function UnifiedScorecard({
 
   return (
     <div className="space-y-6">
+      {/* ADR-206 — Functional Manager mis-routing notice */}
+      {showFmMisroutingNotice && (
+        <div className="rounded-lg border border-blue-300 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 px-4 py-3 text-sm">
+          <p className="font-semibold text-blue-900 dark:text-blue-200">You are the Functional Manager for this employee</p>
+          <p className="text-blue-800 dark:text-blue-300/90 text-xs mt-0.5">
+            This screen opened in “{staticConfig.title}” mode, which is read-only for you. Open the employee from
+            Team Reviews → Functional Pending to score as Functional Manager.
+          </p>
+        </div>
+      )}
       {/* Disclose Smart Period Detection auto-switch */}
       <PeriodAutoSwitchBanner
         displayedPeriod={selectedPeriod}
