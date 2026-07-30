@@ -5333,3 +5333,10 @@ Rules:
 - Prevention: `trg_ar_stage_score_required` (ADR-172) blocks INSERT/UPDATE of a locked response whose stage has scoreable criteria and no scores. Rows locked before that trigger existed are exactly the historical `unscored` cohort and are only cleared by real re-scoring — never by back-filling zeros or force-completing.
 - Qualitative content (`__overall_recommendation`) is never evidence of scoring completeness and must not advance a stage on its own.
 - Regression: `src/lib/annualReview/narrativeStageDisplay.test.ts`.
+
+## §IMPORT-ERROR-TRANSPARENCY — Import failures must name their cause (ADR-202)
+- Any client call to an edge function whose failure is surfaced to a user MUST read the response body from `fnError.context` via `extractFunctionError()` (`src/lib/edgeFunctionError.ts`). Using `fnError.message` alone is forbidden: on a non-2xx `supabase.functions.invoke()` returns `data = null` and the fixed placeholder *"Edge Function returned a non-2xx status code"*, discarding the server's real message.
+- Every non-2xx return in an edge function MUST be preceded by a `console.warn`/`console.error` that identifies the subject (employee code, id) and the offending value. Silent validation rejections are a defect: they make the failure unrecoverable from logs.
+- Client-side pre-flight validation MUST mirror the server's acceptance rule exactly, including scoping predicates. For employee categories the rule is: accept when the category is global (`company_id IS NULL`) or bound to the row's resolved company. A name-only pre-flight that lets a cross-company row through is a policy violation.
+- Rejection messages must be actionable — distinguish "value does not exist" from "value exists but is out of scope", and name the admin screen that fixes it.
+- Regression: `src/test/edgeFunctionError.test.ts`, `src/test/importCategoryCompanyScope.test.ts`.
