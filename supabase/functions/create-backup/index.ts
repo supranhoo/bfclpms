@@ -1004,6 +1004,61 @@ async function runScheduledChunked(
   // last batch invocation.
   await sleep(INTER_BATCH_DELAY_MS * 2)
 
+  // ADR-204 — coverage reconciliation sweep.
+  //
+  // Before finalize, diff the manifest against the discovered table list and
+  // give every missing table one more single-table attempt while budget
+  // remains. Without this, a table whose batch retries were exhausted mid-run
+  // was never re-tried even though minutes of RETRY_BUDGET_MS were still
+  // available — which is exactly how 29 Jul 2026 lost one 34-row table and
+  // hard-failed a 247/248 run.
+  //
+  // The sweep NEVER downgrades a failure: if a table still cannot be
+  // exported, it stays out of the manifest and the WP-9.2.a hard-fail
+  // terminal remains the authority.
+  {
+    const covered = new Set(tableManifest.map((t) => t.table))
+    const missing = tablesToBackup.filter((t) => !covered.has(t))
+    if (missing.length > 0) {
+      const notes: string[] = []
+      for (const table of missing) {
+        const budgetLeftMs = RETRY_BUDGET_MS - (Date.now() - startTime)
+        if (budgetLeftMs <= 0) {
+          notes.push(`${table}: skipped (budget exhausted)`)
+          continue
+        }
+        const res = await callSelf({
+          backup_type: 'scheduled',
+          backup_id: backupId,
+          folder_path: folderPath,
+          tables: [table],
+        })
+        const processed = res.ok ? (res.data?.processed || []) : []
+        if (res.ok && processed.length > 0) {
+          for (const p of processed) {
+            const pFiles: string[] | undefined = p.files
+            const pFile: string | undefined = p.file
+            const files = pFiles && pFiles.length > 0
+              ? pFiles
+              : (pFile ? [pFile] : [`${folderPath}/${partFileName(p.table, 1)}`])
+            tableManifest.push({ table: p.table, rows: p.rows, file: files[0], files })
+            totalRows += p.rows
+            totalSize += p.sizeBytes || 0
+            tablesCount++
+          }
+          notes.push(`${table}: recovered`)
+        } else {
+          const why = res.ok
+            ? (res.data?.errors?.join(' | ') || 'no rows returned')
+            : (res.error ?? 'unknown')
+          notes.push(`${table}: still failing (${why})`)
+        }
+        await sleep(INTER_BATCH_DELAY_MS)
+      }
+      errors.push(`reconcile: ${missing.length} missing table(s) — ${notes.join('; ')}`)
+    }
+  }
+
   const finalizeResult = await callSelf({
     backup_type: 'scheduled',
     backup_id: backupId,
