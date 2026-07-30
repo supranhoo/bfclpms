@@ -21,12 +21,24 @@ import {
   useRejectPIP,
   useCompletePIP,
   useExtendPIP,
+  useCancelPIP,
   useUpdateMilestone,
   PIPStatus,
   PIPOutcome,
   MilestoneStatus
 } from '@/hooks/usePIP';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  pipStatusLabel,
+  pipStatusVariant,
+  pipOutcomeLabel,
+  pipOutcomeVariant,
+  pipMilestoneLabel,
+  pipMilestoneVariant,
+  PIP_OUTCOME_ORDER,
+  PIP_OUTCOME_DESCRIPTIONS,
+} from '@/lib/pip/pipVocabulary';
+import { availableActions, type PIPAction } from '@/lib/pip/pipTransitions';
 import { 
   AlertTriangle, 
   CalendarIcon, 
@@ -35,25 +47,20 @@ import {
   Download, 
   FileText, 
   Send, 
+  Ban,
   XCircle 
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
-const STATUS_CONFIG: Record<PIPStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ElementType }> = {
-  draft: { label: 'Draft', variant: 'secondary', icon: FileText },
-  pending_hr_approval: { label: 'Pending HR Approval', variant: 'outline', icon: Clock },
-  active: { label: 'Active', variant: 'default', icon: AlertTriangle },
-  completed: { label: 'Completed', variant: 'secondary', icon: CheckCircle2 },
-  extended: { label: 'Extended', variant: 'destructive', icon: Clock },
-  terminated: { label: 'Terminated', variant: 'destructive', icon: XCircle },
-};
-
-const MILESTONE_STATUS_CONFIG: Record<MilestoneStatus, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  pending: { label: 'Pending', variant: 'outline' },
-  met: { label: 'Met', variant: 'default' },
-  partially_met: { label: 'Partially Met', variant: 'secondary' },
-  not_met: { label: 'Not Met', variant: 'destructive' },
+// ADR-205: labels/variants come from the vocabulary SSOT; only the icon is local.
+const STATUS_ICONS: Record<PIPStatus, React.ElementType> = {
+  draft: FileText,
+  pending_hr_approval: Clock,
+  active: AlertTriangle,
+  completed: CheckCircle2,
+  extended: Clock,
+  terminated: Ban,
 };
 
 interface PIPDetailSheetProps {
