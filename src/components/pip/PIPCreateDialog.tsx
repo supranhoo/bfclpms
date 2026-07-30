@@ -111,7 +111,7 @@ export function PIPCreateDialog({
       const { data, error } = await supabase
         .from('performance_improvement_plans')
         .select('id, employee_id, status')
-        .in('status', LIVE_PIP_STATUSES as unknown as string[]);
+        .in('status', [...LIVE_PIP_STATUSES]);
       if (error) throw error;
       return data ?? [];
     },
