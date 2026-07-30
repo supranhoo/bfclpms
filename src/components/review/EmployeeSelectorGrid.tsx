@@ -1129,10 +1129,26 @@ export function EmployeeSelectorGrid({
 
     if (viewLevel === 'team') {
       // Merged view: separate direct pending, skip-level pending, and reviewed counts
-      let directPending = 0, skipPending = 0, reviewed = 0, kraSetPending = 0;
+      let directPending = 0, skipPending = 0, reviewed = 0, kraSetPending = 0, functionalPending = 0;
       relevantKpis.forEach(k => {
         const isIndirect = skipIds.has(k.employee_id);
         const isDirect = directIds.has(k.employee_id);
+        const isFunctional = functionalIdSet.has(k.employee_id);
+        // ADR-206 — functional pending is counted independently of the
+        // direct/skip branches below so an FM always sees their queue.
+        if (isFunctional || isFullAccess) {
+          const stages = getStages(k.employee_id);
+          if (stages.includes('functional_manager_check')) {
+            const fmReviewable = resolveReviewableStatuses('functional_manager', stages);
+            if (fmReviewable.includes(k.status || '')) functionalPending++;
+          }
+        }
+        if (isFunctional && !isDirect && !isIndirect) {
+          const stages = getStages(k.employee_id);
+          const fmIdx = stages.indexOf('functional_manager_check');
+          if (fmIdx >= 0 && stages.slice(fmIdx).includes(k.status || '')) reviewed++;
+          return;
+        }
         // BUG-050: Full-access roles (admin/auditor/management/hr_pms) have no
         // direct or skip-level reports — directIds/skipIds are empty — so the
         // membership-based branch below leaves all three tiles at 0 even when
@@ -1178,7 +1194,7 @@ export function EmployeeSelectorGrid({
         stat2: skipPending,
         stat3: reviewed,
         stat4: relevantKpis.length,
-        stat5: 0,
+        stat5: functionalPending,
         totalKpis: relevantKpis.length,
       };
     } else if (viewLevel === 'audit') {
