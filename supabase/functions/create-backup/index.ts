@@ -768,7 +768,14 @@ const INTER_BATCH_DELAY_MS = 900
 // with a healthy sibling.
 const BATCH_SIZE_RETRY = 1
 const RETRY_BUDGET_MS = 8 * 60_000
-const RETRY_BACKOFFS_MS = [5_000, 15_000] as const
+// ADR-204 — widened backoff schedule.
+// 29 Jul 2026: a single-table sub-batch got HTTP 502 on the initial call and
+// on both retries — all inside a ~20s window — while 427s of RETRY_BUDGET_MS
+// went unused. Gateway blips routinely outlast 20s, so the schedule now
+// spans ~2.6 min across 4 attempts. Still comfortably inside the 8-min
+// budget (which remains the hard wall-clock authority) and inside the 30-min
+// stuck-backup reaper ceiling. BATCH_SIZE / BATCH_SIZE_RETRY are unchanged.
+const RETRY_BACKOFFS_MS = [5_000, 15_000, 45_000, 90_000] as const
 
 export function isTransientChunkError(
   errMsg: string | undefined,
