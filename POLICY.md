@@ -223,6 +223,21 @@
 
 **Implementation.** `useDownloadBackup` in `src/hooks/useBackups.ts`. Regression guard: `src/test/backupDownloadChunkedParts.test.ts`.
 
+### §BACKUP-TRANSIENT-RESILIENCE — Gateway transients must not cost a table (v2.66.130, 2026-07-30 / ADR-204)
+
+**Rule.** A scheduled backup MUST survive an upstream gateway blip without losing coverage:
+
+1. **Upload-level retry.** Every part-file upload in `streamTableToStorage` MUST be retried on transient signals (`Gateway Timeout` / timeout / `isTransientChunkError`). Attempt 1 keeps `upsert: false`; retries MUST use `upsert: true` so a half-written object cannot poison the retry with "resource already exists". Non-transient errors (4xx / permission / RLS) MUST re-throw immediately without retry.
+2. **Backoff must fit the budget.** `RETRY_BACKOFFS_MS` MUST be strictly increasing and its sum MUST stay below `RETRY_BUDGET_MS` (8 min). A schedule shorter than the observed gateway-blip window (≥ ~2 min) is non-compliant.
+3. **Reconciliation sweep.** Before `finalize`, every scheduled run MUST diff the manifest against the discovered table list and re-attempt each missing table individually while budget remains, recording the outcome under a `reconcile:` prefix in `backup_logs.error_message`.
+4. **Hard-fail stays terminal.** The sweep MUST NOT downgrade a failure. If a table is still missing after reconciliation, `backup_hard_fail_on_partial` still marks the run `failed` (§Backup, WP-9.2.a). A failed backup is re-run, never "verified" away.
+
+**Why.** 26 Jul 2026: one `Gateway Timeout` on a single part upload dropped a table (238/239 → failed) — the batch layer cannot help because `handleBatch` answers HTTP 200 with the table in `errors`. 29 Jul 2026: a 34-row / 64 kB table's single-table sub-batch got `HTTP 502` on the initial call and both retries inside a ~20 s window, while **427 s of retry budget went unused**, and no post-loop pass ever re-tried it (247/248 → failed). Both are recoverable transients, not capacity problems.
+
+**Implementation.** `supabase/functions/create-backup/index.ts` — `uploadPartWithRetry`, `UPLOAD_RETRY_BACKOFFS_MS`, widened `RETRY_BACKOFFS_MS = [5s, 15s, 45s, 90s]`, reconciliation block in `runScheduledChunked`. Unchanged invariants: `BATCH_SIZE = 4`, `BATCH_SIZE_RETRY = 1`, `RETRY_BUDGET_MS = 8 min`, `ROWS_PER_CHUNK = 5000`, `PAGE_SIZE = 1000`, `loadHardFailOnPartial`.
+
+**Guard.** `src/test/infra/backupTransientResilienceContract.test.ts` (4 contract tests) plus the existing Phase-9 coverage and finalize-memory contracts.
+
 
 **Rule.** The `review-evidence` Storage bucket is **private**. Any client surface that lets a user download or open an evidence file MUST route the URL through either (a) `supabase.storage.from(bucket).download(path)` to obtain a `blob:` URL, or (b) `supabase.storage.from(bucket).createSignedUrl(path, ≤600)` to obtain a short-lived signed URL. Direct navigation to `/storage/v1/object/public/<bucket>/<path>` is forbidden — a private bucket returns `404 Bucket not found` for that path, which is what the auditor saw on 2026-06-29 when downloading an `.xlsx`.
 
