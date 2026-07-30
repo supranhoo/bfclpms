@@ -15432,6 +15432,59 @@ export type Database = {
         Args: { v_uid: string }
         Returns: Json
       }
+      get_annual_review_assisted_submissions: {
+        Args: {
+          p_bu_id?: string
+          p_cycle_id?: string
+          p_dept_id?: string
+          p_evidence?: string
+          p_from?: string
+          p_limit?: number
+          p_offset?: number
+          p_proxy_user_id?: string
+          p_search?: string
+          p_to?: string
+        }
+        Returns: {
+          business_unit_id: string
+          business_unit_name: string
+          captured_at: string
+          cycle_id: string
+          declaration_text: string
+          department_id: string
+          department_name: string
+          employee_code: string
+          employee_id: string
+          employee_name: string
+          has_photo: boolean
+          has_selfie: boolean
+          id: string
+          instance_id: string
+          ip: string
+          overall_status: string
+          photo_upload_path: string
+          proxy_code: string
+          proxy_name: string
+          proxy_role: string
+          proxy_user_id: string
+          selfie_path: string
+          total_count: number
+          user_agent: string
+        }[]
+      }
+      get_annual_review_assisted_summary: {
+        Args: { p_cycle_id?: string }
+        Returns: {
+          assisted_pct: number
+          distinct_assistors: number
+          missing_both: number
+          missing_photo: number
+          missing_selfie: number
+          top_assistors: Json
+          total_assisted: number
+          total_submitted: number
+        }[]
+      }
       get_annual_review_carry_kra_rows: {
         Args: { p_fy_start: number; p_instance_id: string }
         Returns: {

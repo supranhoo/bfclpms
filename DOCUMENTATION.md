@@ -7692,3 +7692,12 @@ Reviews such as employee 101279 showed a saved "Overall Recommendation" but blan
 - **Prevention**: the existing `trg_ar_stage_score_required` trigger already blocks new occurrences on INSERT and UPDATE; no new writes are possible.
 - **Tests**: `src/lib/annualReview/narrativeStageDisplay.test.ts` (6 tests).
 - **Policy**: §AR-STAGE-SUBMIT-SCORE-COMPLETENESS.
+
+## ADR-203 — Assisted Submissions admin console
+- **Problem**: assisted (proxy) annual review submissions were captured with full evidence but had no UI; admins could not verify who submitted on whose behalf.
+- **Data**: `annual_review_proxy_submissions` (already immutable). Two new SECURITY INVOKER RPCs (RLS remains the access authority) — `get_annual_review_assisted_submissions` (paginated, filtered, returns `total_count`) and `get_annual_review_assisted_summary` (totals, assisted %, missing-evidence counts, top assistors). Supporting indexes on `instance_id`, `proxy_user_id`, `captured_at`.
+- **Service layer**: `src/services/annualReview/assistedSubmissions.ts` (types, RPC mappers, evidence labels, CSV export).
+- **Hooks**: `src/hooks/annualReview/useAssistedSubmissions.ts` — `useAssistedSubmissions`, `useAssistedSummary`, filter-complete query keys.
+- **UI**: `src/components/annual-review/AssistedSubmissionsTab.tsx` (server-paginated table, 6 filters, summary cards, per-page CSV export) and `AssistedEvidenceDrawer.tsx` (5-minute signed URLs, declaration text, device/IP, deep link to the full review). Registered as the **Assisted Submissions** tab in `AnnualReviewAdmin.tsx`.
+- **Policy**: §AR-ASSISTED-SUBMISSION-VISIBILITY.
+- **Tests**: `src/test/assistedSubmissions.test.ts`.
