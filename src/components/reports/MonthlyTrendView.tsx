@@ -475,6 +475,14 @@ export function MonthlyTrendView({ canExport }: Props) {
           </CardContent>
         </Card>
       )}
+
+      {canStartPip && (
+        <PIPCreateDialog
+          open={!!pipDialogEmployeeId}
+          onOpenChange={(o) => { if (!o) setPipDialogEmployeeId(null); }}
+          preselectedEmployeeId={pipDialogEmployeeId ?? undefined}
+        />
+      )}
     </div>
   );
 }
