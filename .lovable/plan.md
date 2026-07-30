@@ -1,60 +1,52 @@
-## Assumptions
-- "Vrindaban Das" = Brundaban Chandra Das (102028); FM = V.A.V.S.S. Ganapathi Varma (200271), who holds the `manager` role but is NOT 102028's L1 (that is Sajid Raza, 100264).
-- Scope is June 2026, but the fix is generic to every FM-mapped employee.
+## What I verified first (facts, not assumptions)
 
-## Verified current state
-- `profiles` 102028: `functional_manager_id = Ganapathi Varma`, `reporting_manager_id = Sajid Raza`. Both active.
-- Workflow for 102028 / June 2026 resolves to `self_l1_f1_audit` = `kra_set → self_review → manager_check → functional_manager_check → audit → approved` (employee-level ongoing `workflow_config` row). So FM IS in the chain.
-- All 20 June-2026 KPIs are at `status = 'manager_check'`. Per the project convention (status = last COMPLETED stage), they are pending with the Functional Manager — matching the screenshot (Manager Check 20, Functional Mgr 0).
+Database (live queries):
+- Brundaban Chandra Das (102028) → `functional_manager_id` = V.A.V.S.S. Ganapathi Varma (200271); `reporting_manager_id` = Sajid Raza (100264), whose manager is Gaurav Budhia. So Ganapathi is **only** a functional manager for him — not direct, not skip.
+- Ganapathi has exactly one role: `manager` (i.e. NOT full-access).
+- June 2026: 20 KPIs at status `manager_check`. `fm_pending_status_for_kpi` = `manager_check` for those rows, so the FM stage exists in his resolved workflow and the FM is the pending actor.
+- RLS is already correct: `FM can update KPI status on FM stage` (USING `is_fm_actionable_kpi(id)`), plus matching update/insert policies on `review_submissions`, and SELECT/INSERT policies on observations/queries. `is_fm_actionable_kpi` returns false in my SQL session only because `auth.uid()` is NULL there — that is expected, not a defect.
 
-## Root cause (two independent defects)
+Client (code reads):
+- `UnifiedScorecard` has the `functional_manager` level with prefix `functional_manager` and previous score `manager_score`; `KpiDetailsTable` / `MobileKpiCard` accept `functional-manager-review`; `workflowEngine` resolves the FM reviewable status as the stage preceding `functional_manager_check`.
+- `get_manager_team_roster` returns a `functional` relationship row, and the non-full-access Team branch of `EmployeeSelectorGrid` uses it.
 
-**RC-1 — Client: there is no Functional Manager scorecard view.**
-`UnifiedScorecard`'s `ScorecardViewLevel` is `'self' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms'` — `functional_manager` is missing, and `VIEW_LEVEL_STATIC` has no entry for it. `Dashboard.tsx` (line ~358) maps `team` → `manager` and only special-cases `relationship === 'indirect'` → `skip_level`; the `'functional'` relationship (added by ADR-193 to the roster RPCs) is never mapped. Result: the FM opens the employee as `viewLevel='manager'`, whose `reviewableStatuses` = `['self_review']`. KPIs at `manager_check` therefore render read-only — exactly what the user reports. `workflowEngine.ts` already supports `functional_manager` in every resolver; only the scorecard/dashboard layer is unwired.
+**Conclusion on the reported symptom:** for Ganapathi's own login the happy path is now wired end to end; the read-only screenshot matches the pre-fix build. What is *not* yet closed are the real remaining gaps below, which still produce a read-only FM view on other entry paths.
 
-**RC-2 — Server: FM write policies gate on the wrong status.**
-- `kpis` policy "FM can update KPI status on FM stage": `USING (is_functional_manager_of(employee_id) AND status = 'functional_manager_check')`
-- `review_submissions` policy "FM can update review_submissions on FM stage": same `k.status = 'functional_manager_check'` predicate.
+## Confirmed remaining gaps
 
-`functional_manager_check` is the status set AFTER the FM signs off. While pending with the FM the status is the PRECEDING stage (`manager_check`). So even if the UI were fixed, the write would be rejected by RLS. There is also no FM INSERT policy on `review_submissions` (needed when a submission row is absent).
-
-## 5 Why
-1. FM cannot review → the scorecard renders read-only and writes would be denied.
-2. Why read-only → the scorecard runs as `viewLevel='manager'`, whose reviewable status is `self_review`.
-3. Why `manager` → Dashboard's view-level map has no branch for the `functional` relationship and `ScorecardViewLevel` has no `functional_manager` member.
-4. Why writes denied → FM RLS predicates were written against the FM's own completed stage instead of the pending (preceding) stage.
-5. Why both → ADR-193/194/196 delivered FM data, roster, columns and report parity, but never the reviewer ACTION path; no test exercised an FM actually submitting a score.
-
-## Risk & Impact
-- Data: no schema change; policy replacement only (additive/corrective). Historical rows untouched.
-- Workflow: FM stage becomes actionable; forward status already resolves via `resolveForwardStatus('functional_manager', stages)` → `audit` for this template.
-- UI: Team Reviews for an FM-mapped employee gains an editable FM column/action, header label "Functional Manager Review", send-back targets from `resolveSendBackTargets`.
-- Regression risk: medium-low. Guarded by keeping the L1 path untouched — the new branch fires only when `relationship === 'functional'` and the resolved chain contains `functional_manager_check`.
-- Scalability: none (no new queries).
-- Rollback: revert the two policies to their current definitions and drop the new view-level branch.
+1. **Full-access viewers mis-tag the relationship.** In `EmployeeSelectorGrid`, the `isFullAccess` Team branch tags only `direct` / `indirect`; a functional report falls through as `undefined`. Admin/HR/Management assisting an FM therefore land on the Manager view (read-only at `manager_check`).
+2. **Deep-link / direct-open path is unreliable.** `resolveRelationship` in `Dashboard.tsx` decides "functional" by reading `employee.functional_manager_id`, a field the roster payloads do not always carry; it then silently defaults to `relationship: 'direct'`, which is exactly the read-only manager view.
+3. **No FM signal in the stage strip / tiles.** The grid computes `functionalIdSet` but the header tiles only expose direct/skip counts, so an FM sees "Functional Mgr 0" with no pending tile.
+4. **No live proof.** Existing tests (`functionalManagerScorecardLevel.test.ts`, `functionalManagerPendingWith.test.ts`) are pure-logic; nothing asserts the RLS write actually succeeds.
 
 ## Plan
 
-### Phase A — Server (migration)
-1. Replace the `kpis` FM UPDATE policy: allow when `is_functional_manager_of(employee_id)` AND the KPI's current status is the stage immediately preceding `functional_manager_check` in that employee's resolved chain, OR is already `functional_manager_check` (re-edit). Implement via a new SECURITY DEFINER helper `public.is_fm_actionable_kpi(kpi_id uuid)` that resolves the chain with `get_employee_workflow(employee_id, review_period, review_year)` — no hardcoded stage array (POLICY §105).
-   Verification: `SELECT is_fm_actionable_kpi(id)` returns true for the 20 June-2026 KPIs of 102028.
-2. Same helper for the `review_submissions` FM UPDATE policy; add a matching FM INSERT policy.
-   Verification: simulated FM update on one KPI succeeds; a non-FM user still fails.
-3. Confirm the FM stage is included in the notification/audit triggers already touched by ADR-196 (no change expected — verify only).
+### Phase D1 — Relationship resolution SSOT (client)
+- Add `src/lib/review/resolveReviewerRelationship.ts`: single pure function taking `{ viewerId, employee: { reporting_manager_id, functional_manager_id }, directIds, skipIds, functionalIds }` → `'direct' | 'indirect' | 'functional' | 'other'`, with **functional evaluated before the `direct` fallback**.
+- `EmployeeSelectorGrid`: use it in **both** Team branches, so full-access viewers also tag `functional` (source: `functionalIdSet`, plus a `functional_manager_id === viewerId` check on the profile row).
+- `Dashboard.tsx`: replace the ad-hoc chain in `resolveRelationship` with the same helper; when the field is absent, do one targeted `profiles` read of `functional_manager_id` for that employee instead of defaulting to `direct`.
 
-### Phase B — Client
-4. `UnifiedScorecard.tsx`: add `'functional_manager'` to `ScorecardViewLevel` and a `VIEW_LEVEL_STATIC` entry (title "Functional Manager Review", score field `functional_manager_score`, rating/remarks/evidence/achieved-value fields, `previousScoreField: 'manager_score'`). All dynamic resolvers already accept the key.
-5. `Dashboard.tsx`: extend the view-level resolution — when `viewMode === 'team'` and `selectedEmployee.relationship === 'functional'`, use `functional_manager`. Keep `indirect → skip_level` and default `direct → manager`.
-   UI change: same Team Reviews screen; the KPI Details action column becomes editable for the FM and the header reads "Functional Manager Review". Stage strip and counters unchanged (already FM-aware via `CANONICAL_WORKFLOW_STAGES`).
-6. `EmployeeSelectorGrid` already tags "Functional" and counts via `resolveReviewableStatuses('functional_manager')` — verify only, no change expected.
+### Phase D2 — FM visibility in Team Reviews
+- Surface a "Functional" tile/filter chip beside Direct / Skip-Level, driven by `functionalIdSet`, with pending counts computed from `resolveReviewableStatuses('functional_manager', stages)` (the counting logic already exists in `getEmployeeKpiStats`).
+- Employee cards keep the existing `functional` badge.
 
-### Phase C — Tests & docs
-7. New `src/test/review/functionalManagerReviewAction.test.ts`: view-level resolution for `functional`/`indirect`/`direct`; `VIEW_LEVEL_STATIC` completeness for every `ScorecardViewLevel`; FM reviewable status = stage preceding FM in `self_l1_f1_audit`; forward status = `audit`.
-8. Extend `src/test/e2e/functionalManagerWorkflow.e2e.test.tsx` with an FM submit assertion.
-9. `docs/adr/ADR-206.md` + `POLICY.md §WF-FM-REVIEW-ACTION` ("A reviewer stage present in a resolved chain MUST have a scorecard view level and RLS predicates keyed to the PENDING status, not the reviewer's own completed status"), plus DOCUMENTATION.md version history.
+### Phase D3 — Guardrail against silent read-only
+- In `UnifiedScorecard`, when the viewer is a mapped FM for the employee and the KPI's status equals the FM-pending stage but the resolved view level is not `functional_manager`, render an explicit inline notice ("You are the Functional Manager for this employee — reopen from Team → Functional") rather than a silent read-only grid. This turns any future mis-routing into a visible, diagnosable state.
 
-### Phase D — Verification for the reported case
-10. Sign-in-equivalent check as Ganapathi Varma: 20 June-2026 KPIs of 102028 appear actionable; one test score save succeeds and advances that KPI to `functional_manager_check`.
+### Phase D4 — Test case and live verification
+- Unit: `resolveReviewerRelationship` matrix (direct / indirect / functional / functional-when-also-indirect / unknown), including the full-access branch.
+- Integration (vitest): given workflow `[…, manager_check, functional_manager_check, …]` and KPI status `manager_check`, assert view level `functional_manager`, `isReviewable === true`, and score field prefix `functional_manager`.
+- Live: run a signed-in browser check against the preview with the real records — open Team → 102028 as the FM path, confirm the view header reads "Functional Manager Review", the score inputs are editable, and a save writes `functional_manager_score` to `review_submissions`. Report the observed result before declaring closure.
 
-## Not applicable
-No data backfill — the 20 KPIs are correctly positioned; only access was broken.
+### Phase D5 — Documentation and policy
+- `docs/adr/ADR-206.md`: record RCA (relationship resolution, not RLS), the SSOT helper, and the guardrail.
+- `POLICY.md §WF-FM-RELATIONSHIP-SSOT`: relationship tagging must come from one resolver; no reviewer path may default an untagged employee to `direct`.
+- Version History entry.
+
+## Risk and impact
+
+- **Data:** none. No schema or RLS change — server side is already correct and verified.
+- **Workflow:** additive only; direct/skip/full-access routing is unchanged except that functional is now checked before the `direct` fallback.
+- **UI:** one new tile/chip in Team Reviews; one new inline notice that appears only in the mis-routing case.
+- **Regression risk:** medium-low, concentrated in `EmployeeSelectorGrid` roster memoisation — mitigated by the relationship matrix unit test and the existing team-roster gate tests.
+- **Rollback:** revert the helper and its three call sites; no migration to undo.

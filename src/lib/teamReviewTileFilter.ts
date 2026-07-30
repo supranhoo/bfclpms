@@ -20,6 +20,7 @@ export type TeamTile =
   | 'pending_kra_set'
   | 'pending_direct'
   | 'pending_skip'
+  | 'pending_functional'
   | 'reviewed';
 
 export interface TileContext {
@@ -30,6 +31,8 @@ export interface TileContext {
   isDirect: boolean;
   /** Skip-level relationship from skipLevelMembers list. */
   isIndirect: boolean;
+  /** ADR-206 — functional-manager relationship (profiles.functional_manager_id). */
+  isFunctional?: boolean;
   /** admin / hr_pms / auditor / management role. */
   isFullAccess: boolean;
 }
@@ -38,6 +41,7 @@ export function matchesTeamTile(tile: TeamTile, ctx: TileContext): boolean {
   const status = ctx.kpiStatus || '';
   const hasManagerStage = ctx.stages.includes('manager_check');
   const hasSkipStage = ctx.stages.includes('skip_level_check');
+  const hasFunctionalStage = ctx.stages.includes('functional_manager_check');
 
   switch (tile) {
     case 'pending_kra_set':
@@ -60,6 +64,16 @@ export function matchesTeamTile(tile: TeamTile, ctx: TileContext): boolean {
       return ctx.isIndirect || ctx.isFullAccess;
     }
 
+    case 'pending_functional': {
+      // ADR-206 — stage-true: no FM stage in the resolved workflow ⇒ never
+      // "functional pending". The FM acts on the stage PRECEDING
+      // `functional_manager_check`, which resolveReviewableStatuses encodes.
+      if (!hasFunctionalStage) return false;
+      const fmReviewable = resolveReviewableStatuses('functional_manager', ctx.stages);
+      if (!fmReviewable.includes(status)) return false;
+      return !!ctx.isFunctional || ctx.isFullAccess;
+    }
+
     case 'reviewed':
       // Direct manager: anything past self_review on direct reports.
       if (ctx.isDirect && !['kra_set', 'self_review'].includes(status)) return true;
@@ -67,6 +81,11 @@ export function matchesTeamTile(tile: TeamTile, ctx: TileContext): boolean {
       if (ctx.isIndirect && hasSkipStage) {
         const slIdx = ctx.stages.indexOf('skip_level_check');
         return slIdx >= 0 && ctx.stages.slice(slIdx).includes(status);
+      }
+      // ADR-206 — functional: KPI has reached or passed the FM stage.
+      if (ctx.isFunctional && hasFunctionalStage) {
+        const fmIdx = ctx.stages.indexOf('functional_manager_check');
+        return fmIdx >= 0 && ctx.stages.slice(fmIdx).includes(status);
       }
       // Full-access (no relationship): count anything past KRA Set/self_review.
       if (ctx.isFullAccess && !['kra_set', 'self_review'].includes(status)) return true;

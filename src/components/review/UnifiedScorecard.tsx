@@ -45,7 +45,7 @@ import { SendBackOrgKpiDialog } from '@/components/review/SendBackOrgKpiDialog';
 import { scoreToRating } from '@/components/review/ScoreSelector';
 import { calculateRating } from '@/lib/ratingCalculation';
 import { buildCycleScopeLabel } from '@/lib/frequencyUtils';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -249,6 +249,29 @@ export function UnifiedScorecard({
   // Fetch the employee's workflow stages dynamically
   const { data: workflowStages, isLoading: stagesLoading } = useEmployeeWorkflowStages(employee.id, selectedPeriod, selectedYear);
   const effectiveStages = workflowStages || DEFAULT_WORKFLOW_STAGES;
+
+  // ADR-206 / POLICY §WF-FM-RELATIONSHIP-SSOT — mis-routing guardrail.
+  // If the viewer is the mapped Functional Manager for this employee but the
+  // scorecard resolved to a different (read-only) view level, surface it
+  // explicitly instead of rendering a silent read-only grid.
+  const { data: isMappedFunctionalManager } = useQuery({
+    queryKey: ['is-fm-of-employee', user?.id, employee.id],
+    enabled: !!user?.id && !!employee.id && viewLevel !== 'self' && viewLevel !== 'functional_manager',
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('functional_manager_id')
+        .eq('id', employee.id)
+        .maybeSingle();
+      if (error) return false;
+      return data?.functional_manager_id === user?.id;
+    },
+  });
+  const showFmMisroutingNotice =
+    !!isMappedFunctionalManager &&
+    viewLevel !== 'functional_manager' &&
+    effectiveStages.includes('functional_manager_check');
 
   // Build dynamic config from workflow stages
   const config = useMemo(() => {
@@ -1522,6 +1545,16 @@ export function UnifiedScorecard({
 
   return (
     <div className="space-y-6">
+      {/* ADR-206 — Functional Manager mis-routing notice */}
+      {showFmMisroutingNotice && (
+        <div className="rounded-lg border border-blue-300 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 px-4 py-3 text-sm">
+          <p className="font-semibold text-blue-900 dark:text-blue-200">You are the Functional Manager for this employee</p>
+          <p className="text-blue-800 dark:text-blue-300/90 text-xs mt-0.5">
+            This screen opened in “{staticConfig.title}” mode, which is read-only for you. Open the employee from
+            Team Reviews → Functional Pending to score as Functional Manager.
+          </p>
+        </div>
+      )}
       {/* Disclose Smart Period Detection auto-switch */}
       <PeriodAutoSwitchBanner
         displayedPeriod={selectedPeriod}

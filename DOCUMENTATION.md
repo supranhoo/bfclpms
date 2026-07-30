@@ -7718,3 +7718,13 @@ Reviews such as employee 101279 showed a saved "Overall Recommendation" but blan
 - **Phase C (integrations)**: `send-scheduled-emails` gained an idempotent PIP milestone reminder producer (dedupe per `(milestone_id, recipient_id)` within 24h, isolated in try/catch); Monthly Trend now uses the candidate-rule SSOT and offers a "Review & start PIP" list wired to `PIPCreateDialog` with the employee preselected; `useSystemIssues` reads the full open PIP set and its configurable SLA thresholds.
 - **Policy**: §PIP-LIFECYCLE-GOVERNANCE.
 - **Tests**: `src/test/pip/pipLifecycle.test.ts` (18).
+
+## ADR-206 — Functional Manager Review Action Path
+
+Functional Managers (FM) can now score their mapped employees end-to-end.
+
+- **SSOT resolver:** `src/lib/review/resolveReviewerRelationship.ts` returns `direct | indirect | functional | other`; used by `Dashboard.tsx` (deep links) and `EmployeeSelectorGrid.tsx` (roster tagging, incl. the full-access admin/HR branch).
+- **Scorecard:** `UnifiedScorecard` supports the `functional_manager` view level (viewType `functional-manager-review`) and renders a mis-routing notice when an FM lands on another view level.
+- **Tiles:** "Functional Pending" stat card + `pending_functional` filter in `src/lib/teamReviewTileFilter.ts`, shown only when the resolved workflow contains `functional_manager_check`.
+- **Server:** `is_fm_actionable_kpi(uuid)` drives `kpis` / `review_submissions` write policies at the stage preceding `functional_manager_check`.
+- **Policy:** POLICY §WF-FM-RELATIONSHIP-SSOT. **Tests:** 16 across two suites.

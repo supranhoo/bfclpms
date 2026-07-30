@@ -5382,3 +5382,15 @@ Rules:
 **Why.** The module was half-wired: an admin-only audit policy made every manager/HR action throw, `hr_pms` had zero access despite owning the approval stage, an initiating manager could approve their own plan, and the reminder template had no producer.
 
 **Guard.** `src/test/pip/pipLifecycle.test.ts` (18 tests: vocabulary, transition graph, segregation of duties, candidate rule).
+
+---
+
+## §WF-FM-RELATIONSHIP-SSOT — Functional Manager review action path (ADR-206)
+
+1. **One resolver.** Reviewer relationship (`direct` / `indirect` / `functional` / `other`) is resolved in exactly one place: `src/lib/review/resolveReviewerRelationship.ts`. Dashboards, deep links, and the Team Reviews grid MUST call it instead of re-deriving the relationship inline. A server-supplied `relationship` tag always wins.
+2. **No silent direct default.** An untagged employee whose `functional_manager_id` equals the viewer is `functional`, never `direct`. Where the roster payload omits `functional_manager_id`, the caller MUST fetch it before resolving — defaulting to the manager view renders a read-only grid for the accountable reviewer.
+3. **FM acts on the preceding stage.** The Functional Manager scores while the KPI sits at the stage *immediately before* `functional_manager_check` (typically `manager_check`), because `status` names the last COMPLETED stage (§WF-STATUS-CONVENTION). RLS (`is_fm_actionable_kpi`) and the client (`resolveReviewableStatuses('functional_manager', stages)`) MUST agree on that resolution.
+4. **Stage-true tiles.** The "Functional Pending" tile only counts employees whose resolved workflow actually contains `functional_manager_check` and whose viewer relationship is `functional`. Workflows without the FM stage never surface the tile.
+5. **Mis-routing is visible, not silent.** If the viewer is the mapped FM but the scorecard opened at another view level, `UnifiedScorecard` MUST render an explicit notice directing them to the Functional Pending entry point.
+
+**Guard.** `src/test/review/reviewerRelationshipResolver.test.ts`, `src/test/review/functionalManagerScorecardLevel.test.ts`.

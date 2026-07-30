@@ -14,6 +14,7 @@ import { useEmployeeScoresForPeriod } from '@/hooks/useEmployeeScoresForPeriod';
 import { useOrgKpiPeriodCounts } from '@/hooks/useOrgKpiPeriodCounts';
 import { resolvePendingStatuses, resolveReviewableStatuses, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { matchesTeamTile, type TeamTile } from '@/lib/teamReviewTileFilter';
+import { resolveReviewerRelationship } from '@/lib/review/resolveReviewerRelationship';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -536,10 +537,22 @@ export function EmployeeSelectorGrid({
         // Admin/auditor/management see all profiles; tag based on reporting chain
         const skipIds = new Set(skipLevelMembers?.map(m => m.id) || []);
         const directIds = new Set(teamMembers?.map(m => m.id) || []);
-        resolved = allProfiles?.map(p => ({
-          ...p,
-          relationship: (skipIds.has(p.id) ? 'indirect' : directIds.has(p.id) ? 'direct' : undefined) as 'direct' | 'indirect' | undefined,
-        }));
+        // ADR-206 / POLICY §WF-FM-RELATIONSHIP-SSOT — functional reports must
+        // be tagged here too, otherwise a full-access viewer assisting a
+        // Functional Manager lands on the read-only Manager view.
+        resolved = allProfiles?.map(p => {
+          const rel = resolveReviewerRelationship({
+            viewerId: user?.id,
+            employee: p as any,
+            directIds,
+            skipIds,
+            functionalIds: functionalIdSet,
+          });
+          return {
+            ...p,
+            relationship: (rel === 'other' ? undefined : rel) as 'direct' | 'indirect' | 'functional' | undefined,
+          };
+        });
       } else {
         // v2.66.38 — Manager roster comes from server-side RPC with
         // relationship already tagged. Falls back to legacy direct/skip
@@ -574,7 +587,7 @@ export function EmployeeSelectorGrid({
     // already filter is_active=true, so this is a no-op for them.
     if (!isFullAccess) return withoutViewer;
     return applyEmployeeStatusFilter(withoutViewer, empStatus, (p) => p.is_active);
-  }, [viewLevel, teamMembers, skipLevelMembers, managerRoster, allProfiles, isFullAccess, requiredStage, stageFilteredProfiles, statusFilter, user?.id, empStatus]);
+  }, [viewLevel, teamMembers, skipLevelMembers, managerRoster, allProfiles, isFullAccess, requiredStage, stageFilteredProfiles, statusFilter, user?.id, empStatus, functionalIdSet]);
 
   // Auto-open KPI from URL
   useEffect(() => {
@@ -890,11 +903,13 @@ export function EmployeeSelectorGrid({
       // For merged team view, build direct + skip-level member sets for relationship detection
       const skipIds = viewLevel === 'team' ? skipIdSet : new Set<string>();
       const directIds = viewLevel === 'team' ? directIdSet : new Set<string>();
+      const functionalIds = viewLevel === 'team' ? functionalIdSet : new Set<string>();
       
       periodKpis.forEach(kpi => {
         const stages = getStages(kpi.employee_id);
         const isIndirect = skipIds.has(kpi.employee_id);
         const isDirect = directIds.has(kpi.employee_id);
+        const isFunctional = functionalIds.has(kpi.employee_id);
         const engineLevel = viewLevel === 'team' && isIndirect ? 'skip_level' as const : getEngineViewLevel();
         const reviewableStatuses = resolveReviewableStatuses(engineLevel, stages);
         
@@ -909,6 +924,7 @@ export function EmployeeSelectorGrid({
             tile === 'pending_kra_set' ||
             tile === 'pending_direct' ||
             tile === 'pending_skip' ||
+            tile === 'pending_functional' ||
             tile === 'reviewed'
           ) {
             if (matchesTeamTile(tile, {
@@ -916,6 +932,7 @@ export function EmployeeSelectorGrid({
               stages,
               isDirect,
               isIndirect,
+              isFunctional,
               isFullAccess,
             })) {
               employeeIds.add(kpi.employee_id);
@@ -1112,10 +1129,26 @@ export function EmployeeSelectorGrid({
 
     if (viewLevel === 'team') {
       // Merged view: separate direct pending, skip-level pending, and reviewed counts
-      let directPending = 0, skipPending = 0, reviewed = 0, kraSetPending = 0;
+      let directPending = 0, skipPending = 0, reviewed = 0, kraSetPending = 0, functionalPending = 0;
       relevantKpis.forEach(k => {
         const isIndirect = skipIds.has(k.employee_id);
         const isDirect = directIds.has(k.employee_id);
+        const isFunctional = functionalIdSet.has(k.employee_id);
+        // ADR-206 — functional pending is counted independently of the
+        // direct/skip branches below so an FM always sees their queue.
+        if (isFunctional || isFullAccess) {
+          const stages = getStages(k.employee_id);
+          if (stages.includes('functional_manager_check')) {
+            const fmReviewable = resolveReviewableStatuses('functional_manager', stages);
+            if (fmReviewable.includes(k.status || '')) functionalPending++;
+          }
+        }
+        if (isFunctional && !isDirect && !isIndirect) {
+          const stages = getStages(k.employee_id);
+          const fmIdx = stages.indexOf('functional_manager_check');
+          if (fmIdx >= 0 && stages.slice(fmIdx).includes(k.status || '')) reviewed++;
+          return;
+        }
         // BUG-050: Full-access roles (admin/auditor/management/hr_pms) have no
         // direct or skip-level reports — directIds/skipIds are empty — so the
         // membership-based branch below leaves all three tiles at 0 even when
@@ -1161,7 +1194,7 @@ export function EmployeeSelectorGrid({
         stat2: skipPending,
         stat3: reviewed,
         stat4: relevantKpis.length,
-        stat5: 0,
+        stat5: functionalPending,
         totalKpis: relevantKpis.length,
       };
     } else if (viewLevel === 'audit') {
@@ -1328,7 +1361,7 @@ export function EmployeeSelectorGrid({
         totalKpis: relevantKpis.length,
       };
     }
-  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipIdSet, directIdSet, submissionScoreMap, isFullAccess]);
+  }, [periodKpis, demographicFilteredMembers, viewLevel, workflowMap, skipIdSet, directIdSet, functionalIdSet, submissionScoreMap, isFullAccess]);
   // v2.66.11.17 — RCA closed. The HR PMS Reviewed tile is mathematically
   // correct (see DOCUMENTATION v2.66.11.17). The visible-list gap was a
   // symptom of zero-scored KPIs stuck at pre-HR-PMS stages, addressed by
@@ -1507,8 +1540,9 @@ export function EmployeeSelectorGrid({
       const orgEntered = (orgKpiCounts?.entered ?? 0) + (orgKpiCounts?.propagated ?? 0);
       const orgTotal = orgKpiCounts?.total ?? 0;
       const orgPending = orgKpiCounts?.pending ?? 0;
+      const showFunctionalTile = functionalIdSet.size > 0 || (stats.stat5 ?? 0) > 0;
       return (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+        <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 ${showFunctionalTile ? 'xl:grid-cols-7' : 'xl:grid-cols-6'} gap-3 sm:gap-4`}>
           <StatCard icon={Users} label="Total Employees" value={stats.totalEmployees} color="primary" onClick={() => setStatusFilter('all')} active={statusFilter === 'all'} />
           <StatCard
             icon={Hourglass}
@@ -1522,6 +1556,18 @@ export function EmployeeSelectorGrid({
           />
           <StatCard icon={Clock} label="Direct Pending" value={stats.stat1} color="yellow" subtitle="Awaiting manager review" onClick={() => toggleStatusFilter('pending_direct')} active={statusFilter === 'pending_direct'} />
           <StatCard icon={UserCheck} label="Skip-Level Pending" value={stats.stat2} color="amber" subtitle="Awaiting skip-level review" onClick={() => toggleStatusFilter('pending_skip')} active={statusFilter === 'pending_skip'} />
+          {showFunctionalTile && (
+            <StatCard
+              icon={UserCheck}
+              label="Functional Pending"
+              value={stats.stat5 ?? 0}
+              color="blue"
+              subtitle="Awaiting functional manager review"
+              onClick={() => toggleStatusFilter('pending_functional')}
+              active={statusFilter === 'pending_functional'}
+              tooltip="KPIs sitting at the stage immediately before Functional Manager review for employees who report to you functionally."
+            />
+          )}
           <StatCard
             icon={CheckCircle2}
             label="Reviewed"

@@ -5,6 +5,7 @@ import { FILTER_PARAM_NAMES } from '@/hooks/useUrlFilterState';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { useSkipLevelTeamMembers } from '@/hooks/useOrganization';
+import { resolveReviewerRelationship } from '@/lib/review/resolveReviewerRelationship';
 import { DashboardSkeleton } from '@/components/ui/LoadingSkeletons';
 import { useDefaultPeriodSelection, type PeriodSelection } from '@/components/ui/ReviewPeriodSelectorEnhanced';
 import { MentionedKpiSheet } from '@/components/review/MentionedKpiSheet';
@@ -40,35 +41,41 @@ async function resolveRelationship(
   employee: EmployeeProfile,
   currentUserId: string
 ): Promise<EmployeeProfile> {
-  // Already tagged by grid — trust it
+  // Already tagged by grid / server roster RPC — trust it
   if (employee.relationship) return employee;
 
-  // Direct manager check
-  if (employee.reporting_manager_id === currentUserId) {
-    return { ...employee, relationship: 'direct' };
-  }
-
-  // Skip-level check: fetch the employee's manager's reporting_manager_id
-  if (employee.reporting_manager_id) {
+  // Skip-level check needs the employee's manager's manager.
+  let managersManagerId: string | null = null;
+  if (employee.reporting_manager_id && employee.reporting_manager_id !== currentUserId) {
     const { data: managerProfile } = await supabase
       .from('profiles')
       .select('reporting_manager_id')
       .eq('id', employee.reporting_manager_id)
-      .single();
-
-    if (managerProfile?.reporting_manager_id === currentUserId) {
-      return { ...employee, relationship: 'indirect' };
-    }
+      .maybeSingle();
+    managersManagerId = managerProfile?.reporting_manager_id ?? null;
   }
 
-  // ADR-206 — functional reporting line: the FM acts on the stage preceding
-  // `functional_manager_check`, so tag the relationship before falling back.
-  if ((employee as { functional_manager_id?: string | null }).functional_manager_id === currentUserId) {
-    return { ...employee, relationship: 'functional' };
+  // ADR-206 / POLICY §WF-FM-RELATIONSHIP-SSOT — the functional_manager_id
+  // field is absent from several roster payloads, so fetch it explicitly
+  // rather than defaulting an untagged employee to the read-only manager view.
+  let functionalManagerId = (employee as { functional_manager_id?: string | null }).functional_manager_id ?? null;
+  if (functionalManagerId === null || functionalManagerId === undefined) {
+    const { data: selfProfile } = await supabase
+      .from('profiles')
+      .select('functional_manager_id')
+      .eq('id', employee.id)
+      .maybeSingle();
+    functionalManagerId = selfProfile?.functional_manager_id ?? null;
   }
 
-  // Default: treat as direct (admin/hr viewing non-chain employee)
-  return { ...employee, relationship: 'direct' };
+  const relationship = resolveReviewerRelationship({
+    viewerId: currentUserId,
+    employee: { ...employee, functional_manager_id: functionalManagerId },
+    managersManagerId,
+  });
+
+  // 'other' → admin/hr viewing a non-chain employee: keep the legacy default.
+  return { ...employee, relationship: relationship === 'other' ? 'direct' : relationship };
 }
 
 export default function Dashboard() {
