@@ -79,9 +79,10 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
   const rejectPIP = useRejectPIP();
   const completePIP = useCompletePIP();
   const extendPIP = useExtendPIP();
+  const cancelPIP = useCancelPIP();
   const updateMilestone = useUpdateMilestone();
 
-  const [actionDialog, setActionDialog] = useState<'approve' | 'reject' | 'complete' | 'extend' | 'milestone' | null>(null);
+  const [actionDialog, setActionDialog] = useState<'approve' | 'reject' | 'complete' | 'extend' | 'cancel' | 'milestone' | null>(null);
   const [remarks, setRemarks] = useState('');
   const [outcome, setOutcome] = useState<PIPOutcome>('improved');
   const [newEndDate, setNewEndDate] = useState<Date>();
@@ -89,9 +90,16 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
   const [milestoneStatus, setMilestoneStatus] = useState<MilestoneStatus>('met');
   const [actualOutcome, setActualOutcome] = useState('');
 
-  const isHR = role === 'admin' || role === 'management';
-  const isInitiator = pip?.initiated_by === user?.id;
-  const canManage = isHR || isInitiator;
+  // ADR-205: action visibility is derived from the transition SSOT, which also
+  // mirrors the server-side segregation-of-duties guard.
+  const actorCtx = {
+    userId: user?.id ?? '',
+    roles: role ? [role] : [],
+    initiatedBy: pip?.initiated_by ?? '',
+  };
+  const actions: PIPAction[] = pip ? availableActions(pip.status, actorCtx) : [];
+  const can = (a: PIPAction) => actions.includes(a);
+  const canManage = can('complete') || can('extend');
 
   const handleAction = async () => {
     if (!pip) return;
@@ -114,6 +122,9 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
             remarks 
           });
         }
+        break;
+      case 'cancel':
+        await cancelPIP.mutateAsync({ pipId: pip.id, reason: remarks });
         break;
       case 'milestone':
         if (selectedMilestone) {
