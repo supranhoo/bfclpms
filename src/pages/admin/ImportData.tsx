@@ -25,6 +25,7 @@ import { validateFileSize, IMPORT_LIMITS, sanitizeText, normalizeRole, VALID_ROL
 import { scoreToRatingLevel } from '@/lib/reviewConstants';
 import { fetchAllPaged } from '@/lib/fetchAll';
 import { CanAction } from '@/components/platform/CanAction';
+import { extractFunctionError } from '@/lib/edgeFunctionError';
 
 /** Map technical DB/edge-function errors to admin-friendly messages */
 function friendlyImportError(msg: string): string {
@@ -831,6 +832,24 @@ export default function ImportData() {
         const buNames = new Set((businessUnits || []).map(d => d.name.toLowerCase()));
         const desigNames = new Set((designations || []).map(d => d.name.toLowerCase()));
         const empCatNames = new Set((employeeCategories || []).map((c: any) => String(c.name).toLowerCase()));
+        // ADR-202: the create-employee edge function accepts a category only when
+        // it is global (company_id NULL) or bound to the row's resolved company.
+        // Mirror that rule here so cross-company mismatches surface in the preview
+        // instead of as an opaque non-2xx at import time.
+        const resolveCompanyId = (code?: string): string | null => {
+          if (!code) return null;
+          const c = (companiesList || []).find((x: any) =>
+            x.code?.toLowerCase() === code.toLowerCase() || x.name?.toLowerCase() === code.toLowerCase(),
+          );
+          return c?.id ?? null;
+        };
+        const categoryAllowedForCompany = (categoryName: string, companyId: string | null): boolean => {
+          if (!companyId) return true; // no company on the row -> edge function skips the scope check
+          return (employeeCategories || []).some((c: any) =>
+            String(c.name).trim().toLowerCase() === categoryName.trim().toLowerCase() &&
+            (!c.company_id || c.company_id === companyId),
+          );
+        };
         const empStatusNames = new Set((employmentStatuses || []).map((s: any) => String(s.name).toLowerCase()));
         const existingCodes = new Set((profiles || []).map(p => p.employee_code?.toLowerCase()).filter(Boolean));
 
@@ -865,6 +884,13 @@ export default function ImportData() {
           }
           if (row.employeeCategory && !empCatNames.has(row.employeeCategory.toLowerCase())) {
             rowErrs.push(`Employee Category '${row.employeeCategory}' does not exist in the system`);
+          } else if (row.employeeCategory) {
+            const companyId = resolveCompanyId(row.companyCode);
+            if (companyId && !categoryAllowedForCompany(row.employeeCategory, companyId)) {
+              rowErrs.push(
+                `Employee Category '${row.employeeCategory}' is not available for company '${row.companyCode}' — add it under Admin → Master Data → Employee Categories`,
+              );
+            }
           }
           if (row.employmentStatus && !empStatusNames.has(row.employmentStatus.toLowerCase())) {
             rowErrs.push(`Employment Status '${row.employmentStatus}' does not exist in the system`);
@@ -898,7 +924,7 @@ export default function ImportData() {
       }
     };
     reader.readAsArrayBuffer(file);
-  }, [toast, departments, divisions, businessUnits, designations, employeeCategories, employmentStatuses, profiles, allowUpdateExisting]);
+  }, [toast, departments, divisions, businessUnits, designations, employeeCategories, employmentStatuses, companiesList, profiles, allowUpdateExisting]);
 
   const handleImport = async () => {
     if (importData.length === 0) return;
@@ -1520,9 +1546,10 @@ export default function ImportData() {
           },
         });
 
-        // Extract the real error: SDK may swallow the body into fnData
+        // ADR-202: on a non-2xx the SDK returns data=null and a placeholder
+        // message; the real body sits on fnError.context. Read it.
         if (fnError) {
-          const rawMsg = fnData?.error || fnError.message || 'Unknown error';
+          const rawMsg = await extractFunctionError(fnError, fnData);
           throw new Error(friendlyImportError(rawMsg));
         }
 
