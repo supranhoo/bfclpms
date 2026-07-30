@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
     }
 
     if (!authorised) {
-      console.warn(`[create-employee] REJECT 403 user=${user.id} code=${req.headers.get('x-employee-code') ?? 'n/a'} — no admin role and no 'admin-users/add' right`)
+      console.warn(`[create-employee] REJECT 403 user=${user.id} — no admin role and no 'admin-users/add' right`)
       return new Response(JSON.stringify({ error: "Unauthorized — 'Add User' permission required" }), {
         status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
