@@ -1,107 +1,60 @@
-# Plug PIP Management into Full Functionality (ADR-205)
+## Assumptions
+- "Vrindaban Das" = Brundaban Chandra Das (102028); FM = V.A.V.S.S. Ganapathi Varma (200271), who holds the `manager` role but is NOT 102028's L1 (that is Sajid Raza, 100264).
+- Scope is June 2026, but the fix is generic to every FM-mapped employee.
 
-## 1. Assumptions
+## Verified current state
+- `profiles` 102028: `functional_manager_id = Ganapathi Varma`, `reporting_manager_id = Sajid Raza`. Both active.
+- Workflow for 102028 / June 2026 resolves to `self_l1_f1_audit` = `kra_set → self_review → manager_check → functional_manager_check → audit → approved` (employee-level ongoing `workflow_config` row). So FM IS in the chain.
+- All 20 June-2026 KPIs are at `status = 'manager_check'`. Per the project convention (status = last COMPLETED stage), they are pending with the Functional Manager — matching the screenshot (Manager Check 20, Functional Mgr 0).
 
-- PIP has never been used in production: `performance_improvement_plans`, `pip_milestones`, `pip_audit_logs` all contain **0 rows**. No historical data to migrate or protect.
-- Approvers = `hr_pms` + `admin` + `management`; the initiator may **not** approve their own PIP.
-- Outcome wording (Successful / Partially Successful / Unsuccessful) is a **display-layer** mapping over the existing `pip_outcome` enum. No enum migration.
-- `terminated` is displayed as **Cancelled**. No enum migration.
-- Fiscal/period conventions and the existing `system_settings` PIP threshold stay as-is.
+## Root cause (two independent defects)
 
-## 2. Clarifications
+**RC-1 — Client: there is no Functional Manager scorecard view.**
+`UnifiedScorecard`'s `ScorecardViewLevel` is `'self' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms'` — `functional_manager` is missing, and `VIEW_LEVEL_STATIC` has no entry for it. `Dashboard.tsx` (line ~358) maps `team` → `manager` and only special-cases `relationship === 'indirect'` → `skip_level`; the `'functional'` relationship (added by ADR-193 to the roster RPCs) is never mapped. Result: the FM opens the employee as `viewLevel='manager'`, whose `reviewableStatuses` = `['self_review']`. KPIs at `manager_check` therefore render read-only — exactly what the user reports. `workflowEngine.ts` already supports `functional_manager` in every resolver; only the scorecard/dashboard layer is unwired.
 
-Resolved in this turn. No open questions.
+**RC-2 — Server: FM write policies gate on the wrong status.**
+- `kpis` policy "FM can update KPI status on FM stage": `USING (is_functional_manager_of(employee_id) AND status = 'functional_manager_check')`
+- `review_submissions` policy "FM can update review_submissions on FM stage": same `k.status = 'functional_manager_check'` predicate.
 
-## 3. Risk & Impact Report
+`functional_manager_check` is the status set AFTER the FM signs off. While pending with the FM the status is the PRECEDING stage (`manager_check`). So even if the UI were fixed, the write would be rejected by RLS. There is also no FM INSERT policy on `review_submissions` (needed when a submission row is absent).
 
-**Data Impact**
-- No table/column drops. Additive only: new RLS policies, a transition-guard trigger, a `pip_audit_logs` insert path, one new SECURITY DEFINER helper.
-- Zero existing rows → no backfill, no data-integrity exposure.
-- All three PIP tables are already covered by the automatic backup discovery RPC (`get_backup_table_order()`), and no entry exists in `backup_denylist`. No backup change needed; will re-confirm coverage after migration.
+## 5 Why
+1. FM cannot review → the scorecard renders read-only and writes would be denied.
+2. Why read-only → the scorecard runs as `viewLevel='manager'`, whose reviewable status is `self_review`.
+3. Why `manager` → Dashboard's view-level map has no branch for the `functional` relationship and `ScorecardViewLevel` has no `functional_manager` member.
+4. Why writes denied → FM RLS predicates were written against the FM's own completed stage instead of the pending (preceding) stage.
+5. Why both → ADR-193/194/196 delivered FM data, roster, columns and report parity, but never the reviewer ACTION path; no test exercised an FM actually submitting a score.
 
-**Workflow Impact**
-- Managers and HR can, for the first time, actually use the module (today every non-admin action fails).
-- Initiators lose the ability to approve their own PIP — intentional, closes a segregation-of-duties hole.
-- Status changes become guarded: illegal jumps (e.g. `draft` → `completed`) will be rejected server-side.
+## Risk & Impact
+- Data: no schema change; policy replacement only (additive/corrective). Historical rows untouched.
+- Workflow: FM stage becomes actionable; forward status already resolves via `resolveForwardStatus('functional_manager', stages)` → `audit` for this template.
+- UI: Team Reviews for an FM-mapped employee gains an editable FM column/action, header label "Functional Manager Review", send-back targets from `resolveSendBackTargets`.
+- Regression risk: medium-low. Guarded by keeping the L1 path untouched — the new branch fires only when `relationship === 'functional'` and the resolved chain contains `functional_manager_check`.
+- Scalability: none (no new queries).
+- Rollback: revert the two policies to their current definitions and drop the new view-level branch.
 
-**UI/UX Impact** — detailed in §5.
+## Plan
 
-**Regression Risk**
-- *Low* on existing modules: PIP RLS/trigger changes are scoped to three tables nothing else reads.
-- *Medium* on notifications: PIP inserts into `notifications` are gated by `can_send_notification_to`. An HR approver who is not in the employee's reporting chain would be blocked, reproducing the recurring "not authorized to send notifications" toast. Mitigated by routing all PIP notifications through a single SECURITY DEFINER RPC rather than direct client inserts (same pattern as ADR-189 `post_observation_reply`).
-- *Low–Medium* on the scheduled-email cron: a new reminder producer runs inside the existing `send-scheduled-emails` function. Mitigated by a feature flag and a per-PIP-per-day idempotency key so a re-run can never double-send.
+### Phase A — Server (migration)
+1. Replace the `kpis` FM UPDATE policy: allow when `is_functional_manager_of(employee_id)` AND the KPI's current status is the stage immediately preceding `functional_manager_check` in that employee's resolved chain, OR is already `functional_manager_check` (re-edit). Implement via a new SECURITY DEFINER helper `public.is_fm_actionable_kpi(kpi_id uuid)` that resolves the chain with `get_employee_workflow(employee_id, review_period, review_year)` — no hardcoded stage array (POLICY §105).
+   Verification: `SELECT is_fm_actionable_kpi(id)` returns true for the 20 June-2026 KPIs of 102028.
+2. Same helper for the `review_submissions` FM UPDATE policy; add a matching FM INSERT policy.
+   Verification: simulated FM update on one KPI succeeds; a non-FM user still fails.
+3. Confirm the FM stage is included in the notification/audit triggers already touched by ADR-196 (no change expected — verify only).
 
-**Scalability Impact**
-- PIP volume is inherently small (low performers only, expected tens–low hundreds/year). Even so, the admin table gets **server-side pagination** (page size 25) rather than the current fetch-all, and the milestone reminder query is date-bounded and indexed.
-- New indexes: `pip_milestones(milestone_date, status)` and `performance_improvement_plans(status, employee_id)`.
+### Phase B — Client
+4. `UnifiedScorecard.tsx`: add `'functional_manager'` to `ScorecardViewLevel` and a `VIEW_LEVEL_STATIC` entry (title "Functional Manager Review", score field `functional_manager_score`, rating/remarks/evidence/achieved-value fields, `previousScoreField: 'manager_score'`). All dynamic resolvers already accept the key.
+5. `Dashboard.tsx`: extend the view-level resolution — when `viewMode === 'team'` and `selectedEmployee.relationship === 'functional'`, use `functional_manager`. Keep `indirect → skip_level` and default `direct → manager`.
+   UI change: same Team Reviews screen; the KPI Details action column becomes editable for the FM and the header reads "Functional Manager Review". Stage strip and counters unchanged (already FM-aware via `CANONICAL_WORKFLOW_STAGES`).
+6. `EmployeeSelectorGrid` already tags "Functional" and counts via `resolveReviewableStatuses('functional_manager')` — verify only, no change expected.
 
-**Rollback Strategy**
-- Every step is additive and independently revertible: drop the new policies/trigger/RPC and restore the prior `pip_audit_logs` policy. Feature flag `pip_milestone_reminders_enabled` can disable the reminder producer instantly without a deploy.
+### Phase C — Tests & docs
+7. New `src/test/review/functionalManagerReviewAction.test.ts`: view-level resolution for `functional`/`indirect`/`direct`; `VIEW_LEVEL_STATIC` completeness for every `ScorecardViewLevel`; FM reviewable status = stage preceding FM in `self_l1_f1_audit`; forward status = `audit`.
+8. Extend `src/test/e2e/functionalManagerWorkflow.e2e.test.tsx` with an FM submit assertion.
+9. `docs/adr/ADR-206.md` + `POLICY.md §WF-FM-REVIEW-ACTION` ("A reviewer stage present in a resolved chain MUST have a scorecard view level and RLS predicates keyed to the PENDING status, not the reviewer's own completed status"), plus DOCUMENTATION.md version history.
 
-## 4. Step-by-step Plan
+### Phase D — Verification for the reported case
+10. Sign-in-equivalent check as Ganapathi Varma: 20 June-2026 KPIs of 102028 appear actionable; one test score save succeeds and advances that KPI to `functional_manager_check`.
 
-### Phase A — Unblock the core workflow (server)
-
-**A1. Fix `pip_audit_logs` writes (the hard blocker).**
-Replace the admin-only INSERT policy with a participation-scoped one, so the acting manager/HR/management user can write their own audit row, while `performed_by` is forced to `auth.uid()` by a trigger (immutability guarantee).
-*Verify:* a manager-context insert against a PIP they initiated succeeds; an insert with a spoofed `performed_by` is rewritten to the caller; an unrelated user's insert is rejected.
-
-**A2. Grant `hr_pms` PIP access.**
-Add SELECT on all PIPs/milestones/audit-logs and UPDATE (approval fields) for `hr_pms`. Uses `has_role()` — no recursive subqueries.
-*Verify:* query the policy catalogue and confirm `hr_pms` now appears; confirm an hr_pms user can read a PIP for an employee outside their reporting chain.
-
-**A3. Segregation of duties + transition guard.**
-New trigger `trg_pip_status_transition`:
-- rejects approval where `hr_reviewer_id = initiated_by`;
-- enforces the legal transition graph `draft → pending_hr_approval → active → (extended) → completed | terminated`, with `pending_hr_approval → draft` allowed for rejection;
-- requires `outcome` + `completion_remarks` on `completed`;
-- requires `extended_end_date > end_date` on `extended`;
-- writes an audit row for every status change so the trail cannot be bypassed by a direct table update.
-Also adds the missing `WITH CHECK` to the UPDATE policy.
-*Verify:* attempt each illegal transition and confirm rejection; confirm a legal path writes exactly one audit row per step.
-
-**A4. Notification safety.**
-New `pip_notify(pip_id, event_type)` SECURITY DEFINER RPC that authorises the caller against the PIP, then inserts the `notifications` row with `performed_by`/relationship set correctly — bypassing the `can_send_notification_to` chain restriction that would otherwise break HR-initiated events. Register `pip_milestone_reminder` in `src/lib/notifications/edgeRegistry.ts` alongside the two existing events.
-*Verify:* an hr_pms approver outside the employee's chain triggers approval and no "not authorized" error appears.
-
-### Phase B — Client alignment
-
-**B1. `src/hooks/usePIP.ts`** — route audit-log writes and notifications through the new RPC; wrap each mutation in explicit error handling with a user-facing toast (no silent failures); add `useCancelPIP`; add server-side pagination params to `usePIPs`.
-
-**B2. New `src/lib/pip/pipVocabulary.ts` (SSOT)** — single mapping of enum → policy label: `improved → Successful`, `escalated → Partially Successful`, `not_improved → Unsuccessful`, `terminated → Cancelled`, plus status labels and badge variants. Every PIP surface imports from here; no literal status/outcome strings anywhere else.
-
-**B3. `src/lib/pip/pipTransitions.ts` (SSOT)** — the legal transition graph, mirrored exactly by the PL/pgSQL trigger from A3 (same dual-SSOT pattern as ADR-179 `kraStageDisplay`), with a test asserting the two definitions agree.
-
-**B4. `PIPDetailSheet.tsx`** — add the missing **Cancel PIP** action behind `ConfirmDestructiveDialog`; drive all action-button visibility from `pipTransitions.ts` + the caller's role; replace the inline milestone list with the existing `MilestoneTracker.tsx` (removing the dead code).
-
-### Phase C — Missing integrations
-
-**C1. Milestone reminders.** Add a PIP block to the existing `send-scheduled-emails` edge function: for every `active`/`extended` PIP, find milestones due within the configurable lead window or overdue, and emit `pip_milestone_reminder` to the initiator (cc employee) via `pip_notify`. Gated by a new `admin_feature_flags` row and an idempotency key of `pip_id|milestone_id|YYYY-MM-DD`. SLA thresholds move from the hardcoded `{warning: 0, critical: 7}` in `useSystemIssues.ts` into `system_settings` (Zero-Hardcoding rule), read by both the cron and the issues dashboard.
-**C2. Report → action.** Add a **Start PIP** row action to the Monthly Trend PIP-candidates report that opens `PIPCreateDialog` pre-filled with the employee and the failing months as the stated reason. Extract the duplicated candidate rule out of `MonthlyTrendView.tsx` into `src/lib/pip/pipCandidateRule.ts` and have the existing test import the real function instead of reimplementing it.
-**C3. Employee visibility.** Add a read-only **My PIP** card on the employee dashboard and a PIP tab on the employee profile (milestones, dates, outcome, letter download). Employees already have RLS SELECT on their own PIP.
-**C4. Discoverability.** Extend the sidebar entry to `admin`, `management`, `hr_pms` and `manager` (matching the route guard, which already allows more roles than the sidebar shows), keeping `menu_access_config` as the authority so admins can still restrict it per profile.
-
-### Phase D — Verification
-
-Unit tests + mock data covering: transition graph parity (TS vs PL/pgSQL), vocabulary mapping completeness, self-approval rejection, audit-row-per-action, reminder idempotency, candidate rule, and pagination. Plus an integration test walking the full lifecycle draft → HR approval → milestone update → completion as a **non-admin manager** — the exact path that fails today.
-
-## 5. UI Changes
-
-| Where | What changes | Interaction | Responsive |
-|---|---|---|---|
-| `/admin/pip` table | Server-side pagination footer (25/page); status chips relabelled via the vocabulary SSOT ("Cancelled" not "Terminated") | Page controls; filters/search unchanged and pagination-aware | Table already scrolls horizontally on mobile; footer stacks |
-| PIP Detail sheet | New **Cancel PIP** button (destructive, confirm dialog); Approve/Reject hidden for the initiator; milestone list replaced by `MilestoneTracker` timeline | Buttons appear only for legal transitions for that role | Sheet is full-width on mobile; action bar becomes sticky |
-| Monthly Trend report | New **Start PIP** action per candidate row | Opens the create dialog pre-filled | Action collapses into the row overflow menu on mobile |
-| Employee dashboard / profile | Read-only **My PIP** card + profile tab | Expand for milestones; letter download | Single-column stack below `md` |
-| Admin → System Settings | PIP milestone SLA (lead days / overdue days) + reminder feature toggle beside the existing threshold card | Standard settings form | Inherits settings grid |
-| Sidebar | PIP Management now visible to management / hr_pms / manager | — | — |
-
-## 6. Documentation & Policy Updates
-
-- **DOCUMENTATION.md** — new ADR-205 section: the transition graph, the vocabulary mapping table, the `pip_notify` RPC contract, reminder cron behaviour, and version-history entry.
-- **POLICY.md** — new `§PIP-LIFECYCLE-GOVERNANCE`: approver set and self-approval prohibition; canonical status/outcome vocabulary and its enum mapping (removing the current §13 wording drift); mandatory audit row per state change; configurable SLAs; and `§PIP-NOTIFY-SSOT` requiring all PIP notifications to route through the RPC.
-
-## 7. What I will *not* do
-
-- No enum migrations (per your answers) — the wording gap is closed at the display layer and documented in POLICY so the drift is recorded, not hidden.
-- No changes to the KPI/annual-review workflow engines, the backup engine, or `can_send_notification_to` itself — the PIP case is handled by its own definer RPC rather than by widening the global notification matrix again.
+## Not applicable
+No data backfill — the 20 KPIs are correctly positioned; only access was broken.

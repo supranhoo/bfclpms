@@ -7,7 +7,7 @@ import { KpiHistoryCard } from './KpiHistoryCard';
 import { KpiObservationsSection } from './KpiObservationsSection';
 import { ManagerKpiBenchmark } from './ManagerKpiBenchmark';
 
-export type ViewLevel = 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
+export type ViewLevel = 'employee' | 'manager' | 'functional_manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
 
 interface KpiReviewPanelProps {
   kpi: KPI;

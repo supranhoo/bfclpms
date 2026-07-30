@@ -82,7 +82,7 @@ export function buildScoreColumns(stages: string[]): { key: string; label: strin
   return cols;
 }
 
-export type KpiTableViewType = 'my-kpis' | 'team-review' | 'audit' | 'management' | 'skip-level-review' | 'hr-pms-review';
+export type KpiTableViewType = 'my-kpis' | 'team-review' | 'functional-manager-review' | 'audit' | 'management' | 'skip-level-review' | 'hr-pms-review';
 
 interface KpiDetailsTableProps {
   kpis: KPI[];
@@ -248,7 +248,7 @@ export function KpiDetailsTable({
     // Status-based completion states
     const isApproved = kpi.status === 'approved';
     const isForwarded = viewType === 'audit' && (kpi.status === 'management_review' || kpi.status === 'approved');
-    const isTeamReviewPastStage = (viewType === 'team-review' || viewType === 'skip-level-review' || viewType === 'hr-pms-review') && 
+    const isTeamReviewPastStage = (viewType === 'team-review' || viewType === 'functional-manager-review' || viewType === 'skip-level-review' || viewType === 'hr-pms-review') && 
       ['manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review', 'approved'].includes(kpi.status || '');
     
     if (locked && viewType === 'my-kpis') {
@@ -274,7 +274,7 @@ export function KpiDetailsTable({
             <Button size="sm" onClick={() => onReview?.(kpi)}>
               {viewType === 'audit' && kpi.status === 'audit' ? 'Continue' : 'Review'}
             </Button>
-            {(viewType === 'team-review' || viewType === 'audit' || viewType === 'management' || viewType === 'skip-level-review' || viewType === 'hr-pms-review') && onSendBack && (
+            {(viewType === 'team-review' || viewType === 'functional-manager-review' || viewType === 'audit' || viewType === 'management' || viewType === 'skip-level-review' || viewType === 'hr-pms-review') && onSendBack && (
               <Button size="sm" variant="outline" onClick={() => onSendBack(kpi)}>
                 <Undo2 className="h-3 w-3" />
               </Button>
@@ -306,7 +306,7 @@ export function KpiDetailsTable({
           </>
         ) : (
           // Check if KPI is drafted at management level before showing "Reviewed"
-          (viewType === 'team-review' || viewType === 'skip-level-review' || viewType === 'hr-pms-review') && 
+          (viewType === 'team-review' || viewType === 'functional-manager-review' || viewType === 'skip-level-review' || viewType === 'hr-pms-review') && 
           kpi.status === 'management_review' && 
           submission?.management_score !== null && submission?.management_score !== undefined
         ) ? (

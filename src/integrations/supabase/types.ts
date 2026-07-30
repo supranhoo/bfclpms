@@ -15387,6 +15387,7 @@ export type Database = {
         Args: { p_fiscal_start_year: number; p_period: string }
         Returns: number
       }
+      fm_pending_status_for_kpi: { Args: { _kpi_id: string }; Returns: string }
       fn_compute_rating_from_achievement: {
         Args: {
           p_achieved_text?: string
@@ -16429,6 +16430,7 @@ export type Database = {
         Args: { p_key: string }
         Returns: boolean
       }
+      is_fm_actionable_kpi: { Args: { _kpi_id: string }; Returns: boolean }
       is_functional_manager_of: {
         Args: { _employee_id: string }
         Returns: boolean

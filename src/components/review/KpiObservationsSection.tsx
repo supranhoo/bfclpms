@@ -34,7 +34,7 @@ import {
 interface KpiObservationsSectionProps {
   kpiId: string;
   kpiStatus: string;
-  viewLevel: 'employee' | 'manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
+  viewLevel: 'employee' | 'manager' | 'functional_manager' | 'auditor' | 'management' | 'skip_level' | 'hr_pms' | 'admin';
   baseScore?: number | null;
   isOwnKpi?: boolean;
   /** v2.65.0 — Explorer Mode: hide all add/edit affordances, render observations as read-only */
