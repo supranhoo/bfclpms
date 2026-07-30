@@ -82,7 +82,7 @@ export function buildScoreColumns(stages: string[]): { key: string; label: strin
   return cols;
 }
 
-export type KpiTableViewType = 'my-kpis' | 'team-review' | 'audit' | 'management' | 'skip-level-review' | 'hr-pms-review';
+export type KpiTableViewType = 'my-kpis' | 'team-review' | 'functional-manager-review' | 'audit' | 'management' | 'skip-level-review' | 'hr-pms-review';
 
 interface KpiDetailsTableProps {
   kpis: KPI[];
