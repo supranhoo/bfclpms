@@ -112,6 +112,57 @@ function partFileName(tableName: string, partIndex: number): string {
   return `${tableName}.part-${String(partIndex).padStart(6, '0')}.json`
 }
 
+// ADR-204 — upload-level transient resilience.
+//
+// 26 Jul 2026: a single `Gateway Timeout` on one part-file upload dropped a
+// whole table from the manifest (238/239 → hard-fail). The batch-level retry
+// envelope cannot help there because `handleBatch` swallows the per-table
+// error and still answers HTTP 200.
+//
+// Each part upload is now retried up to UPLOAD_RETRY_BACKOFFS_MS.length + 1
+// times. Attempt 1 keeps `upsert: false` (preserves the "no silent overwrite"
+// contract); retries use `upsert: true` so a half-written object from the
+// lost attempt is replaced instead of colliding with "resource already exists".
+// Non-transient errors (4xx / permission / RLS) re-throw immediately.
+const UPLOAD_RETRY_BACKOFFS_MS = [1_000, 3_000, 8_000] as const
+
+function isTransientUploadError(msg: string): boolean {
+  if (/Gateway ?Timeout|timeout|timed out/i.test(msg)) return true
+  return isTransientChunkError(msg)
+}
+
+async function uploadPartWithRetry(
+  supabase: ReturnType<typeof createClient>,
+  filePath: string,
+  fileName: string,
+  json: string,
+): Promise<void> {
+  let lastMsg = 'unknown'
+  for (let attempt = 0; attempt <= UPLOAD_RETRY_BACKOFFS_MS.length; attempt++) {
+    const { error: uploadError } = await supabase.storage
+      .from('database-backups')
+      .upload(filePath, json, {
+        contentType: 'application/json',
+        // First attempt preserves the historical no-overwrite contract.
+        upsert: attempt > 0,
+      })
+    if (!uploadError) {
+      if (attempt > 0) {
+        console.warn(`[upload-retry] ${fileName} recovered on attempt ${attempt + 1}`)
+      }
+      return
+    }
+    lastMsg = uploadError.message
+    if (attempt === UPLOAD_RETRY_BACKOFFS_MS.length) break
+    if (!isTransientUploadError(lastMsg)) break
+    console.warn(
+      `[upload-retry] ${fileName} attempt ${attempt + 1} failed: ${lastMsg}; retrying in ${UPLOAD_RETRY_BACKOFFS_MS[attempt]}ms`,
+    )
+    await sleep(UPLOAD_RETRY_BACKOFFS_MS[attempt])
+  }
+  throw new Error(`Upload ${fileName} failed: ${lastMsg}`)
+}
+
 async function streamTableToStorage(
   supabase: ReturnType<typeof createClient>,
   tableName: string,
@@ -131,12 +182,7 @@ async function streamTableToStorage(
     const filePath = `${folderPath}/${fileName}`
     const json = JSON.stringify(buffer)
     const sizeBytes = new TextEncoder().encode(json).byteLength
-    const { error: uploadError } = await supabase.storage
-      .from('database-backups')
-      .upload(filePath, json, { contentType: 'application/json', upsert: false })
-    if (uploadError) {
-      throw new Error(`Upload ${fileName} failed: ${uploadError.message}`)
-    }
+    await uploadPartWithRetry(supabase, filePath, fileName, json)
     files.push(filePath)
     totalSize += sizeBytes
     // Help V8 reclaim the chunk before paging the next slice.
@@ -178,12 +224,7 @@ async function streamTableToStorage(
     const fileName = partFileName(tableName, partIndex)
     const filePath = `${folderPath}/${fileName}`
     const json = '[]'
-    const { error: uploadError } = await supabase.storage
-      .from('database-backups')
-      .upload(filePath, json, { contentType: 'application/json', upsert: false })
-    if (uploadError) {
-      throw new Error(`Upload ${fileName} failed: ${uploadError.message}`)
-    }
+    await uploadPartWithRetry(supabase, filePath, fileName, json)
     files.push(filePath)
     totalSize += 2
   } else {
