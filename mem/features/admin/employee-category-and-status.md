@@ -5,6 +5,7 @@ type: feature
 ---
 - Two profile attributes: `profiles.employee_category` (text, nullable) and `profiles.employment_status` (text, nullable). Stored as names, mirrors `pms_grade` pattern.
 - Masters: `public.employee_categories` (company-scoped) and `public.employment_statuses` (global, seeded: Probation / Trainee / Confirmed / Superannuated / Retainer). Admin CRUD lives on `/admin/organization`.
+- Category company-scope is enforced in Import Employees and `create-employee`: accept only global categories (`company_id` NULL) or a category row bound to the row's resolved company. Add category rows per company instead of bypassing validation.
 - Hooks: `useEmployeeCategories(companyId?)`, `useEmploymentStatuses()` in `src/hooks/useOrganization.ts` — never hardcode the values anywhere.
 - Write paths that MUST validate against master (case-insensitive): UserManagement dialogs, `create-employee` edge function (returns HTTP 400 `Unknown employee category|status: 'X'` on miss), ImportData per-row validation.
 - Import: strict mode — unknown values produce row errors, row is skipped. NEVER auto-create master rows from importer.

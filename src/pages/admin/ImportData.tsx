@@ -832,6 +832,10 @@ export default function ImportData() {
         const buNames = new Set((businessUnits || []).map(d => d.name.toLowerCase()));
         const desigNames = new Set((designations || []).map(d => d.name.toLowerCase()));
         const empCatNames = new Set((employeeCategories || []).map((c: any) => String(c.name).toLowerCase()));
+        const companyLabelById = new Map((companiesList || []).map((c: any) => [
+          c.id,
+          `${c.name}${c.code ? ` (${c.code})` : ''}`,
+        ]));
         // ADR-202: the create-employee edge function accepts a category only when
         // it is global (company_id NULL) or bound to the row's resolved company.
         // Mirror that rule here so cross-company mismatches surface in the preview
@@ -849,6 +853,21 @@ export default function ImportData() {
             String(c.name).trim().toLowerCase() === categoryName.trim().toLowerCase() &&
             (!c.company_id || c.company_id === companyId),
           );
+        };
+        const describeCompany = (code?: string): string => {
+          if (!code) return 'no company on this row';
+          const c = (companiesList || []).find((x: any) =>
+            x.code?.toLowerCase() === code.toLowerCase() || x.name?.toLowerCase() === code.toLowerCase(),
+          );
+          if (!c) return `unresolved company '${code}'`;
+          return `${c.name}${c.code ? ` (${c.code})` : ''}`;
+        };
+        const describeCategoryScope = (categoryName: string): string => {
+          const scopes = (employeeCategories || [])
+            .filter((c: any) => String(c.name).trim().toLowerCase() === categoryName.trim().toLowerCase())
+            .map((c: any) => c.company_id ? (companyLabelById.get(c.company_id) || 'another company') : 'Global')
+            .filter(Boolean);
+          return scopes.length ? scopes.join(', ') : 'not configured';
         };
         const empStatusNames = new Set((employmentStatuses || []).map((s: any) => String(s.name).toLowerCase()));
         const existingCodes = new Set((profiles || []).map(p => p.employee_code?.toLowerCase()).filter(Boolean));
@@ -888,7 +907,7 @@ export default function ImportData() {
             const companyId = resolveCompanyId(row.companyCode);
             if (companyId && !categoryAllowedForCompany(row.employeeCategory, companyId)) {
               rowErrs.push(
-                `Employee Category '${row.employeeCategory}' is not available for company '${row.companyCode}' — add it under Admin → Master Data → Employee Categories`,
+                `Employee Category '${row.employeeCategory}' is configured for ${describeCategoryScope(row.employeeCategory)}, but this row resolves to ${describeCompany(row.companyCode)}. Add it for that company under Admin → Master Data → Employee Categories.`,
               );
             }
           }

@@ -123,18 +123,39 @@ Deno.serve(async (req) => {
     // Validate optional master-data fields (strict): reject unknown values.
     if (body.employee_category && body.employee_category.trim()) {
       const name = body.employee_category.trim();
-      let q = supabaseAdmin.from('employee_categories').select('id, name, company_id').ilike('name', name);
-      const { data: rows } = await q;
+      const { data: rows } = await supabaseAdmin
+        .from('employee_categories')
+        .select('id, name, company_id')
+        .ilike('name', name);
       const match = (rows || []).find((r: any) =>
         String(r.name).trim().toLowerCase() === name.toLowerCase() &&
         (!body.company_id || !r.company_id || r.company_id === body.company_id)
       );
       if (!match) {
+        const companyIds = Array.from(new Set([
+          ...(rows || []).map((r: any) => r.company_id).filter(Boolean),
+          body.company_id,
+        ].filter(Boolean)));
+        const { data: companies } = companyIds.length
+          ? await supabaseAdmin.from('companies').select('id, code, name').in('id', companyIds)
+          : { data: [] };
+        const companyLabelById = new Map((companies || []).map((c: any) => [
+          c.id,
+          `${c.name}${c.code ? ` (${c.code})` : ''}`,
+        ]));
+        const selectedCompany = body.company_id
+          ? (companyLabelById.get(body.company_id) || 'selected company')
+          : 'no company on the row';
+        const configuredFor = (rows || [])
+          .filter((r: any) => String(r.name).trim().toLowerCase() === name.toLowerCase())
+          .map((r: any) => r.company_id ? (companyLabelById.get(r.company_id) || 'another company') : 'Global')
+          .filter(Boolean)
+          .join(', ');
         console.warn(`[create-employee] REJECT 400 code=${body.employee_code} unknown employee_category='${body.employee_category}' company_id=${body.company_id ?? 'null'} candidates=${JSON.stringify((rows || []).map((r: any) => ({ name: r.name, company_id: r.company_id })))}`)
         // Distinguish "no such name" from "exists but belongs to another company"
         const nameExists = (rows || []).some((r: any) => String(r.name).trim().toLowerCase() === name.toLowerCase())
         const message = nameExists
-          ? `Employee category '${name}' exists but is not available for the selected company. Add it under Admin → Master Data → Employee Categories.`
+          ? `Employee category '${name}' is configured for ${configuredFor || 'another company'}, but this row resolves to ${selectedCompany}. Add it for that company under Admin → Master Data → Employee Categories.`
           : `Unknown employee category: '${body.employee_category}'`
         return new Response(JSON.stringify({ error: message }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }

@@ -1,53 +1,103 @@
+## Assumptions
+- The screenshot is from the Employee Import flow.
+- The three failed rows are new employees: `101393`, `101395`, and `101818`.
+- The import file likely contains a company other than `BFCL` or a company value resolving to a non-BFCL company for these rows.
+- Existing policy intentionally validates `employeeCategory` against company-scoped master data; this is why the import now shows clear failures instead of a generic non-2xx error.
 
-# Assisted (Proxy) Submission Tracking for Admins
+## Clarifications
+Not required before implementation. The failure reason is specific enough to fix safely.
 
-## Current state (verified)
+## Risk & Impact Report
+- **Data Impact:** Add missing employee category master rows for the affected company scope(s), or convert selected categories to global only if policy supports it. No existing employee records will be changed.
+- **Workflow Impact:** Employee import will stop rejecting valid categories for the selected company. No review/KPI workflow logic changes.
+- **UI/UX Impact:** No visual redesign. The same import screen will work; error messages may be tightened if needed.
+- **Regression Risk:** Low, if we add company-scoped master rows instead of bypassing validation. Risk is medium if categories are made global because that changes availability across all companies.
+- **Scalability Impact:** No large-data impact. Master table has only a few rows; lookups remain bounded and indexed.
+- **Mitigation Plan:** Keep the validation rule; only repair master data/config. Add regression tests for BFCL, Saibal, and missing category cases.
 
-- Every assisted submission already writes an immutable audit row to `annual_review_proxy_submissions` — **2,037 rows exist today** (1,061 with a selfie, 992 with an uploaded photograph).
-- Columns captured: `instance_id`, `employee_user_id`, `proxy_user_id`, `proxy_role`, `selfie_path`, `photo_upload_path`, `declaration_text`, `user_agent`, `ip`, `captured_at`.
-- Read access is already correct: the `arps_select_visible` policy allows the employee, the assisting user, the employee's manager/skip manager, **admin**, and **hr_pms**. Storage has a matching `proxy_selfies_select` policy.
-- **Gap:** nothing in the app reads this table. `getProxyAuditForInstance()` and `createSignedSelfieUrl()` exist in `src/services/annualReview/proxySubmission.ts` but are called by no component. So the evidence is being collected and is invisible.
+## Confirmed Current State
+- Database currently has only BFCL-scoped employee category masters:
+  - `Non ESI` exists only for BFCL.
+  - `Retainership` exists only for BFCL.
+  - No global category rows exist for these categories.
+- The failing employees are not currently present in `profiles`, so this is a create-time import failure.
+- The frontend importer and `create-employee` backend function both enforce: category must be either global or scoped to the selected company.
 
-No database or security change is needed — this is a read-only surfacing job.
+## 5-Why Analysis
+1. **Why did the import fail?** The selected `employeeCategory` is not available for the row’s resolved company.
+2. **Why is it not available?** The master table contains those categories only under BFCL.
+3. **Why did the importer block it?** ADR-202 added strict company-scope validation to prevent invalid employee master data.
+4. **Why did this surface now?** The system previously showed only a generic edge-function failure; now it correctly exposes the underlying master-data mismatch.
+5. **Why is the business process blocked?** The master data setup does not cover the company/category combinations used in the import file.
 
-## Where it goes
+## RCA
+Root cause is not the import engine failing technically; it is a master-data configuration gap. `Non ESI` and `Retainership` are BFCL-scoped categories, but the failed import rows resolve to another company, so validation correctly rejects them.
 
-Two entry points, both admin-facing:
+## CAPA
+### Corrective Action
+- Add/repair employee category master rows for the company used by rows `101393`, `101395`, and `101818`:
+  - `Non ESI`
+  - `Retainership`
+- Keep categories company-scoped unless the business confirms these categories should apply globally.
 
-**1. Primary — a new "Assisted Submissions" tab** in Annual Review → Admin (`src/pages/annual-review/AnnualReviewAdmin.tsx`), sitting alongside Orphaned Reviews and Unscored Stages. Same place admins already go for review governance.
+### Preventive Action
+- Add a small admin/import pre-check enhancement: when a category exists for another company, show which company currently owns it and which company the import row resolved to.
+- Add regression tests so company-scoped categories remain accepted only for matching companies and rejected with clear messaging for non-matching companies.
+- Update documentation and policy to clarify that Admin → Master Data → Employee Categories must be maintained per company unless marked global.
 
-**2. Secondary — an inline badge** on any review that was submitted with assistance, shown in the admin Progress grid row and on the review detail page. Clicking it opens the same evidence drawer. This answers "was *this* review self-submitted?" without leaving the record.
+## Step-by-step Plan
+1. **Repair master data**
+   - Query the exact company resolved for the failed rows from the import values if available; otherwise infer from the screenshot/error context and current company masters.
+   - Add missing `employee_categories` rows for the affected company, not employee records.
 
-## How it works
+2. **Tighten importer guidance**
+   - Update the import preview error message to include:
+     - row company value,
+     - resolved company,
+     - category’s existing company scope.
 
-### The tab
+3. **Backend parity**
+   - Keep the `create-employee` backend validation aligned with the frontend.
+   - If needed, improve the backend error text in the same way, without weakening validation.
 
-A filter bar + server-paginated table (25/page, `.range()`, `count: 'exact'` — no unbounded load):
+4. **Tests and mock data**
+   - Extend `src/test/importCategoryCompanyScope.test.ts` with:
+     - category available for same company succeeds,
+     - same category unavailable for another company fails,
+     - adding a company-specific row for the second company succeeds,
+     - global category still succeeds for all companies.
 
-- **Filters:** cycle (defaults to active), date range on `captured_at`, assisting person, department / business unit, evidence completeness (has selfie / has photo / neither), free-text search on employee name or code.
-- **Columns:** Employee (name + code), Department/BU, Assisted by (name + code), Role at time of assistance (`proxy_role`), Captured at, Evidence (selfie / photo chips), Review status now, Actions.
-- **Row action → Evidence drawer:** selfie and uploaded photograph rendered from short-lived signed URLs (5 min), the exact `declaration_text` the assistant accepted, `captured_at`, `user_agent`, `ip`, and a deep link to the full review.
-- **Header summary:** total assisted this cycle, % of all submissions assisted, count missing selfie, count missing photo, top 5 assisting users by volume — so an admin can spot one person submitting for dozens of employees.
-- **Export CSV** of the filtered set (evidence paths are exported as presence flags, never as raw storage URLs).
+5. **Documentation / Policy**
+   - Update `DOCUMENTATION.md` version history.
+   - Update `POLICY.md` under Employee Category & Employment Status with the company-scoped import rule and admin maintenance instruction.
 
-### Verification angle
+6. **Validation**
+   - Run the targeted import/category tests.
+   - Re-check the category masters after the migration/data update.
 
-"Verify the assisted self-service records" is served by the completeness filter plus the top-assistor summary: an admin can pull every assisted submission with no selfie, or every submission made by one person, and open the evidence to confirm the employee was actually present.
+## UI Changes
+- No layout changes.
+- Only import error wording may be improved in the existing Import Results/preview area.
+- Responsiveness unchanged.
 
-## Technical details
+## Implementation
+- Requires a small data repair and possibly a small frontend/backend message improvement.
+- No destructive schema changes.
 
-- New RPC `get_annual_review_assisted_submissions(p_cycle_id, p_from, p_to, p_proxy_user_id, p_dept_id, p_bu_id, p_evidence, p_search, p_limit, p_offset)` — `SECURITY INVOKER` so the existing RLS policy stays the sole authority; returns rows plus `total_count`. Joins `profiles` for employee/assistant names and `annual_review_instances` for current status. A second RPC `get_annual_review_assisted_summary(p_cycle_id)` returns the header aggregates.
-- New files: `src/services/annualReview/assistedSubmissions.ts` (data layer), `src/hooks/annualReview/useAssistedSubmissions.ts` (React Query, keyed on all filters), `src/components/annual-review/admin/AssistedSubmissionsTab.tsx`, `src/components/annual-review/admin/AssistedEvidenceDrawer.tsx`.
-- Signed URLs are minted on drawer open only, never in the list — avoids 25 signing round-trips per page and limits URL exposure.
-- Tab is gated on `admin` / `hr_pms` exactly as the sibling governance tabs are; the menu entry is registered in `menu_access_config` so it can be mapped to other roles later without a code change (zero-hardcoding rule).
-- Tests: `assistedSubmissions.test.ts` (pagination range math, filter → RPC arg mapping, evidence-completeness classification, CSV shape with no raw paths) and a hook test asserting the query key changes with every filter.
-- Docs: ADR-203 + `POLICY.md §AR-ASSISTED-SUBMISSION-VISIBILITY` (assisted submissions must be auditable by admin/HR; evidence served only via short-lived signed URLs) + `DOCUMENTATION.md` version entry.
+## Tests
+- Add/extend unit tests for employee category company scoping.
+- Run the targeted test file.
 
-## Risk & impact
+## DOCUMENTATION.md updates
+- Add a version-history entry explaining that company-scoped category master gaps caused the failed imports and how the validation behaves.
 
-- **Data:** none — read-only. No schema, RLS, or trigger change.
-- **Workflow:** none. Submission behaviour is untouched.
-- **UI/UX:** one new tab in an existing tab strip; the strip already scrolls horizontally on mobile.
-- **Regression risk:** low, isolated new components. Only shared touch is adding one `<TabsTrigger>` / `<TabsContent>` pair.
-- **Scalability:** 2,037 rows today and growing one row per assisted submission; server-side pagination and indexed filters keep it flat. Add an index on `(instance_id)` and `(captured_at DESC)` if the query plan warrants it.
-- **Rollback:** delete the new files, remove the tab pair, drop the two RPCs. No data migration to undo.
+## POLICY.md updates
+- Clarify that employee category import validation is company-scoped and that admins must create category rows per company unless a category is intentionally global.
+
+## Rollback Strategy
+- If the added category master rows are wrong, deactivate/delete only those newly added master rows.
+- Revert any wording/test/documentation changes if needed.
+- No employee data rollback required because failed rows have not been created yet.
+
+## Post-implementation notes
+- After this repair, re-run the same import file. The three rows should pass category validation; any remaining failures would indicate a different column/master-data issue and should be handled separately.
