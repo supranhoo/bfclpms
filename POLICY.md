@@ -5401,6 +5401,7 @@ Rules:
 8. **Plan completeness.** A new plan MUST record support & resources provided (§15.6) alongside reason, improvement areas and success criteria, and MUST persist `trigger_source` / `trigger_context` so the evidence that produced it is auditable.
 9. **Sign-offs.** Skip-level (RM2) approval is mandatory before activation (§15.5, `pip_rm2_approve`), and employee acknowledgement is captured separately (§15.9, `pip_acknowledge`). Neither may be recorded by the plan's initiator on the other's behalf.
 10. **Suggestions are paginated** (25/page) and load only while the tab is active — the trend RPC is org-wide.
+11. **Anchored evaluation window (v2.66.133, ADR-207 amendment).** The §15.2 window is *N complete months ending at an admin-selected anchor month*, chosen in the "Up to month" filter. The default anchor is the previous complete month; because Monthly KRA review can lag by up to two months, an admin may shift the anchor back so the window covers fully-reviewed periods only. The anchor changes the evaluated period — never the rule (`<` threshold in every month, missing month disqualifies).
 
 **Why.** PIP Management shipped as an empty list with no way to find who needs a plan, and the policy's structural requirements (support, RM2 sign-off, acknowledgement, no-overlap, sustain window, duration bounds) had no enforcement point.
 
