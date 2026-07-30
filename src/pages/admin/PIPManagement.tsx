@@ -192,8 +192,9 @@ export default function PIPManagement() {
             <CardHeader>
               <CardTitle>PIPs List</CardTitle>
               <CardDescription>
-                {statusFilter === 'all' ? 'All performance improvement plans' : 
-                  `Showing ${STATUS_CONFIG[statusFilter as PIPStatus]?.label || statusFilter} PIPs`}
+                {statusFilter === 'all'
+                  ? `All performance improvement plans (${total})`
+                  : `Showing ${PIP_STATUS_LABELS[statusFilter as PIPStatus] ?? statusFilter} PIPs (${total})`}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -214,9 +215,8 @@ export default function PIPManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredPips?.map(pip => {
-                      const statusConfig = STATUS_CONFIG[pip.status];
-                      const StatusIcon = statusConfig.icon;
+                    {pips.map(pip => {
+                      const StatusIcon = STATUS_ICONS[pip.status] ?? FileText;
                       const effectiveEndDate = pip.extended_end_date || pip.end_date;
                       const milestonesCompleted = pip.milestones?.filter(m => m.status === 'met').length || 0;
                       const totalMilestones = pip.milestones?.length || 0;
@@ -241,9 +241,9 @@ export default function PIPManagement() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={statusConfig.variant}>
+                            <Badge variant={pipStatusVariant(pip.status)}>
                               <StatusIcon className="h-3 w-3 mr-1" />
-                              {statusConfig.label}
+                              {pipStatusLabel(pip.status)}
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -257,7 +257,7 @@ export default function PIPManagement() {
                         </TableRow>
                       );
                     })}
-                    {(!filteredPips || filteredPips.length === 0) && (
+                    {pips.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                           <UserX className="h-8 w-8 mx-auto mb-2 opacity-50" />
