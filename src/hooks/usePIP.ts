@@ -124,15 +124,32 @@ export interface CreatePIPData {
   milestones?: Omit<PIPMilestone, 'id' | 'pip_id' | 'created_at' | 'updated_at' | 'actual_outcome' | 'status' | 'reviewed_by' | 'reviewed_at' | 'remarks'>[];
 }
 
-// Fetch all PIPs with filters
-export function usePIPs(filters?: {
+export interface PIPListFilters {
   status?: PIPStatus;
   employeeId?: string;
   initiatedBy?: string;
-}) {
+  /** 1-based page index. Omit for the first page. */
+  page?: number;
+  pageSize?: number;
+  /** Server-side search across employee name / code. */
+  search?: string;
+}
+
+export interface PIPListResult {
+  rows: PIP[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// Fetch PIPs with filters + server-side pagination (ADR-205)
+export function usePIPs(filters?: PIPListFilters) {
+  const page = Math.max(1, filters?.page ?? 1);
+  const pageSize = filters?.pageSize ?? PIP_PAGE_SIZE;
+
   return useQuery({
-    queryKey: ['pips', filters],
-    queryFn: async () => {
+    queryKey: ['pips', filters, page, pageSize],
+    queryFn: async (): Promise<PIPListResult> => {
       let query = supabase
         .from('performance_improvement_plans')
         .select(`
@@ -147,7 +164,7 @@ export function usePIPs(filters?: {
             id, full_name
           ),
           milestones:pip_milestones(*)
-        `)
+        `, { count: 'exact' })
         .order('created_at', { ascending: false });
 
       if (filters?.status) {
@@ -160,9 +177,17 @@ export function usePIPs(filters?: {
         query = query.eq('initiated_by', filters.initiatedBy);
       }
 
-      const { data, error } = await query;
+      const from = (page - 1) * pageSize;
+      query = query.range(from, from + pageSize - 1);
+
+      const { data, error, count } = await query;
       if (error) throw error;
-      return data as PIP[];
+      return {
+        rows: (data ?? []) as PIP[],
+        total: count ?? 0,
+        page,
+        pageSize,
+      };
     },
   });
 }
