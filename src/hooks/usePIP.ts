@@ -378,61 +378,6 @@ export function useAcknowledgePIP() {
   });
 }
 
-function useCreatePIPLegacy() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-
-  return useMutation({
-    mutationFn: async (data: CreatePIPData) => {
-      const { milestones, ...pipData } = data;
-
-      // Get current user ID
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      // Create PIP
-      const { data: pip, error: pipError } = await supabase
-        .from('performance_improvement_plans')
-        .insert({
-          ...pipData,
-          initiated_by: user.id,
-          status: 'draft',
-        } as any)
-        .select()
-        .single();
-
-      if (pipError) throw pipError;
-
-      // Create milestones if provided
-      if (milestones && milestones.length > 0) {
-        const milestonesWithPipId = milestones.map(m => ({
-          ...m,
-          pip_id: pip.id,
-          status: 'pending',
-        }));
-
-        const { error: msError } = await supabase
-          .from('pip_milestones')
-          .insert(milestonesWithPipId as any);
-
-        if (msError) throw msError;
-      }
-
-      await writePipAudit(pip.id, 'CREATED', null, pipData as Record<string, unknown>);
-      await notifyPip(pip.id, 'pip_initiated');
-
-      return pip;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pips'] });
-      toast({ title: 'PIP created successfully' });
-    },
-    onError: (error: any) => {
-      toast({ title: 'Failed to create PIP', description: error.message, variant: 'destructive' });
-    },
-  });
-}
-
 // Submit PIP for HR approval
 export function useSubmitPIPForApproval() {
   const queryClient = useQueryClient();
