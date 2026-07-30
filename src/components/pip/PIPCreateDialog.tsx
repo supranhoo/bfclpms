@@ -364,6 +364,34 @@ export function PIPCreateDialog({
               )}
             />
 
+            {/* Support & resources — POLICY §15.6 */}
+            <FormField
+              control={form.control}
+              name="support_provided"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Support &amp; Resources Provided</FormLabel>
+                  <FormDescription>
+                    Training, coaching, mentoring or tools the organisation will provide during the plan (POLICY §15.6)
+                  </FormDescription>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Weekly coaching with the reporting manager, refresher training on..."
+                      className="min-h-20"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {policyError && (
+              <Alert variant="destructive">
+                <AlertDescription>{policyError}</AlertDescription>
+              </Alert>
+            )}
+
             {/* Milestones */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
