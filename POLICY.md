@@ -5344,8 +5344,8 @@ Rules:
 ## §AR-ASSISTED-SUBMISSION-VISIBILITY (ADR-203)
 - Every annual review self-stage submitted on an employee's behalf ("Assisted submission") MUST be recorded immutably in `annual_review_proxy_submissions` and MUST be inspectable by Admin / HR PMS without a database query.
 - Surface: **Annual Review → Admin → Assisted Submissions**. The view is strictly read-only; it never mutates a review.
-- Access is restricted to Admin and HR PMS via the `get_annual_review_assisted_submissions` / `get_annual_review_assisted_summary` RPCs (SECURITY DEFINER, role-checked). No client-side role gating is authoritative.
-- Listing is server-paginated (50 rows/page) with server-side filters: cycle, business unit, department, evidence completeness, capture date range, employee/assistant search. Loading the full audit set into the client is forbidden.
+- Access authority is the `annual_review_proxy_submissions` RLS policy `arps_select_visible` alone. The `get_annual_review_assisted_submissions` / `get_annual_review_assisted_summary` RPCs are SECURITY INVOKER and MUST stay that way — they must never widen visibility beyond what the caller could already read. Client-side role gating is never authoritative.
+- Listing is server-paginated (25 rows/page) with server-side filters: cycle, business unit, department, evidence completeness, capture date range, employee/assistant search. Loading the full audit set into the client is forbidden.
 - Evidence (live selfie, uploaded photograph) is exposed only through short-lived (5 minute) signed URLs minted when the evidence drawer opens for a single record. Signed URLs must never be minted for list rows.
 - Evidence completeness is an audit signal, not a blocker: rows missing a selfie and/or photograph MUST be visibly flagged (badge + summary counters) rather than hidden.
 - `profiles` has no `business_unit_id`; business unit for an assisted row is resolved via `departments.business_unit_id`.
