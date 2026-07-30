@@ -269,6 +269,31 @@ export default function PIPManagement() {
                 </Table>
               )}
             </CardContent>
+            {totalPages > 1 && (
+              <CardContent className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-0">
+                <div className="text-sm text-muted-foreground">
+                  Page {page} of {totalPages} · {total} plan{total === 1 ? '' : 's'}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page <= 1}
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </CardContent>
+            )}
           </Card>
         </TabsContent>
       </Tabs>
