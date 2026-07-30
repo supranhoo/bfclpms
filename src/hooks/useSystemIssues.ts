@@ -4,6 +4,7 @@ import { useAllKpis, useKpiQueries } from './useKpis';
 import { useProfiles } from './useOrganization';
 import { useTrainingNeeds } from './useTNI';
 import { usePIPs } from './usePIP';
+import { getPipSlaSettings, DEFAULT_PIP_SLA, type PipSlaSettings } from '@/lib/pip/pipSlaSettings';
 import { useSlaThresholds } from './useWorkflowSettings';
 import { format } from 'date-fns';
 import { isKpiLockedForPeriod } from '@/lib/frequencyUtils';
