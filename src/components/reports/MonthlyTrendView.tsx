@@ -478,6 +478,8 @@ export function MonthlyTrendView({ canExport }: Props) {
 
       {canStartPip && (
         <PIPCreateDialog
+          // Remount per employee so the form's defaultValues pick up the preselection.
+          key={pipDialogEmployeeId ?? 'none'}
           open={!!pipDialogEmployeeId}
           onOpenChange={(o) => { if (!o) setPipDialogEmployeeId(null); }}
           preselectedEmployeeId={pipDialogEmployeeId ?? undefined}
