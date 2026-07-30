@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -17,6 +17,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { CalendarIcon, Plus, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { getPipPolicySettings, DEFAULT_PIP_POLICY } from '@/lib/pip/pipPolicySettings';
+import {
+  validatePipDuration,
+  validateMilestoneCadence,
+  LIVE_PIP_STATUSES,
+} from '@/lib/pip/pipTriggerRules';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const milestoneSchema = z.object({
   milestone_date: z.date(),
@@ -31,6 +38,7 @@ const formSchema = z.object({
   reason: z.string().min(10, 'Reason must be at least 10 characters'),
   improvement_areas: z.array(z.string()).min(1, 'Select at least one area'),
   success_criteria: z.string().min(10, 'Success criteria must be at least 10 characters'),
+  support_provided: z.string().min(10, 'Describe the support BFCL will provide (POLICY §15.6)'),
   milestones: z.array(milestoneSchema).min(1, 'Add at least one milestone'),
 });
 
@@ -40,6 +48,10 @@ interface PIPCreateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   preselectedEmployeeId?: string;
+  /** ADR-207 — policy-worded evidence text carried from a suggestion. */
+  prefillReason?: string;
+  triggerSource?: string;
+  triggerContext?: Record<string, unknown> | null;
 }
 
 const IMPROVEMENT_AREAS = [
@@ -55,19 +67,53 @@ const IMPROVEMENT_AREAS = [
   'Initiative',
 ];
 
-export function PIPCreateDialog({ open, onOpenChange, preselectedEmployeeId }: PIPCreateDialogProps) {
+export function PIPCreateDialog({
+  open,
+  onOpenChange,
+  preselectedEmployeeId,
+  prefillReason,
+  triggerSource,
+  triggerContext,
+}: PIPCreateDialogProps) {
   const createPIP = useCreatePIP();
   const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
+  const [policyError, setPolicyError] = useState<string | null>(null);
 
+  /** Active employees only — a PIP is never raised against a deactivated user. */
   const { data: employees } = useQuery({
     queryKey: ['employees-for-pip'],
+    enabled: open,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
         .select('id, full_name, employee_code, designation')
-        .order('full_name');
+        .eq('is_active', true)
+        .order('full_name')
+        .limit(2000);
       if (error) throw error;
       return data;
+    },
+  });
+
+  /** POLICY §15.7 — duration bounds are admin-configurable, never hardcoded. */
+  const { data: policy } = useQuery({
+    queryKey: ['pip-policy-settings'],
+    queryFn: getPipPolicySettings,
+    staleTime: 5 * 60 * 1000,
+  });
+  const bounds = policy ?? DEFAULT_PIP_POLICY;
+
+  /** POLICY §15.7 — an employee may not hold overlapping plans. */
+  const { data: livePips } = useQuery({
+    queryKey: ['pip-live-plans'],
+    enabled: open,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('performance_improvement_plans')
+        .select('id, employee_id, status')
+        .in('status', [...LIVE_PIP_STATUSES]);
+      if (error) throw error;
+      return data ?? [];
     },
   });
 
@@ -77,9 +123,10 @@ export function PIPCreateDialog({ open, onOpenChange, preselectedEmployeeId }: P
       employee_id: preselectedEmployeeId || '',
       start_date: new Date(),
       end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
-      reason: '',
+      reason: prefillReason || '',
       improvement_areas: [],
       success_criteria: '',
+      support_provided: '',
       milestones: [
         {
           milestone_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 2 weeks
@@ -89,6 +136,14 @@ export function PIPCreateDialog({ open, onOpenChange, preselectedEmployeeId }: P
       ],
     },
   });
+
+  // Suggestion-driven opens carry the employee and evidence text.
+  useEffect(() => {
+    if (!open) return;
+    setPolicyError(null);
+    if (preselectedEmployeeId) form.setValue('employee_id', preselectedEmployeeId);
+    if (prefillReason) form.setValue('reason', prefillReason);
+  }, [open, preselectedEmployeeId, prefillReason]);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -106,6 +161,35 @@ export function PIPCreateDialog({ open, onOpenChange, preselectedEmployeeId }: P
   };
 
   const onSubmit = async (values: FormValues) => {
+    setPolicyError(null);
+
+    const duration = validatePipDuration(values.start_date, values.end_date, {
+      minDays: bounds.minDurationDays,
+      maxDays: bounds.maxDurationDays,
+    });
+    if (!duration.valid) {
+      setPolicyError(duration.message ?? 'Invalid plan duration.');
+      return;
+    }
+
+    const cadence = validateMilestoneCadence(
+      values.milestones.map(m => m.milestone_date),
+      values.start_date,
+      values.end_date,
+    );
+    if (!cadence.valid) {
+      setPolicyError(cadence.message ?? 'Invalid checkpoint schedule.');
+      return;
+    }
+
+    const overlap = (livePips ?? []).find(p => p.employee_id === values.employee_id);
+    if (overlap) {
+      setPolicyError(
+        'This employee already has a live Performance Improvement Plan. Overlapping plans are not permitted (POLICY §15.7).',
+      );
+      return;
+    }
+
     await createPIP.mutateAsync({
       employee_id: values.employee_id,
       start_date: format(values.start_date, 'yyyy-MM-dd'),
@@ -113,6 +197,9 @@ export function PIPCreateDialog({ open, onOpenChange, preselectedEmployeeId }: P
       reason: values.reason,
       improvement_areas: values.improvement_areas,
       success_criteria: values.success_criteria,
+      support_provided: values.support_provided,
+      trigger_source: triggerSource ?? 'manual',
+      trigger_context: triggerContext ?? null,
       milestones: values.milestones.map(m => ({
         milestone_date: format(m.milestone_date, 'yyyy-MM-dd'),
         description: m.description,
@@ -120,6 +207,7 @@ export function PIPCreateDialog({ open, onOpenChange, preselectedEmployeeId }: P
       })),
     });
     form.reset();
+    setSelectedAreas([]);
     onOpenChange(false);
   };
 
@@ -275,6 +363,34 @@ export function PIPCreateDialog({ open, onOpenChange, preselectedEmployeeId }: P
                 </FormItem>
               )}
             />
+
+            {/* Support & resources — POLICY §15.6 */}
+            <FormField
+              control={form.control}
+              name="support_provided"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Support &amp; Resources Provided</FormLabel>
+                  <FormDescription>
+                    Training, coaching, mentoring or tools the organisation will provide during the plan (POLICY §15.6)
+                  </FormDescription>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Weekly coaching with the reporting manager, refresher training on..."
+                      className="min-h-20"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {policyError && (
+              <Alert variant="destructive">
+                <AlertDescription>{policyError}</AlertDescription>
+              </Alert>
+            )}
 
             {/* Milestones */}
             <div className="space-y-4">

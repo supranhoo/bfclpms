@@ -9205,6 +9205,8 @@ export type Database = {
         Row: {
           completion_remarks: string | null
           created_at: string
+          employee_ack_comments: string | null
+          employee_acknowledged_at: string | null
           employee_id: string
           end_date: string
           extended_end_date: string | null
@@ -9214,16 +9216,25 @@ export type Database = {
           id: string
           improvement_areas: Json
           initiated_by: string
+          monitoring_until: string | null
           outcome: Database["public"]["Enums"]["pip_outcome"] | null
           reason: string
+          rm2_approved_at: string | null
+          rm2_approver_id: string | null
+          rm2_remarks: string | null
           start_date: string
           status: Database["public"]["Enums"]["pip_status"]
           success_criteria: string
+          support_provided: string | null
+          trigger_context: Json | null
+          trigger_source: string | null
           updated_at: string
         }
         Insert: {
           completion_remarks?: string | null
           created_at?: string
+          employee_ack_comments?: string | null
+          employee_acknowledged_at?: string | null
           employee_id: string
           end_date: string
           extended_end_date?: string | null
@@ -9233,16 +9244,25 @@ export type Database = {
           id?: string
           improvement_areas?: Json
           initiated_by: string
+          monitoring_until?: string | null
           outcome?: Database["public"]["Enums"]["pip_outcome"] | null
           reason: string
+          rm2_approved_at?: string | null
+          rm2_approver_id?: string | null
+          rm2_remarks?: string | null
           start_date: string
           status?: Database["public"]["Enums"]["pip_status"]
           success_criteria: string
+          support_provided?: string | null
+          trigger_context?: Json | null
+          trigger_source?: string | null
           updated_at?: string
         }
         Update: {
           completion_remarks?: string | null
           created_at?: string
+          employee_ack_comments?: string | null
+          employee_acknowledged_at?: string | null
           employee_id?: string
           end_date?: string
           extended_end_date?: string | null
@@ -9252,11 +9272,18 @@ export type Database = {
           id?: string
           improvement_areas?: Json
           initiated_by?: string
+          monitoring_until?: string | null
           outcome?: Database["public"]["Enums"]["pip_outcome"] | null
           reason?: string
+          rm2_approved_at?: string | null
+          rm2_approver_id?: string | null
+          rm2_remarks?: string | null
           start_date?: string
           status?: Database["public"]["Enums"]["pip_status"]
           success_criteria?: string
+          support_provided?: string | null
+          trigger_context?: Json | null
+          trigger_source?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -9479,6 +9506,53 @@ export type Database = {
             columns: ["reviewed_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pip_monitoring_records: {
+        Row: {
+          created_at: string
+          employee_id: string
+          id: string
+          is_relapse: boolean
+          observed_score: number | null
+          period_month: string
+          pip_id: string
+          recorded_by: string | null
+          remarks: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          id?: string
+          is_relapse?: boolean
+          observed_score?: number | null
+          period_month: string
+          pip_id: string
+          recorded_by?: string | null
+          remarks?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          id?: string
+          is_relapse?: boolean
+          observed_score?: number | null
+          period_month?: string
+          pip_id?: string
+          recorded_by?: string | null
+          remarks?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pip_monitoring_records_pip_id_fkey"
+            columns: ["pip_id"]
+            isOneToOne: false
+            referencedRelation: "performance_improvement_plans"
             referencedColumns: ["id"]
           },
         ]
@@ -16623,6 +16697,10 @@ export type Database = {
         Args: { p_instance_id: string; p_new_rating: string; p_reason: string }
         Returns: undefined
       }
+      pip_acknowledge: {
+        Args: { p_comments?: string; p_pip_id: string }
+        Returns: undefined
+      }
       pip_notify: {
         Args: {
           p_event: string
@@ -16631,6 +16709,18 @@ export type Database = {
           p_recipient?: string
         }
         Returns: string
+      }
+      pip_rm2_approve: {
+        Args: { p_pip_id: string; p_remarks?: string }
+        Returns: undefined
+      }
+      pip_setting_bool: {
+        Args: { _fallback: boolean; _key: string }
+        Returns: boolean
+      }
+      pip_setting_num: {
+        Args: { _fallback: number; _key: string }
+        Returns: number
       }
       pip_transition_allowed: {
         Args: {

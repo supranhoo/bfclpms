@@ -7728,3 +7728,15 @@ Functional Managers (FM) can now score their mapped employees end-to-end.
 - **Tiles:** "Functional Pending" stat card + `pending_functional` filter in `src/lib/teamReviewTileFilter.ts`, shown only when the resolved workflow contains `functional_manager_check`.
 - **Server:** `is_fm_actionable_kpi(uuid)` drives `kpis` / `review_submissions` write policies at the stage preceding `functional_manager_check`.
 - **Policy:** POLICY §WF-FM-RELATIONSHIP-SSOT. **Tests:** 16 across two suites.
+
+## ADR-207 — PIP Trigger Suggestions & Policy Guardrails
+
+PIP Management now surfaces *who* needs a plan, and enforces the structural requirements of POLICY §15.
+
+- **Server**: `performance_improvement_plans` gained `support_provided`, `trigger_source`, `trigger_context`, `rm2_approver_id`/`rm2_approved_at`/`rm2_remarks`, `employee_acknowledged_at`/`employee_ack_comments`, `monitoring_until`. New `pip_monitoring_records` table (grants + RLS + updated_at trigger), `trg_pip_rm2_gate` (no activation without skip-level sign-off), `trg_pip_stamp_monitoring` (stamps the sustain window on completion), and the `pip_rm2_approve` / `pip_acknowledge` SECURITY DEFINER RPCs.
+- **Rules SSOT**: `src/lib/pip/pipTriggerRules.ts` — monthly trigger (§15.2, strictly below threshold in *every* month; a missing month disqualifies, delegating to `pipCandidateRule.ts`), annual trigger (§15.3, at-or-below), policy-worded reason text, candidate classification (`eligible` / `live_pip` / `relapse_window`) and the §15.7 duration + checkpoint-cadence validators. `src/lib/pip/pipPolicySettings.ts` reads the configurable bounds (min/max duration, monitor months, RM2 requirement).
+- **Data**: `src/hooks/usePIPCandidates.ts` joins monthly trend scores, annual ratings and existing plans. The annual number is derived from `annual_review_instances.total_score` rebased to the 5-point scale — `final_rating` is a text descriptor ("Poor"/"Average"/…), not a number.
+- **UI**: `PIPManagement.tsx` now has *PIPs List* and *Suggestions* views. `PIPSuggestionsPanel.tsx` renders per-month evidence, annual rating, matched trigger, candidate state, with search, window/trigger filters and 25/page pagination; it loads only while active. "Initiate PIP" prefills `PIPCreateDialog` with the employee and the evidence text; the dialog adds a mandatory **Support & Resources Provided** field (§15.6), blocks out-of-bounds durations, bad checkpoint cadence and overlapping live plans, and persists the trigger metadata. `PIPDetailSheet.tsx` adds the skip-level (RM2) approval action, the employee acknowledgement action, support display and the post-PIP monitoring window.
+- **Policy**: §PIP-TRIGGER-SUGGESTIONS.
+- **Tests**: `src/test/pip/pipTriggerRules.test.ts` (20).
+- **Security (unrelated, auto-triggered)**: `incentive_vessel_rates` lost its `USING (true)` read policy; SELECT is now scoped to the employee themselves plus admin/hr_pms/management and incentive menu-override holders.

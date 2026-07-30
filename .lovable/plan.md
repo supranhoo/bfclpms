@@ -1,52 +1,86 @@
-## What I verified first (facts, not assumptions)
+## Assumptions
 
-Database (live queries):
-- Brundaban Chandra Das (102028) → `functional_manager_id` = V.A.V.S.S. Ganapathi Varma (200271); `reporting_manager_id` = Sajid Raza (100264), whose manager is Gaurav Budhia. So Ganapathi is **only** a functional manager for him — not direct, not skip.
-- Ganapathi has exactly one role: `manager` (i.e. NOT full-access).
-- June 2026: 20 KPIs at status `manager_check`. `fm_pending_status_for_kpi` = `manager_check` for those rows, so the FM stage exists in his resolved workflow and the FM is the pending actor.
-- RLS is already correct: `FM can update KPI status on FM stage` (USING `is_fm_actionable_kpi(id)`), plus matching update/insert policies on `review_submissions`, and SELECT/INSERT policies on observations/queries. `is_fm_actionable_kpi` returns false in my SQL session only because `auth.uid()` is NULL there — that is expected, not a defect.
+- "Score < 2" refers to POLICY §15.2: monthly rating below 2 on the 5-point scale, sustained into the **third consecutive month**. The current default threshold constant in the app is `3.0` (`DEFAULT_PIP_THRESHOLD` in `src/lib/pmsSettings.ts`), read from `system_settings.pms_pip_threshold`. The suggestion engine will read the same setting so Admin stays in control (zero-hardcoding), with the policy value 2.0 as the recommended configured value.
+- Suggestions are advisory only. They never auto-create a PIP; a human must initiate (POLICY §15.5).
+- Verified in the database this turn: `performance_improvement_plans` has columns `id, employee_id, initiated_by, hr_reviewer_id, status, start_date, end_date, extended_end_date, reason, improvement_areas, success_criteria, hr_remarks, hr_approved_at, completion_remarks, outcome, created_at, updated_at`. There is **no** column recording *why* a PIP was triggered, and no `pip_candidates` table exists. Sibling tables `pip_milestones` and `pip_audit_logs` exist.
 
-Client (code reads):
-- `UnifiedScorecard` has the `functional_manager` level with prefix `functional_manager` and previous score `manager_score`; `KpiDetailsTable` / `MobileKpiCard` accept `functional-manager-review`; `workflowEngine` resolves the FM reviewable status as the stage preceding `functional_manager_check`.
-- `get_manager_team_roster` returns a `functional` relationship row, and the non-full-access Team branch of `EmployeeSelectorGrid` uses it.
+## Clarifications (answer while I build; safe defaults chosen)
 
-**Conclusion on the reported symptom:** for Ganapathi's own login the happy path is now wired end to end; the read-only screenshot matches the pre-fix build. What is *not* yet closed are the real remaining gaps below, which still produce a read-only FM view on other entry paths.
+1. Should the configured `pms_pip_threshold` be changed from 3.0 to 2.0 to match POLICY §15.2? Default: leave the stored value untouched, show it in the UI ("Threshold: X — configurable in Settings"), and surface a warning banner when it differs from the policy value of 2.0.
+2. Consecutive-month window: default is the **last 3 completed months** (policy: "third consecutive month"), with a selector for 3 / 6 months.
 
-## Confirmed remaining gaps
+## Risk & Impact Report
 
-1. **Full-access viewers mis-tag the relationship.** In `EmployeeSelectorGrid`, the `isFullAccess` Team branch tags only `direct` / `indirect`; a functional report falls through as `undefined`. Admin/HR/Management assisting an FM therefore land on the Manager view (read-only at `manager_check`).
-2. **Deep-link / direct-open path is unreliable.** `resolveRelationship` in `Dashboard.tsx` decides "functional" by reading `employee.functional_manager_id`, a field the roster payloads do not always carry; it then silently defaults to `relationship: 'direct'`, which is exactly the read-only manager view.
-3. **No FM signal in the stage strip / tiles.** The grid computes `functionalIdSet` but the header tiles only expose direct/skip counts, so an FM sees "Functional Mgr 0" with no pending tile.
-4. **No live proof.** Existing tests (`functionalManagerScorecardLevel.test.ts`, `functionalManagerPendingWith.test.ts`) are pure-logic; nothing asserts the RLS write actually succeeds.
+- **Data impact:** One additive migration — nullable `trigger_source text` and `trigger_context jsonb` on `performance_improvement_plans`, so a PIP records which rule surfaced it and the scores at initiation (POLICY §15.6 "supporting evidence", §15.13 audit). No column drops, no backfill required, existing rows stay NULL. Additive → included automatically in the RPC-driven backup coverage (no denylist entry).
+- **Workflow impact:** None to the existing PIP lifecycle graph or `trg_pip_status_transition`. Suggestions sit *before* draft creation. Segregation of duties unchanged.
+- **UI/UX impact:** New "Suggestions" tab in `PIPManagement.tsx` alongside the existing list. Existing list, filters and paging untouched.
+- **Regression risk:** Low-medium. Main risk is reusing the heavy `get_monthly_trend` RPC (full-org aggregate) inside an admin page that currently loads instantly. Mitigated by making the tab opt-in (data fetches only when the tab is opened) plus client-side pagination of candidates.
+- **Scalability:** `get_monthly_trend` already server-aggregates and is capped at 12 months; the suggestion query uses a 3-month window. Candidate list is paginated at 25/page and filtered server-side by BU/department where the RPC already supports it. No unbounded fetch.
+- **Mitigation:** shared rule module (no logic duplication), unit tests on every rule branch, opt-in loading, additive schema only.
 
-## Plan
+## What gets built
 
-### Phase D1 — Relationship resolution SSOT (client)
-- Add `src/lib/review/resolveReviewerRelationship.ts`: single pure function taking `{ viewerId, employee: { reporting_manager_id, functional_manager_id }, directIds, skipIds, functionalIds }` → `'direct' | 'indirect' | 'functional' | 'other'`, with **functional evaluated before the `direct` fallback**.
-- `EmployeeSelectorGrid`: use it in **both** Team branches, so full-access viewers also tag `functional` (source: `functionalIdSet`, plus a `functional_manager_id === viewerId` check on the profile row).
-- `Dashboard.tsx`: replace the ad-hoc chain in `resolveRelationship` with the same helper; when the field is absent, do one targeted `profiles` read of `functional_manager_id` for that employee instead of defaulting to `direct`.
+### 1. Rule engine (SSOT, no duplication)
 
-### Phase D2 — FM visibility in Team Reviews
-- Surface a "Functional" tile/filter chip beside Direct / Skip-Level, driven by `functionalIdSet`, with pending counts computed from `resolveReviewableStatuses('functional_manager', stages)` (the counting logic already exists in `getEmployeeKpiStats`).
-- Employee cards keep the existing `functional` badge.
+`src/lib/pip/pipTriggerRules.ts` — extends the existing `isPipCandidate` rather than replacing it:
 
-### Phase D3 — Guardrail against silent read-only
-- In `UnifiedScorecard`, when the viewer is a mapped FM for the employee and the KPI's status equals the FM-pending stage but the resolved view level is not `functional_manager`, render an explicit inline notice ("You are the Functional Manager for this employee — reopen from Team → Functional") rather than a silent read-only grid. This turns any future mis-routing into a visible, diagnosable state.
+- `evaluateMonthlyTrigger(employee, monthKeys, threshold)` → uses the existing `isPipCandidate` (every month present **and** strictly below threshold; a missing month disqualifies). Returns `{ qualifies, months, scores, worstScore }`.
+- `evaluateAnnualTrigger(finalAnnualRating, threshold)` → POLICY §15.3: annual rating **at or below** 2 qualifies (note the ≤ vs < asymmetry with the monthly rule — this is per policy, and is covered by an explicit test).
+- `resolveTriggerReason(...)` → human-readable string used to prefill the PIP `reason` field, e.g. *"Monthly rating below 2.0 for 3 consecutive months (Apr 1.6, May 1.4, Jun 1.8) — POLICY §15.2."*
+- `isSuppressed(candidate, existingPips)` → suppresses employees who already have a live PIP (`draft`, `pending_hr_approval`, `active`, `extended`) — POLICY §15.7 forbids overlapping PIPs — and flags those inside the 3-month post-PIP sustain window (POLICY §15.12) as **"Relapse — review for reopen"** instead of a fresh suggestion.
 
-### Phase D4 — Test case and live verification
-- Unit: `resolveReviewerRelationship` matrix (direct / indirect / functional / functional-when-also-indirect / unknown), including the full-access branch.
-- Integration (vitest): given workflow `[…, manager_check, functional_manager_check, …]` and KPI status `manager_check`, assert view level `functional_manager`, `isReviewable === true`, and score field prefix `functional_manager`.
-- Live: run a signed-in browser check against the preview with the real records — open Team → 102028 as the FM path, confirm the view header reads "Functional Manager Review", the score inputs are editable, and a save writes `functional_manager_score` to `review_submissions`. Report the observed result before declaring closure.
+### 2. Data hook
 
-### Phase D5 — Documentation and policy
-- `docs/adr/ADR-206.md`: record RCA (relationship resolution, not RLS), the SSOT helper, and the guardrail.
-- `POLICY.md §WF-FM-RELATIONSHIP-SSOT`: relationship tagging must come from one resolver; no reviewer path may default an untagged employee to `direct`.
-- Version History entry.
+`src/hooks/usePIPCandidates.ts`:
 
-## Risk and impact
+- Reads the threshold via existing `getPipThreshold()` / `pms_pip_threshold`.
+- Calls `useMonthlyTrend` for the selected trailing window with `enabled` gated on the Suggestions tab being open and `includeInactive: false` (inactive employees are never suggested).
+- Calls `usePIPs` for live/recent plans to apply suppression.
+- Adds the annual trigger by reading the completed annual-review final rating for the current cycle (reuses the existing comprehensive-report RPC path; if the value is unavailable for an employee, the monthly trigger alone still applies and the row is labelled accordingly — no silent failure).
+- Returns `{ candidates, threshold, thresholdMatchesPolicy, months, isLoading, error }`.
 
-- **Data:** none. No schema or RLS change — server side is already correct and verified.
-- **Workflow:** additive only; direct/skip/full-access routing is unchanged except that functional is now checked before the `direct` fallback.
-- **UI:** one new tile/chip in Team Reviews; one new inline notice that appears only in the mis-routing case.
-- **Regression risk:** medium-low, concentrated in `EmployeeSelectorGrid` roster memoisation — mitigated by the relationship matrix unit test and the existing team-roster gate tests.
-- **Rollback:** revert the helper and its three call sites; no migration to undo.
+### 3. UI
+
+`src/pages/admin/PIPManagement.tsx` — wrap existing content in tabs: **PIPs List** (current, unchanged) and **Suggestions** (new, badge showing candidate count once loaded).
+
+Suggestions tab contents:
+
+- **Controls row:** window selector (Last 3 / 6 months), trigger-type filter (Monthly / Annual / Both), BU + Department filters, employee search, and a read-only threshold chip. Amber inline note when threshold ≠ 2.0.
+- **Candidate table** (shadcn `Table`, sticky header, `hover:bg-muted/50`, rows ≥ `h-10`): Employee (name, code, designation) · Department / BU · Reporting Manager · per-month score cells (destructive-toned when below threshold) · Trigger badge (Monthly §15.2 / Annual §15.3) · Status (`Eligible` / `Live PIP exists` / `Relapse in sustain window`) · Action.
+- **Action:** "Initiate PIP" opens the existing `PIPCreateDialog` prefilled with the employee, a policy-worded `reason`, and default 30-day dates. Suppressed rows render a disabled button with a tooltip explaining why (never a silent no-op).
+- **Empty state:** `ShieldCheck` icon + "No employees meet the PIP trigger criteria for this window" + a link to the Monthly Scorecard Trend report.
+- **Loading:** `Skeleton` rows matching the table shape (not a spinner). Errors surface as a destructive inline alert with a Retry button.
+- Client-side pagination, 25 rows/page, matching the existing `PIP_PAGE_SIZE` convention.
+
+### 4. Policy guardrails added to `PIPCreateDialog`
+
+These close real gaps against POLICY §15 that exist today regardless of the suggestions feature:
+
+- **Duration 30–90 days** (§15.7) — zod validation on `end_date - start_date`, with the bounds read from PIP SLA settings rather than hardcoded.
+- **Checkpoint cadence** (§15.7) — validate milestones are at least fortnightly/monthly and that the final milestone is on or before the end date.
+- **No overlapping PIP** (§15.7) — block creation when the selected employee already has a live plan; message names the existing plan.
+- **Evidence prefill** (§15.6) — when opened from a suggestion, the reason carries the KPI-score evidence and window; the trigger metadata is persisted to `trigger_source` / `trigger_context`.
+- The dialog's employee dropdown currently fetches **all** profiles unpaginated and without an active filter — it will be switched to an active-only, server-side searched combobox.
+
+### 5. Tests (`src/test/pip/pipTriggerRules.test.ts`)
+
+Monthly trigger: 3 consecutive below → qualifies; one month at threshold → no; missing month → no; threshold unset → inert. Annual trigger: exactly 2 → qualifies (≤), 2.1 → no. Suppression: live PIP in each of the four live statuses → suppressed; completed 2 months ago → relapse label; completed 5 months ago → eligible. Reason string snapshot. Duration validator: 29 / 30 / 90 / 91 days.
+
+### 6. Documentation & policy sync
+
+- New `docs/adr/ADR-207.md` — PIP trigger suggestion engine.
+- `POLICY.md` → new **§PIP-TRIGGER-SUGGESTIONS** recording the monthly/annual triggers, the configurable-threshold rule, suppression semantics, and that suggestions are advisory only.
+- `DOCUMENTATION.md` version-history entry.
+
+## Known policy gaps this plan does **not** close (flagged, not silently dropped)
+
+These need separate decisions before I build them; say the word and I will fold any into this plan:
+
+1. **RM2 / Dept-Head approval** (§15.5) — the current lifecycle has a single HR approval step, not the joint RM2 + HR approval the policy requires. - This should be created and Implimented with Option to keep this customisable.  
+2. **Employee acknowledgment & comments** (§15.9) — no acknowledgment capture exists on a PIP today. - This should also be build and Employee will only see the PIP Tab if the employee is active in PIP window. 
+3. **Post-PIP 3-month sustain monitoring** (§15.12) — this plan only *labels* relapse in the suggestions list; there is no monitoring record or reopen flow. - plan in detail how this can be achieved.  
+4. **Support/resources field** (§15.6, Annexure F) — not currently captured on the PIP form. - This must be there in the form. 
+
+## Rollback
+
+Feature is additive and tab-gated. Rollback = revert the two new modules plus the tab block in `PIPManagement.tsx`; the migration's two nullable columns can be left in place harmlessly or dropped in a follow-up.

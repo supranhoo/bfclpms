@@ -80,6 +80,16 @@ export interface PIP {
   outcome: PIPOutcome | null;
   created_at: string;
   updated_at: string;
+  // ADR-207 — POLICY §15 completeness
+  support_provided?: string | null;
+  trigger_source?: string | null;
+  trigger_context?: Record<string, unknown> | null;
+  rm2_approver_id?: string | null;
+  rm2_approved_at?: string | null;
+  rm2_remarks?: string | null;
+  employee_acknowledged_at?: string | null;
+  employee_ack_comments?: string | null;
+  monitoring_until?: string | null;
   // Joined fields
   employee?: {
     id: string;
@@ -121,6 +131,11 @@ export interface CreatePIPData {
   reason: string;
   improvement_areas: string[];
   success_criteria: string;
+  /** POLICY §15.6 / Annexure F — support and resources BFCL will provide. */
+  support_provided?: string;
+  /** ADR-207 — which rule surfaced this plan. */
+  trigger_source?: string;
+  trigger_context?: Record<string, unknown> | null;
   milestones?: Omit<PIPMilestone, 'id' | 'pip_id' | 'created_at' | 'updated_at' | 'actual_outcome' | 'status' | 'reviewed_by' | 'reviewed_at' | 'remarks'>[];
 }
 
@@ -303,10 +318,62 @@ export function useCreatePIP() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pips'] });
+      queryClient.invalidateQueries({ queryKey: ['pip-live-plans'] });
       toast({ title: 'PIP created successfully' });
     },
     onError: (error: any) => {
       toast({ title: 'Failed to create PIP', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+/**
+ * POLICY §15.5 — skip-level (RM2) sign-off. The RPC enforces that the approver
+ * is the employee's skip-level manager (or HR/admin) and is not the initiator.
+ */
+export function useRM2ApprovePIP() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ pipId, remarks }: { pipId: string; remarks?: string }) => {
+      const { error } = await supabase.rpc('pip_rm2_approve', {
+        p_pip_id: pipId,
+        p_remarks: remarks ?? null,
+      } as never);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['pips'] });
+      queryClient.invalidateQueries({ queryKey: ['pip-details', vars.pipId] });
+      toast({ title: 'Skip-level approval recorded' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Approval failed', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+/** POLICY §15.9 — employee acknowledges receipt and discussion of the plan. */
+export function useAcknowledgePIP() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ pipId, comments }: { pipId: string; comments?: string }) => {
+      const { error } = await supabase.rpc('pip_acknowledge', {
+        p_pip_id: pipId,
+        p_comments: comments ?? null,
+      } as never);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['pips'] });
+      queryClient.invalidateQueries({ queryKey: ['pip-details', vars.pipId] });
+      toast({ title: 'Acknowledgement recorded' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Could not record acknowledgement', description: error.message, variant: 'destructive' });
     },
   });
 }

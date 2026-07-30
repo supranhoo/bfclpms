@@ -5385,6 +5385,29 @@ Rules:
 
 ---
 
+### §PIP-TRIGGER-SUGGESTIONS — Objective PIP triggers & policy guardrails (v2.66.132, 2026-07-30 / ADR-207)
+
+**Rule.**
+
+1. **Triggers are advisory, never automatic.** The system surfaces candidates; a human always initiates the plan (POLICY §15.5). No code path may create a `performance_improvement_plans` row without an acting user.
+2. **Two objective triggers, one module.** `src/lib/pip/pipTriggerRules.ts` is the SSOT.
+   - *Monthly (§15.2)* — score **strictly below** the threshold in **every** month of the window; a missing month disqualifies. Reuses `pipCandidateRule.ts`, so the Suggestions tab and Monthly Scorecard → Trend can never diverge.
+   - *Annual (§15.3)* — final annual rating **at or below** the threshold. The `<=` versus the monthly `<` is deliberate policy wording, not a bug.
+3. **Annual rating is derived, not read from `final_rating`.** `annual_review_instances.final_rating` stores a descriptor label ("Poor"/"Average"/…). The comparable number is `total_score`, guaranteed on a 0..100 scale by §AR-FINAL-SCORE-SCALE-INVARIANT, rebased to the 5-point scale (`/20`).
+4. **Threshold is configuration.** The PIP threshold comes from PMS settings — the same value the Monthly Trend report uses. When it differs from the policy value of 2, the UI states the divergence rather than silently overriding it.
+5. **No overlapping plans (§15.7).** An employee holding a plan in `draft | pending_hr_approval | active | extended` is shown as "Live PIP exists" and cannot be initiated again; the create dialog blocks the submit.
+6. **Relapse window (§15.12).** A `completed` plan keeps the employee inside a configurable post-PIP monitoring window (`monitoring_until`, default 3 months). Re-triggering inside that window is labelled "Relapse window" and routes to review/escalation, not to a fresh plan.
+7. **Duration & cadence guardrails (§15.7).** Plan length must sit inside the configured min/max day bounds and every checkpoint must fall inside the plan window with no gap wider than the cadence limit. Bounds live in `pipPolicySettings.ts` (settings-backed) — never hardcoded at a call site.
+8. **Plan completeness.** A new plan MUST record support & resources provided (§15.6) alongside reason, improvement areas and success criteria, and MUST persist `trigger_source` / `trigger_context` so the evidence that produced it is auditable.
+9. **Sign-offs.** Skip-level (RM2) approval is mandatory before activation (§15.5, `pip_rm2_approve`), and employee acknowledgement is captured separately (§15.9, `pip_acknowledge`). Neither may be recorded by the plan's initiator on the other's behalf.
+10. **Suggestions are paginated** (25/page) and load only while the tab is active — the trend RPC is org-wide.
+
+**Why.** PIP Management shipped as an empty list with no way to find who needs a plan, and the policy's structural requirements (support, RM2 sign-off, acknowledgement, no-overlap, sustain window, duration bounds) had no enforcement point.
+
+**Guard.** `src/test/pip/pipTriggerRules.test.ts` (20 tests: monthly/annual triggers, reason text, candidate classification, duration & cadence).
+
+---
+
 ## §WF-FM-RELATIONSHIP-SSOT — Functional Manager review action path (ADR-206)
 
 1. **One resolver.** Reviewer relationship (`direct` / `indirect` / `functional` / `other`) is resolved in exactly one place: `src/lib/review/resolveReviewerRelationship.ts`. Dashboards, deep links, and the Team Reviews grid MUST call it instead of re-deriving the relationship inline. A server-supplied `relationship` tag always wins.

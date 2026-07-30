@@ -19,6 +19,8 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { PIPCreateDialog } from '@/components/pip/PIPCreateDialog';
 import { PIPDetailSheet } from '@/components/pip/PIPDetailSheet';
+import { PIPSuggestionsPanel } from '@/components/pip/PIPSuggestionsPanel';
+import type { PIPCandidate } from '@/hooks/usePIPCandidates';
 import { 
   AlertTriangle, 
   CheckCircle2, 
@@ -49,6 +51,28 @@ export default function PIPManagement() {
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedPipId, setSelectedPipId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [view, setView] = useState<'plans' | 'suggestions'>('plans');
+  const [prefill, setPrefill] = useState<{
+    employeeId: string;
+    reason: string;
+    triggerSource: 'monthly_trend' | 'annual_rating';
+    triggerContext: Record<string, unknown>;
+  } | null>(null);
+
+  const handleInitiateFromSuggestion = (c: PIPCandidate) => {
+    setPrefill({
+      employeeId: c.employeeId,
+      reason: c.reason,
+      triggerSource: c.triggers[0] ?? 'monthly_trend',
+      triggerContext: {
+        triggers: c.triggers,
+        months: c.monthly.months,
+        worst_score: c.monthly.worstScore,
+        annual_rating: c.annualRating,
+      },
+    });
+    setCreateOpen(true);
+  };
 
   // Reset to the first page whenever the result set changes shape.
   useEffect(() => { setPage(1); }, [statusFilter, searchTerm]);
@@ -165,7 +189,22 @@ export default function PIPManagement() {
         </div>
       )}
 
-      {/* Tabs */}
+      {/* View switch: plans list vs policy-driven suggestions (ADR-207) */}
+      <Tabs value={view} onValueChange={(v) => setView(v as 'plans' | 'suggestions')}>
+        <TabsList>
+          <TabsTrigger value="plans">PIPs List</TabsTrigger>
+          <TabsTrigger value="suggestions">Suggestions</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="suggestions" className="mt-6">
+          <PIPSuggestionsPanel
+            active={view === 'suggestions'}
+            onInitiate={handleInitiateFromSuggestion}
+            onOpenPip={(id) => setSelectedPipId(id)}
+          />
+        </TabsContent>
+
+        <TabsContent value="plans" className="mt-6 space-y-6">
       <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as PIPStatus | 'all')}>
         <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
           <TabsList>
@@ -297,9 +336,18 @@ export default function PIPManagement() {
           </Card>
         </TabsContent>
       </Tabs>
+        </TabsContent>
+      </Tabs>
 
       {/* Create Dialog */}
-      <PIPCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <PIPCreateDialog
+        open={createOpen}
+        onOpenChange={(open) => { setCreateOpen(open); if (!open) setPrefill(null); }}
+        preselectedEmployeeId={prefill?.employeeId}
+        prefillReason={prefill?.reason}
+        triggerSource={prefill?.triggerSource}
+        triggerContext={prefill?.triggerContext}
+      />
 
       {/* Detail Sheet */}
       <PIPDetailSheet 

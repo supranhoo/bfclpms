@@ -23,6 +23,8 @@ import {
   useExtendPIP,
   useCancelPIP,
   useUpdateMilestone,
+  useRM2ApprovePIP,
+  useAcknowledgePIP,
   PIPStatus,
   PIPOutcome,
   MilestoneStatus
@@ -81,6 +83,10 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
   const extendPIP = useExtendPIP();
   const cancelPIP = useCancelPIP();
   const updateMilestone = useUpdateMilestone();
+  const rm2Approve = useRM2ApprovePIP();
+  const acknowledge = useAcknowledgePIP();
+  const [rm2Remarks, setRm2Remarks] = useState('');
+  const [ackComments, setAckComments] = useState('');
 
   const [actionDialog, setActionDialog] = useState<'approve' | 'reject' | 'complete' | 'extend' | 'cancel' | 'milestone' | null>(null);
   const [remarks, setRemarks] = useState('');
@@ -283,6 +289,113 @@ export function PIPDetailSheet({ pipId, open, onOpenChange }: PIPDetailSheetProp
                 <p>{pip.success_criteria}</p>
               </CardContent>
             </Card>
+
+            {/* Support provided — POLICY §15.6 */}
+            {pip.support_provided && (
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">Support &amp; Resources Provided</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm">
+                  <p>{pip.support_provided}</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Skip-level (RM2) approval — POLICY §15.5 */}
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Skip-Level (RM2) Approval</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {pip.rm2_approved_at ? (
+                  <>
+                    <p className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-success" />
+                      Approved on {format(new Date(pip.rm2_approved_at), 'dd MMM yyyy, HH:mm')}
+                    </p>
+                    {pip.rm2_remarks && <p className="text-muted-foreground italic">"{pip.rm2_remarks}"</p>}
+                  </>
+                ) : (
+                  <>
+                    <p className="text-muted-foreground">
+                      Pending. A plan cannot become Active without skip-level sign-off.
+                    </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="rm2-remarks">Remarks (optional)</Label>
+                      <Textarea
+                        id="rm2-remarks"
+                        value={rm2Remarks}
+                        onChange={(e) => setRm2Remarks(e.target.value)}
+                        placeholder="Context for the approval..."
+                      />
+                      <Button
+                        className="h-10"
+                        disabled={rm2Approve.isPending}
+                        onClick={() => rm2Approve.mutate({ pipId: pip.id, remarks: rm2Remarks })}
+                      >
+                        Record skip-level approval
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Employee acknowledgement — POLICY §15.9 */}
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Employee Acknowledgement</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                {pip.employee_acknowledged_at ? (
+                  <>
+                    <p className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-success" />
+                      Acknowledged on {format(new Date(pip.employee_acknowledged_at), 'dd MMM yyyy, HH:mm')}
+                    </p>
+                    {pip.employee_ack_comments && (
+                      <p className="text-muted-foreground italic">"{pip.employee_ack_comments}"</p>
+                    )}
+                  </>
+                ) : user?.id === pip.employee_id ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="pip-ack">Your comments (optional)</Label>
+                    <Textarea
+                      id="pip-ack"
+                      value={ackComments}
+                      onChange={(e) => setAckComments(e.target.value)}
+                      placeholder="I have discussed this plan with my manager..."
+                    />
+                    <Button
+                      className="h-10"
+                      disabled={acknowledge.isPending}
+                      onClick={() => acknowledge.mutate({ pipId: pip.id, comments: ackComments })}
+                    >
+                      Acknowledge plan
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">Awaiting the employee's acknowledgement.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Post-PIP monitoring — POLICY §15.12 */}
+            {pip.monitoring_until && (
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">Post-PIP Monitoring</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm">
+                  <p>
+                    Sustained-performance monitoring runs until{' '}
+                    <span className="font-medium">{format(new Date(pip.monitoring_until), 'dd MMM yyyy')}</span>.
+                    A drop below the threshold in this window is treated as a relapse.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Milestones */}
             <Card>
