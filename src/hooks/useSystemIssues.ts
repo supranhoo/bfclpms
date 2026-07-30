@@ -41,12 +41,14 @@ export interface IssueSummary {
   byDepartment: Record<string, { name: string; count: number; critical: number }>;
 }
 
-// Default thresholds - will be overridden by configurable settings
+// Default thresholds — overridden by configurable settings.
+// ADR-205: the PIP entries are defaults only; `pip_sla_*` / `pip_milestone_*`
+// rows in `system_settings` are the configurable authority.
 const DEFAULT_AGE_THRESHOLDS: Record<IssueType, { warning: number; critical: number }> = {
   query: { warning: 5, critical: 10 },
   training_need: { warning: 14, critical: 30 },
-  pip: { warning: 7, critical: 14 },
-  pip_milestone: { warning: 0, critical: 7 },
+  pip: { warning: DEFAULT_PIP_SLA.pipWarningDays, critical: DEFAULT_PIP_SLA.pipCriticalDays },
+  pip_milestone: { warning: 0, critical: DEFAULT_PIP_SLA.milestoneOverdueDays },
   stalled_kpi: { warning: 14, critical: 30 },
   pending_kra: { warning: 7, critical: 14 },
 };
@@ -120,12 +122,27 @@ export function useSystemIssues() {
   const { data: kpis = [], isLoading: kpisLoading } = useAllKpis();
   const { data: profiles = [], isLoading: profilesLoading } = useProfiles();
   const { data: trainingNeeds = [], isLoading: tniLoading } = useTrainingNeeds();
-  const { data: pips = [], isLoading: pipsLoading } = usePIPs();
+  // Dashboard needs the full open set, not a single UI page.
+  const { data: pipPage, isLoading: pipsLoading } = usePIPs({ page: 1, pageSize: 500 });
+  const pips = pipPage?.rows ?? [];
   const { thresholds: configuredThresholds, isLoading: thresholdsLoading } = useSlaThresholds();
+  const { data: pipSla } = useQuery({
+    queryKey: ['pip-sla-settings'],
+    queryFn: getPipSlaSettings,
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Merge configured thresholds with defaults
   const AGE_THRESHOLDS: Record<IssueType, { warning: number; critical: number }> = {
     ...DEFAULT_AGE_THRESHOLDS,
+    pip: {
+      warning: pipSla?.pipWarningDays ?? DEFAULT_PIP_SLA.pipWarningDays,
+      critical: pipSla?.pipCriticalDays ?? DEFAULT_PIP_SLA.pipCriticalDays,
+    },
+    pip_milestone: {
+      warning: 0,
+      critical: pipSla?.milestoneOverdueDays ?? DEFAULT_PIP_SLA.milestoneOverdueDays,
+    },
     ...configuredThresholds,
   };
 
