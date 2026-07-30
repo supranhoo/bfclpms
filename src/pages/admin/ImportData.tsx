@@ -1521,9 +1521,10 @@ export default function ImportData() {
           },
         });
 
-        // Extract the real error: SDK may swallow the body into fnData
+        // ADR-202: on a non-2xx the SDK returns data=null and a placeholder
+        // message; the real body sits on fnError.context. Read it.
         if (fnError) {
-          const rawMsg = fnData?.error || fnError.message || 'Unknown error';
+          const rawMsg = await extractFunctionError(fnError, fnData);
           throw new Error(friendlyImportError(rawMsg));
         }
 
