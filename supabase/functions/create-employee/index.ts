@@ -131,7 +131,12 @@ Deno.serve(async (req) => {
       );
       if (!match) {
         console.warn(`[create-employee] REJECT 400 code=${body.employee_code} unknown employee_category='${body.employee_category}' company_id=${body.company_id ?? 'null'} candidates=${JSON.stringify((rows || []).map((r: any) => ({ name: r.name, company_id: r.company_id })))}`)
-        return new Response(JSON.stringify({ error: `Unknown employee category: '${body.employee_category}'` }), {
+        // Distinguish "no such name" from "exists but belongs to another company"
+        const nameExists = (rows || []).some((r: any) => String(r.name).trim().toLowerCase() === name.toLowerCase())
+        const message = nameExists
+          ? `Employee category '${name}' exists but is not available for the selected company. Add it under Admin → Master Data → Employee Categories.`
+          : `Unknown employee category: '${body.employee_category}'`
+        return new Response(JSON.stringify({ error: message }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
