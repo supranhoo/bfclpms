@@ -288,27 +288,8 @@ export function useCreatePIP() {
         if (msError) throw msError;
       }
 
-      // Log creation
-      await supabase.from('pip_audit_logs').insert({
-        pip_id: pip.id,
-        action: 'CREATED',
-        performed_by: user.id,
-        new_value: pipData,
-      } as any);
-
-      // Notify the employee about PIP initiation
-      await supabase.from('notifications').insert({
-        user_id: pipData.employee_id,
-        type: 'pip_initiated',
-        title: 'Performance Improvement Plan Initiated',
-        message: 'A Performance Improvement Plan has been created for you.',
-        metadata: {
-          pip_id: pip.id,
-          pip_start_date: pipData.start_date,
-          pip_end_date: pipData.end_date,
-          pip_reason: pipData.reason,
-        },
-      });
+      await writePipAudit(pip.id, 'CREATED', null, pipData as Record<string, unknown>);
+      await notifyPip(pip.id, 'pip_initiated');
 
       return pip;
     },
@@ -341,13 +322,7 @@ export function useSubmitPIPForApproval() {
 
       if (error) throw error;
 
-      await supabase.from('pip_audit_logs').insert({
-        pip_id: pipId,
-        action: 'SUBMITTED_FOR_APPROVAL',
-        performed_by: user.id,
-        old_value: { status: 'draft' },
-        new_value: { status: 'pending_hr_approval' },
-      } as any);
+      await writePipAudit(pipId, 'SUBMITTED_FOR_APPROVAL', { status: 'draft' }, { status: 'pending_hr_approval' });
 
       return data;
     },
@@ -386,13 +361,7 @@ export function useApprovePIP() {
 
       if (error) throw error;
 
-      await supabase.from('pip_audit_logs').insert({
-        pip_id: pipId,
-        action: 'HR_APPROVED',
-        performed_by: user.id,
-        old_value: { status: 'pending_hr_approval' },
-        new_value: { status: 'active', hr_remarks: remarks },
-      } as any);
+      await writePipAudit(pipId, 'HR_APPROVED', { status: 'pending_hr_approval' }, { status: 'active', hr_remarks: remarks });
 
       return data;
     },
@@ -430,13 +399,7 @@ export function useRejectPIP() {
 
       if (error) throw error;
 
-      await supabase.from('pip_audit_logs').insert({
-        pip_id: pipId,
-        action: 'HR_REJECTED',
-        performed_by: user.id,
-        old_value: { status: 'pending_hr_approval' },
-        new_value: { status: 'draft', hr_remarks: remarks },
-      } as any);
+      await writePipAudit(pipId, 'HR_REJECTED', { status: 'pending_hr_approval' }, { status: 'draft', hr_remarks: remarks });
 
       return data;
     },
@@ -478,33 +441,8 @@ export function useCompletePIP() {
 
       if (error) throw error;
 
-      await supabase.from('pip_audit_logs').insert({
-        pip_id: pipId,
-        action: 'COMPLETED',
-        performed_by: user.id,
-        new_value: { status: 'completed', outcome, completion_remarks: remarks },
-      } as any);
-
-      // Notify the employee about PIP completion
-      const { data: pip } = await supabase
-        .from('performance_improvement_plans')
-        .select('employee_id')
-        .eq('id', pipId)
-        .single();
-
-      if (pip) {
-        await supabase.from('notifications').insert({
-          user_id: pip.employee_id,
-          type: 'pip_completed',
-          title: 'Performance Improvement Plan Completed',
-          message: `Your Performance Improvement Plan has been completed. Outcome: ${outcome}`,
-          metadata: {
-            pip_id: pipId,
-            pip_outcome: outcome,
-            pip_remarks: remarks,
-          },
-        });
-      }
+      await writePipAudit(pipId, 'COMPLETED', null, { status: 'completed', outcome, completion_remarks: remarks });
+      await notifyPip(pipId, 'pip_completed');
 
       return data;
     },
@@ -546,12 +484,7 @@ export function useExtendPIP() {
 
       if (error) throw error;
 
-      await supabase.from('pip_audit_logs').insert({
-        pip_id: pipId,
-        action: 'EXTENDED',
-        performed_by: user.id,
-        new_value: { status: 'extended', extended_end_date: newEndDate, remarks },
-      } as any);
+      await writePipAudit(pipId, 'EXTENDED', null, { status: 'extended', extended_end_date: newEndDate, remarks });
 
       return data;
     },
@@ -603,12 +536,7 @@ export function useUpdateMilestone() {
 
       if (error) throw error;
 
-      await supabase.from('pip_audit_logs').insert({
-        pip_id: pipId,
-        action: 'MILESTONE_UPDATED',
-        performed_by: user.id,
-        new_value: { milestone_id: milestoneId, status, actual_outcome: actualOutcome },
-      } as any);
+      await writePipAudit(pipId, 'MILESTONE_UPDATED', null, { milestone_id: milestoneId, status, actual_outcome: actualOutcome });
 
       return data;
     },
