@@ -1,6 +1,6 @@
 ---
 name: Backup batch retry/backoff policy
-description: Scheduled-backup transient-failure retry — 546/429/RateLimit + upstream gateway 408/502/503/504 + fetch/ECONNRESET/ETIMEDOUT network errors (Phase 9.2.c, 2026-06-12); 2 retries with 5s/15s backoff, BATCH_SIZE_RETRY=1 (ADR-082, single-table isolation), RETRY_BUDGET_MS=8min, hard-fail terminal preserved
+description: Scheduled-backup transient-failure retry — 546/429/RateLimit + upstream gateway 408/502/503/504 + fetch/ECONNRESET/ETIMEDOUT network errors (Phase 9.2.c); ADR-204 (2026-07-30) widened to 4 retries 5s/15s/45s/90s, added per-part upload retry and a pre-finalize reconciliation sweep; BATCH_SIZE_RETRY=1, RETRY_BUDGET_MS=8min, hard-fail terminal preserved
 type: feature
 ---
 Phase 9.2 WP-b. Applies to `runScheduledChunked` in `supabase/functions/create-backup/index.ts`. Manual finalize path is intentionally NOT wired.
@@ -14,7 +14,9 @@ Retry triggers (`isTransientChunkError`):
 Never retry schema / permission / RLS / validation errors, `HTTP 500`, `HTTP 501`, or other non-retryable 5xx.
 
 Retry mechanics:
-- Up to 2 retries per failing chunk; backoffs `[5s, 15s]` before each retry.
+- ADR-204 (2026-07-30): up to **4** retries per failing chunk; backoffs `[5s, 15s, 45s, 90s]` (~2.6 min total). The old `[5s, 15s]` schedule could not outlast a gateway 502 window — 29 Jul run `71112b35…` burned all 3 attempts in ~20s with 427s of budget unused and hard-failed at 247/248.
+- ADR-204: **per-part upload retry** in `streamTableToStorage` via `uploadPartWithRetry` — `[1s, 3s, 8s]`, transient-only (`Gateway Timeout`/timeout/`isTransientChunkError`), `upsert:false` on attempt 1 and `upsert:true` on retries. Needed because `handleBatch` returns HTTP 200 with the table listed in `errors`, so the batch retry layer never sees an upload failure (26 Jul run lost a table to a single Gateway Timeout).
+- ADR-204: **coverage reconciliation sweep** before `finalize` — diff `tableManifest` against the discovered table list and re-invoke the worker once per missing table while budget remains; outcomes appended to `backup_logs.error_message` under a `reconcile:` prefix. Never downgrades a failure.
 - ADR-082: retry re-splits the failing chunk into **single tables** (`BATCH_SIZE_RETRY=1`). Primary `BATCH_SIZE=4` is unchanged. Single-table retry isolates a failing table from a healthy sibling and pairs with the streaming chunk export so no individual table can OOM the worker.
 - Global cap `RETRY_BUDGET_MS = 8 * 60_000` ms, anchored on the orchestrator `startTime`. Once exhausted, subsequent failing chunks skip retry and are recorded as failed.
 
