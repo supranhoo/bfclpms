@@ -35,7 +35,7 @@ describe('create-backup — transient resilience (ADR-204)', () => {
   });
 
   it('widens the batch retry schedule but keeps it inside the budget', () => {
-    const m = SRC.match(/RETRY_BACKOFFS_MS\s*=\s*\[([^\]]+)\]/);
+    const m = SRC.match(/\bconst RETRY_BACKOFFS_MS\s*=\s*\[([^\]]+)\]/);
     expect(m, 'RETRY_BACKOFFS_MS must exist').toBeTruthy();
     const values = m![1]
       .split(',')
