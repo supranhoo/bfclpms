@@ -113,9 +113,11 @@ export function usePIPCandidates({ windowMonths, enabled, today }: UsePIPCandida
         .limit(5000);
       if (error) throw error;
       const out: Record<string, number> = {};
-      for (const row of (data ?? []) as { employee_id: string; final_rating: number | null }[]) {
+      for (const row of (data ?? []) as unknown as { employee_id: string; final_rating: number | string | null }[]) {
         if (row.final_rating == null) continue;
-        if (out[row.employee_id] == null) out[row.employee_id] = Number(row.final_rating);
+        const v = Number(row.final_rating);
+        if (!Number.isFinite(v)) continue;
+        if (out[row.employee_id] == null) out[row.employee_id] = v;
       }
       return out;
     },
