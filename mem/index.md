@@ -163,3 +163,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Monthly KRA Sheet](mem://features/reports/monthly-kra-sheet) — ADR-188: "Monthly KRA Scores" export sheet, Jul→Jun /5 + % per month, KRA-template employees only, server-side aggregation
 - [Bulk Review Multi-select Parity](mem://features/review/bulk-review-multiselect-parity) — Single-valued RPC axes must be re-filtered client-side (ADR-195)
 - [Blank Stage Classification](mem://features/annual-review/blank-stage-classification) — narrative_only vs unscored empty criteria_scores, diagnostic RPC, Unscored Stages tab (ADR-197)
+- [Import Error Transparency](mem://architecture/import/error-transparency) — Edge-function non-2xx bodies must reach the UI; company-scoped employee categories (ADR-202)
