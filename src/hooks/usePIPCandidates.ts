@@ -100,22 +100,25 @@ export function usePIPCandidates({ windowMonths, enabled, today }: UsePIPCandida
     },
   });
 
-  // Annual trigger (POLICY §15.3) — completed instances of the active cycle.
+  // Annual trigger (POLICY §15.3). `annual_review_instances.final_rating` is a
+  // descriptor label ("Poor" / "Average" / ...), so the comparable number comes
+  // from `total_score`, which ADR-187 guarantees is on a 0..100 scale. It is
+  // rebased to the 5-point rating scale the policy threshold is expressed in.
   const annualQ = useQuery({
     queryKey: ['pip-annual-ratings'],
     enabled,
     queryFn: async (): Promise<Record<string, number>> => {
       const { data, error } = await supabase
         .from('annual_review_instances')
-        .select('employee_id, final_rating, updated_at')
-        .not('final_rating', 'is', null)
+        .select('employee_id, total_score, updated_at')
+        .not('total_score', 'is', null)
         .order('updated_at', { ascending: false })
         .limit(5000);
       if (error) throw error;
       const out: Record<string, number> = {};
-      for (const row of (data ?? []) as unknown as { employee_id: string; final_rating: number | string | null }[]) {
-        if (row.final_rating == null) continue;
-        const v = Number(row.final_rating);
+      for (const row of (data ?? []) as unknown as { employee_id: string; total_score: number | string | null }[]) {
+        if (row.total_score == null) continue;
+        const v = Number(row.total_score) / 20; // 0..100 → 0..5
         if (!Number.isFinite(v)) continue;
         if (out[row.employee_id] == null) out[row.employee_id] = v;
       }
