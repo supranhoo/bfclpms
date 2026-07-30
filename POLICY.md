@@ -5418,3 +5418,12 @@ Rules:
 5. **Mis-routing is visible, not silent.** If the viewer is the mapped FM but the scorecard opened at another view level, `UnifiedScorecard` MUST render an explicit notice directing them to the Functional Pending entry point.
 
 **Guard.** `src/test/review/reviewerRelationshipResolver.test.ts`, `src/test/review/functionalManagerScorecardLevel.test.ts`.
+
+### §PIP-CREATE-FULL-PAGE — Full-page PIP creation & KPI-driven improvement areas (v2.66.134, 2026-07-30 / ADR-208)
+
+1. **One creation surface.** PIP creation lives at the dedicated route `/admin/pip/new`. The modal (`PIPCreateDialog`) is retired; every entry point (New PIP button, Suggestions → Initiate PIP, Monthly Scorecard → Trend → Start PIP) navigates to that route. No second, drifting copy of the form may be reintroduced.
+2. **Prefill is contractual.** When a plan is initiated from evidence, the route receives `employee`, `trigger`, `from` and `to` in the query string and the reason + trigger context in router state. The employee field is a *controlled* input, so a prefilled employee is always visible before submit — a silently empty selector is a defect, not a cosmetic issue.
+3. **Improvement areas may be selected from KPIs.** Underperforming KPIs (score strictly below the PIP threshold, N/A and unscored excluded) inside the anchored evaluation window are selectable directly as improvement areas, grouped by KRA and labelled `KRA — KPI (Mon YYYY)`. Only KRA name, KPI name, period and score are surfaced — formulas, targets and scoring logic are deliberately not shown, so the plan cites the gap, not the calculation.
+4. **The window is the same window.** The KPI picker reuses the §12.2 anchored evaluation window used to raise the suggestion. It must never query its own independent range.
+5. **Manual areas remain valid.** KPI selection augments free-text improvement areas; it is never mandatory, because non-KPI gaps (behaviour, compliance) must remain expressible.
+6. **Published policy parity.** The PMS Policy document (§12 Performance Improvement Plans, `app_settings.pms_policy_content`) carries the approved PIP standard §12.1–§12.12; the PIP draft numbering §15.x maps one-to-one onto it. Code guardrails and the published policy must be amended together.
