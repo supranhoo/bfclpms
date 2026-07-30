@@ -7740,3 +7740,12 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - **Policy**: §PIP-TRIGGER-SUGGESTIONS.
 - **Tests**: `src/test/pip/pipTriggerRules.test.ts` (20).
 - **Security (unrelated, auto-triggered)**: `incentive_vessel_rates` lost its `USING (true)` read policy; SELECT is now scoped to the employee themselves plus admin/hr_pms/management and incentive menu-override holders.
+
+## ADR-208 — Full-page PIP creation, KPI improvement areas & policy publication
+
+- **Route**: `/admin/pip/new` (`src/pages/admin/PIPCreate.tsx`), registered in `App.tsx` and `usePrefetchRoute.ts`. Reads `employee` / `trigger` / `from` / `to` from the query string plus `reason` + `triggerContext` from router state.
+- **Form**: `src/components/pip/PIPCreateForm.tsx` — extracted verbatim from the retired `PIPCreateDialog`, two-column layout, with the employee `Select` converted from `defaultValue` to a controlled `value` (root cause of the empty-selector prefill bug).
+- **KPI improvement areas**: `src/lib/pip/lowScoringKpis.ts` (pure helpers: threshold filter, N/A + unscored exclusion, KRA grouping, `KRA — KPI (Mon YYYY)` labels), `src/hooks/useLowScoringKpis.ts` (queries `kpis` × `review_submissions` over the anchored window), `src/components/pip/LowScoringKpiPicker.tsx` (grouped checkbox picker). Formulas and scoring logic are intentionally not surfaced.
+- **Call sites**: `PIPSuggestionsPanel.tsx` passes the evaluation window to `onInitiate`; `PIPManagement.tsx` and `MonthlyTrendView.tsx` navigate to the route instead of opening a dialog. `PIPCreateDialog.tsx` deleted.
+- **Published policy**: `app_settings.pms_policy_content` §12 replaced with the approved PIP standard §12.1–§12.12 (triggers, advisory-only, RM2 gate, mandatory support, duration/cadence, milestones, acknowledgement, outcomes, audit trail, relapse window).
+- **Policy**: §PIP-CREATE-FULL-PAGE. **Tests**: `src/test/pip/lowScoringKpis.test.ts` (9); PIP suites 54 passing.

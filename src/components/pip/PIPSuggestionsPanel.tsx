@@ -15,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Label } from '@/components/ui/label';
 import { AlertTriangle, Info, RotateCw, Search, ShieldCheck } from 'lucide-react';
 import { usePIPCandidates, recentMonthOptions, type PIPCandidate } from '@/hooks/usePIPCandidates';
+import type { MonthKey } from '@/hooks/useMonthlyTrend';
 import { POLICY_PIP_RATING } from '@/lib/pip/pipTriggerRules';
 import { cn } from '@/lib/utils';
 
@@ -25,7 +26,8 @@ type TriggerFilter = 'all' | 'monthly_trend' | 'annual_rating';
 interface PIPSuggestionsPanelProps {
   /** Data loads only while the tab is visible (the trend RPC is org-wide). */
   active: boolean;
-  onInitiate: (candidate: PIPCandidate) => void;
+  /** `months` is the evaluation window that produced the suggestion. */
+  onInitiate: (candidate: PIPCandidate, months: MonthKey[]) => void;
   onOpenPip: (pipId: string) => void;
 }
 
@@ -236,7 +238,7 @@ export function PIPSuggestionsPanel({ active, onInitiate, onOpenPip }: PIPSugges
                       </TableCell>
                       <TableCell className="text-right">
                         {c.state === 'eligible' ? (
-                          <Button size="sm" className="h-10" onClick={() => onInitiate(c)}>
+                          <Button size="sm" className="h-10" onClick={() => onInitiate(c, months)}>
                             Initiate PIP
                           </Button>
                         ) : (
