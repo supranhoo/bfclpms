@@ -70,6 +70,9 @@ function KpiCard({ label, value, hint }: { label: string; value: string | number
 export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleName: string }) {
   const { effectiveRole, user } = useAuth();
   const canConfigure = effectiveRole === 'admin' || effectiveRole === 'hr_pms';
+  // ADR-221 — who may request vs decide eligibility exemptions.
+  const canApproveExemptions = effectiveRole === 'admin' || effectiveRole === 'hr_pms' || effectiveRole === 'management';
+  const canManageExemptions = canApproveExemptions;
   const isManagerScope = effectiveRole === 'manager' || effectiveRole === 'skip_level';
 
   const { data: rows = [], isLoading } = useQuery({
