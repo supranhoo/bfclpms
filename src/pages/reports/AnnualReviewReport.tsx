@@ -301,7 +301,18 @@ export default function AnnualReviewReport() {
                       </Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatSlabPercent(resolveSlabPercent(ratingFor(i.id, i.total_score), slabs))}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatSlabPercent(slabPercentFor(i))}
+                    {slabCappedFor(i) && (
+                      <Badge
+                        variant="outline"
+                        className="ml-2 text-[10px]"
+                        title={`Exemption cap: top ${capOptions.topTiersExcluded ?? 0} tier(s) excluded`}
+                      >
+                        Capped
+                      </Badge>
+                    )}
+                  </TableCell>
                   {canCalibrate && (
                     <TableCell className="text-right">
                       <Button
