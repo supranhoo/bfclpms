@@ -242,6 +242,12 @@ export function BandEmployeeList({
           onDone={() => setSelected([])}
         />
       )}
+
+      <ReviewFormViewerDialog
+        instanceId={viewInstanceId}
+        slabs={slabs}
+        onClose={() => setViewInstanceId(null)}
+      />
     </div>
   );
 }
