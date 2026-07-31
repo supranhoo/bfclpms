@@ -5,7 +5,7 @@ const base: ComprehensiveRow = {
   instance_id: 'i', employee_id: 'e', employee_code: '1', employee_name: 'X',
   designation: null, department_id: null, department_name: null,
   business_unit_id: null, business_unit_name: null, division_id: null, division_name: null,
-  grade: null, doj: null, overall_status: 'pending_hr', is_excluded: false, excluded_reason: null,
+  grade: null, pms_grade_id: null, doj: null, overall_status: 'pending_hr', is_excluded: false, excluded_reason: null,
   enabled_stages: ['self','manager','hr'], self_score: null, manager_score: null,
   dept_head_score: null, bu_head_score: null, hr_score: null, total_score: null,
   final_rating: null, finalized_at: null, updated_at: null, days_pending: 0,
