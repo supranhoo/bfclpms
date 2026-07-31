@@ -3,12 +3,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowDown, ArrowUp, ArrowUpDown, Search, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Percent, Search, X, Hash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BAND_LABELS, BAND_ORDER, type HeatmapRow } from '@/lib/annualReview/bellCurve';
 
 type SortKey = 'name' | 'total' | 1 | 2 | 3 | 4 | 5;
 type SortDir = 'asc' | 'desc';
+type SortMode = 'count' | 'pct';
 
 function cellClass(compliance: string, count: number): string {
   if (count === 0) return 'bg-muted/40 text-muted-foreground';
