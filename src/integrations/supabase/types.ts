@@ -2280,6 +2280,42 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_status_repair_2026_07: {
+        Row: {
+          created_at: string
+          employee_code: string | null
+          employee_id: string | null
+          id: string
+          instance_id: string
+          new_status: string | null
+          performed_by: string | null
+          prior_status: string | null
+          reason: string
+        }
+        Insert: {
+          created_at?: string
+          employee_code?: string | null
+          employee_id?: string | null
+          id?: string
+          instance_id: string
+          new_status?: string | null
+          performed_by?: string | null
+          prior_status?: string | null
+          reason: string
+        }
+        Update: {
+          created_at?: string
+          employee_code?: string | null
+          employee_id?: string | null
+          id?: string
+          instance_id?: string
+          new_status?: string | null
+          performed_by?: string | null
+          prior_status?: string | null
+          reason?: string
+        }
+        Relationships: []
+      }
       annual_review_system_kpi_weights: {
         Row: {
           created_at: string
