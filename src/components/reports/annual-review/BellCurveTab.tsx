@@ -176,12 +176,13 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
               <TabsTrigger value="manager">Manager</TabsTrigger>
             </TabsList>
           </Tabs>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {([
               ['Business Unit', bu, setBu, options.bu],
               ['Department', dept, setDept, options.dept],
               ['Manager', manager, setManager, options.manager],
               ['Division / Location', division, setDivision, options.division],
+              ['PMS Grade', pmsGrade, setPmsGrade, options.grade],
             ] as const).map(([label, value, setter, opts]) => (
               <div key={label} className="space-y-1">
                 <Label className="text-xs">{label}</Label>
