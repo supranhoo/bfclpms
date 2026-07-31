@@ -15,6 +15,8 @@ function mapRow(r: Record<string, unknown>): BellCurveConfig {
     target_1: Number(r.target_1),
     green_threshold: Number(r.green_threshold),
     amber_threshold: Number(r.amber_threshold),
+    exempted_slab_cap_enabled: (r.exempted_slab_cap_enabled as boolean | null) ?? true,
+    exempted_top_tiers_excluded: Number(r.exempted_top_tiers_excluded ?? 2),
   };
 }
 
@@ -29,7 +31,7 @@ export function useBellCurveConfig(cycleId?: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('annual_review_bell_curve_config')
-        .select('id, cycle_id, target_5, target_4, target_3, target_2, target_1, green_threshold, amber_threshold, is_active')
+        .select('id, cycle_id, target_5, target_4, target_3, target_2, target_1, green_threshold, amber_threshold, exempted_slab_cap_enabled, exempted_top_tiers_excluded, is_active')
         .eq('is_active', true);
       if (error) throw error;
       const rows = (data ?? []) as Array<Record<string, unknown>>;
@@ -55,6 +57,8 @@ export function useSaveBellCurveConfig() {
         target_1: config.target_1,
         green_threshold: config.green_threshold,
         amber_threshold: config.amber_threshold,
+        exempted_slab_cap_enabled: config.exempted_slab_cap_enabled ?? true,
+        exempted_top_tiers_excluded: config.exempted_top_tiers_excluded ?? 2,
         is_active: true,
         updated_by: userRes?.user?.id ?? null,
       };

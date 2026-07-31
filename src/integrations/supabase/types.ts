@@ -437,6 +437,8 @@ export type Database = {
           amber_threshold: number
           created_at: string
           cycle_id: string | null
+          exempted_slab_cap_enabled: boolean
+          exempted_top_tiers_excluded: number
           green_threshold: number
           id: string
           is_active: boolean
@@ -452,6 +454,8 @@ export type Database = {
           amber_threshold?: number
           created_at?: string
           cycle_id?: string | null
+          exempted_slab_cap_enabled?: boolean
+          exempted_top_tiers_excluded?: number
           green_threshold?: number
           id?: string
           is_active?: boolean
@@ -467,6 +471,8 @@ export type Database = {
           amber_threshold?: number
           created_at?: string
           cycle_id?: string | null
+          exempted_slab_cap_enabled?: boolean
+          exempted_top_tiers_excluded?: number
           green_threshold?: number
           id?: string
           is_active?: boolean

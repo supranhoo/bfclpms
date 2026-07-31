@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
-  effectiveSlabPercent, eligibilitySummary, isExemptable, resolveEligibility,
+  effectiveSlabPercent, eligibilitySummary, isExemptable, isSlabCapped, resolveEligibility,
   type ExemptionPolicyRow, type ExemptionRecord,
 } from '@/lib/annualReview/effectiveEligibility';
+import { DEFAULT_RATING_SLABS, slabCapPercent, type RatingSlab } from '@/lib/annualReview/ratingSlab';
 import type { EligibilityCriterion } from '@/types/annualReview';
 
 const absent: EligibilityCriterion = { id: 'absent', name: 'Absent Days', type: 'number', operator: 'lte', expected_value: 5 };
@@ -83,5 +84,57 @@ describe('ADR-221 effective eligibility', () => {
     expect(effectiveSlabPercent(12, 'exempted')).toBe(12);
     expect(effectiveSlabPercent(12, 'eligible')).toBe(12);
     expect(effectiveSlabPercent(null, 'unknown')).toBeNull();
+  });
+});
+
+describe('ADR-222 exemption increment cap', () => {
+  const cap = (topTiersExcluded: number, capEnabled = true, slabs: ReadonlyArray<RatingSlab> = DEFAULT_RATING_SLABS) =>
+    ({ slabs, capEnabled, topTiersExcluded });
+
+  it('slabCapPercent drops the top N active tiers', () => {
+    expect(slabCapPercent(DEFAULT_RATING_SLABS, 0)).toBe(20);
+    expect(slabCapPercent(DEFAULT_RATING_SLABS, 1)).toBe(16);
+    expect(slabCapPercent(DEFAULT_RATING_SLABS, 2)).toBe(12);
+    expect(slabCapPercent(DEFAULT_RATING_SLABS, 99)).toBe(0);
+  });
+
+  it('works on a custom slab table', () => {
+    const custom: RatingSlab[] = [
+      { rating_from: 0, rating_to: 3, increment_percent: 0 },
+      { rating_from: 3, rating_to: 4, increment_percent: 10 },
+      { rating_from: 4, rating_to: null, increment_percent: 25 },
+    ];
+    expect(slabCapPercent(custom, 1)).toBe(10);
+    expect(slabCapPercent(custom, 2)).toBe(0);
+  });
+
+  it('caps exempted employees out of the top two tiers', () => {
+    expect(effectiveSlabPercent(20, 'exempted', cap(2))).toBe(12);
+    expect(isSlabCapped(20, 'exempted', cap(2))).toBe(true);
+  });
+
+  it('leaves exempted employees below the cap untouched', () => {
+    expect(effectiveSlabPercent(8, 'exempted', cap(2))).toBe(8);
+    expect(isSlabCapped(8, 'exempted', cap(2))).toBe(false);
+  });
+
+  it('does nothing when the cap is disabled', () => {
+    expect(effectiveSlabPercent(20, 'exempted', cap(2, false))).toBe(20);
+    expect(isSlabCapped(20, 'exempted', cap(2, false))).toBe(false);
+  });
+
+  it('never touches eligible or unknown employees, and keeps ineligible at 0%', () => {
+    expect(effectiveSlabPercent(20, 'eligible', cap(2))).toBe(20);
+    expect(effectiveSlabPercent(20, 'unknown', cap(2))).toBe(20);
+    expect(effectiveSlabPercent(20, 'ineligible', cap(2))).toBe(0);
+  });
+
+  it('forces 0% when every tier is excluded', () => {
+    expect(effectiveSlabPercent(20, 'exempted', cap(99))).toBe(0);
+  });
+
+  it('is null-safe', () => {
+    expect(effectiveSlabPercent(null, 'exempted', cap(2))).toBeNull();
+    expect(isSlabCapped(null, 'exempted', cap(2))).toBe(false);
   });
 });

@@ -76,6 +76,26 @@ export function formatSlabPercent(pct: number | null | undefined): string {
   return pct === null || pct === undefined || !Number.isFinite(pct) ? '—' : `${pct}%`;
 }
 
+/**
+ * ADR-222 / POLICY §AR-ELIGIBILITY-EXEMPTION (decision B) — the highest
+ * increment percentage still available once the top `topTiersExcluded` active
+ * bands are removed from the scale. Returns 0 when every band is excluded.
+ */
+export function slabCapPercent(
+  slabs: ReadonlyArray<RatingSlab> = DEFAULT_RATING_SLABS,
+  topTiersExcluded = 0,
+): number {
+  const n = Number.isFinite(topTiersExcluded) ? Math.max(0, Math.trunc(topTiersExcluded)) : 0;
+  const active = slabs
+    .filter((s) => s.is_active !== false)
+    .slice()
+    .sort((a, b) => a.rating_from - b.rating_from);
+  if (active.length === 0) return 0;
+  const remaining = n >= active.length ? [] : active.slice(0, active.length - n);
+  if (remaining.length === 0) return 0;
+  return Math.max(...remaining.map((s) => Number(s.increment_percent) || 0));
+}
+
 /** Human-readable band label, e.g. "3.50 – under 4.00" / "4.50 and above". */
 export function describeSlab(slab: RatingSlab): string {
   return slab.rating_to === null || slab.rating_to === undefined

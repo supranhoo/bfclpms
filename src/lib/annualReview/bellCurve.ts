@@ -39,6 +39,9 @@ export interface BellCurveConfig {
   target_1: number;
   green_threshold: number;
   amber_threshold: number;
+  /** ADR-222 — cap exempted employees out of the top increment tiers. */
+  exempted_slab_cap_enabled?: boolean;
+  exempted_top_tiers_excluded?: number;
 }
 
 export const DEFAULT_BELL_CURVE_CONFIG: BellCurveConfig = {
@@ -50,6 +53,8 @@ export const DEFAULT_BELL_CURVE_CONFIG: BellCurveConfig = {
   target_1: 10,
   green_threshold: 5,
   amber_threshold: 10,
+  exempted_slab_cap_enabled: true,
+  exempted_top_tiers_excluded: 2,
 };
 
 export function targetFor(config: BellCurveConfig, band: RatingBand): number {
@@ -76,6 +81,10 @@ export function validateConfig(config: BellCurveConfig): string | null {
   const a = Number(config.amber_threshold);
   if (!Number.isFinite(g) || g <= 0) return 'Green threshold must be greater than 0.';
   if (!Number.isFinite(a) || a <= g) return 'Amber threshold must be greater than the green threshold.';
+  const tiers = Number(config.exempted_top_tiers_excluded ?? 0);
+  if (!Number.isInteger(tiers) || tiers < 0 || tiers > 6) {
+    return 'Top tiers excluded for exempted employees must be a whole number between 0 and 6.';
+  }
   return null;
 }
 
