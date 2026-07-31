@@ -5,14 +5,15 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ArrowDown, ArrowUp, ArrowUpDown, Percent, Search, X, Hash } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { BAND_LABELS, BAND_ORDER, type HeatmapRow } from '@/lib/annualReview/bellCurve';
+import type { BandDef, HeatmapRow } from '@/lib/annualReview/bellCurve';
 
-type SortKey = 'name' | 'total' | 1 | 2 | 3 | 4 | 5;
+type SortKey = 'name' | 'total' | { band: string };
 type SortDir = 'asc' | 'desc';
 type SortMode = 'count' | 'pct';
 
-function cellClass(compliance: string, count: number): string {
+function cellClass(compliance: string | null, count: number): string {
   if (count === 0) return 'bg-muted/40 text-muted-foreground';
+  if (compliance === null) return 'bg-primary/15 text-foreground';
   if (compliance === 'green') return 'bg-emerald-500/25 text-emerald-900 dark:text-emerald-100';
   if (compliance === 'amber') return 'bg-amber-500/30 text-amber-900 dark:text-amber-100';
   return 'bg-rose-500/30 text-rose-900 dark:text-rose-100';
@@ -25,11 +26,16 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
     : <ArrowDown className="inline h-3 w-3" aria-hidden />;
 }
 
+const sameKey = (a: SortKey, b: SortKey) =>
+  typeof a === 'object' && typeof b === 'object' ? a.band === b.band : a === b;
+
 export function RatingHeatmap({
-  rows, title, selectedIds = [], onToggle, onClearSelection, onSelectAll,
+  rows, title, defs, hasTargets = true, selectedIds = [], onToggle, onClearSelection, onSelectAll,
 }: {
   rows: HeatmapRow[];
   title: string;
+  defs: BandDef[];
+  hasTargets?: boolean;
   selectedIds?: string[];
   onToggle?: (id: string) => void;
   onClearSelection?: () => void;
@@ -48,7 +54,7 @@ export function RatingHeatmap({
     const val = (r: HeatmapRow): string | number => {
       if (sortKey === 'name') return r.name.toLowerCase();
       if (sortKey === 'total') return r.total;
-      const cell = r.cells.find((c) => c.band === sortKey);
+      const cell = r.cells.find((c) => c.key === sortKey.band);
       return sortMode === 'pct' ? (cell?.pct ?? 0) : (cell?.count ?? 0);
     };
     filtered.sort((a, b) => {
@@ -60,7 +66,7 @@ export function RatingHeatmap({
   }, [rows, search, sortKey, sortDir, sortMode]);
 
   const toggleSort = (key: SortKey) => {
-    if (key === sortKey) { setSortDir((d) => (d === 'asc' ? 'desc' : 'asc')); return; }
+    if (sameKey(key, sortKey)) { setSortDir((d) => (d === 'asc' ? 'desc' : 'asc')); return; }
     setSortKey(key);
     setSortDir(key === 'name' ? 'asc' : 'desc');
   };
@@ -74,7 +80,9 @@ export function RatingHeatmap({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <CardTitle className="text-base">Heat Map</CardTitle>
-            <CardDescription>{title} vs rating distribution — colour shows deviation from target</CardDescription>
+            <CardDescription>
+              {title} vs {hasTargets ? 'rating distribution — colour shows deviation from target' : 'increment slab distribution'}
+            </CardDescription>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -130,11 +138,13 @@ export function RatingHeatmap({
                     {title} <SortIcon active={sortKey === 'name'} dir={sortDir} />
                   </button>
                 </th>
-                {BAND_ORDER.map((b) => (
-                  <th key={b} className="p-2 text-center font-medium text-muted-foreground text-xs">
-                    <button type="button" className="inline-flex flex-col items-center hover:text-foreground" onClick={() => toggleSort(b as SortKey)}>
-                      <span className="inline-flex items-center gap-1">{BAND_LABELS[b]} <SortIcon active={sortKey === b} dir={sortDir} /></span>
-                      <span className="opacity-60">({b})</span>
+                {defs.map((d) => (
+                  <th key={d.key} className="p-2 text-center font-medium text-muted-foreground text-xs">
+                    <button type="button" className="inline-flex flex-col items-center hover:text-foreground" onClick={() => toggleSort({ band: d.key })}>
+                      <span className="inline-flex items-center gap-1">
+                        {d.label} <SortIcon active={typeof sortKey === 'object' && sortKey.band === d.key} dir={sortDir} />
+                      </span>
+                      <span className="opacity-60">{d.sub}</span>
                     </button>
                   </th>
                 ))}
@@ -161,10 +171,10 @@ export function RatingHeatmap({
                   </td>
                   <td className="p-2 font-medium max-w-[220px] truncate" title={r.name}>{r.name}</td>
                   {r.cells.map((c) => (
-                    <td key={c.band} className="p-1">
+                    <td key={c.key} className="p-1">
                       <div
                         className={cn('rounded-md py-2 text-center tabular-nums min-h-[44px] flex flex-col justify-center', cellClass(c.compliance, c.count))}
-                        title={`${c.count} employees — ${c.pct}% (variance ${c.variancePct}%)`}
+                        title={`${c.count} employees — ${c.pct}%${c.variancePct === null ? '' : ` (variance ${c.variancePct}%)`}`}
                       >
                         <span className="font-semibold">{c.count}</span>
                         <span className="text-[10px] opacity-70">{c.pct}%</span>
@@ -179,9 +189,18 @@ export function RatingHeatmap({
         )}
         <div className="mt-3 flex flex-wrap items-center gap-4 border-t pt-3 text-xs text-muted-foreground">
           <span>Legend:</span>
-          <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-emerald-500/25" /> Within threshold</span>
-          <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-amber-500/30" /> Minor deviation</span>
-          <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-rose-500/30" /> Major deviation</span>
+          {hasTargets ? (
+            <>
+              <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-emerald-500/25" /> Within threshold</span>
+              <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-amber-500/30" /> Minor deviation</span>
+              <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-rose-500/30" /> Major deviation</span>
+            </>
+          ) : (
+            <>
+              <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-primary/15" /> Employees in slab</span>
+              <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-muted/40" /> None</span>
+            </>
+          )}
         </div>
       </CardContent>
     </Card>

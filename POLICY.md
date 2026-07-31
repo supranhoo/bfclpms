@@ -5565,7 +5565,8 @@ Rules:
 7. **Screen-only by default.** The bell curve is an on-screen dashboard. The existing Annual Review Report download is unchanged; Bell Curve Excel/PDF exports are separate, in-tab actions.
 8. **Advisory only.** Normalization recommendations never mutate a rating; they are guidance for the reviewer.
 9. **Scoring source filter (ADR-218a, 2026-07-31).** The tab exposes a **Scoring Source (KRA)** filter with three values — *With KRA*, *Blended*, *Without KRA* — derived from the comprehensive report's `scoring_mode`, falling back to `kra_weight > 0` when that text is absent so no employee is invisible to both the KRA and the Non-KRA selection. Blended employees (criteria + KRA weight) are never folded into either pure bucket. The filter narrows the KPI cards, curve, bar chart, variance table, heat map and both tab-local exports; the exports record the active selection. It is a presentation filter only — no scoring, schema or RPC change.
+10. **Band modes (ADR-218b, 2026-07-31).** The tab exposes a **Band mode** switch with two values: *Rating bands (1–5)* (default, unchanged ADR-218 behaviour) and *Slab %*. In slab mode the population is bucketed by the increment slab resolved from the same /5 rating through the ADR-212 SSOT (`resolveSlab`), so slab-master edits flow straight through and no percentage is hardcoded. Slab bands have **no targets**: target %, target count, variance %, compliance status and the normalization recommendations are omitted (never rendered as 0), and the bell curve drops the target overlay. The switch applies to the whole tab — KPI cards, both charts, the distribution table, the group table, the heat map and both tab-local exports, which record the active mode. Presentation only: no schema, RPC or RLS change, and the rated denominator rule (item 2) is identical in both modes.
 
-**Guard.** `src/test/annualReview/bellCurve.test.ts` (19 cases).
+**Guard.** `src/test/annualReview/bellCurve.test.ts` (24 cases).
 
 ---
