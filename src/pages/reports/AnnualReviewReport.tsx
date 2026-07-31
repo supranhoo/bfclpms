@@ -39,13 +39,15 @@ export default function AnnualReviewReport() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
   const [ratingBand, setRatingBand] = useState<string>('all');
+  const [pmsGrade, setPmsGrade] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  const args = cycleId ? { cycleId, page, pageSize, search, status } : undefined;
+  const args = cycleId ? { cycleId, page, pageSize, search, status, pmsGrade: pmsGrade === 'all' ? undefined : pmsGrade } : undefined;
   const { data: paged, isFetching } = useAnnualReviewInstancesPaginated(args);
   const { data: counts } = useCycleStatusCounts(cycleId);
   const { data: slabs } = useAnnualReviewRatingSlabs();
+  const { grades: gradeOptions } = useEmployeeFilterOptions({ enabledGrades: true });
   const rows = paged?.rows ?? [];
   const total = paged?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
