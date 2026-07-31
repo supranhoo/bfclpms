@@ -419,11 +419,6 @@ export function KpiJourneySection({
     [auditLogs],
   );
 
-  const _unusedAuditUserIds = useMemo(() => {
-    const ids = auditLogs.map((l: any) => l.performed_by);
-    return [...new Set(ids)] as string[];
-  }, [auditLogs]);
-
   const { data: auditProfiles = [] } = useQuery({
     queryKey: ['kpi-journey-audit-profiles', auditUserIds],
     queryFn: async () => {
