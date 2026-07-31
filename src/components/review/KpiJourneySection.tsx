@@ -408,6 +408,18 @@ export function KpiJourneySection({
 
   // Fetch performer profiles for audit logs
   const auditUserIds = useMemo(() => {
+    return [...new Set(auditLogs.map((l: any) => l.performed_by))] as string[];
+  }, [auditLogs]);
+
+  // ADR-209 — admin-only first-action date per stage (from immutable audit log)
+  const { effectiveRole } = useAuth();
+  const isAdminViewer = effectiveRole === 'admin';
+  const stageFirstActionDates = useMemo(
+    () => resolveStageFirstActionDates(auditLogs as any),
+    [auditLogs],
+  );
+
+  const _unusedAuditUserIds = useMemo(() => {
     const ids = auditLogs.map((l: any) => l.performed_by);
     return [...new Set(ids)] as string[];
   }, [auditLogs]);
