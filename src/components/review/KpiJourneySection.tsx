@@ -858,6 +858,8 @@ export function KpiJourneySection({
                 employeeCode={resolvedEmployeeCode !== '-' ? resolvedEmployeeCode : null}
                 isLoading={isLoading && !submission}
                 autoAdvancedResyncHint={stage === 'self' && !!(data as any).autoAdvancedResyncHint}
+                firstActionAt={stageFirstActionDates[stage] ?? null}
+                showFirstActionDate={isAdminViewer}
               />
             );
           })}
