@@ -5531,3 +5531,16 @@ Rules:
 **Guard.** `src/test/annualReview/stageUpdatePolicyEffectiveChain.test.ts`.
 
 ---
+
+## §AR-SYSTEM-SCORE-ADMIN-CORRECTION — Admins may correct System Score raw values in place (ADR-217, 2026-07-31)
+
+1. **Admin only.** The "Update system scores" action on the Annual Review detail page is gated on the `admin` role. HR PMS keeps eligibility-input editing only.
+2. **Raw values only.** Admins key in the measured achievement; appraisal points are ALWAYS derived from the template bands via `scoreFromRaw` (SSOT). Typing points directly is forbidden.
+3. **Bidirectional and status-agnostic.** Corrections may raise or lower a value and are permitted on any status, including `completed`. The monotonic ADR-171 RPC stays exclusive to bulk upload.
+4. **Reason mandatory, audit mandatory.** `admin_update_system_scores_raw` rejects a blank reason and writes one `annual_review_system_score_edits` row per changed slot plus an `annual_review_access_audit` entry.
+5. **Final score recomputed.** The RPC re-derives `total_score` / `final_rating` through `annual_review_compute_final_summary`, so Final Rating (/5) and the increment slab (ADR-212) never drift from the corrected inputs.
+6. **carry_kra excluded.** Carry KRA slots are computed live and are never editable here.
+
+**Guard.** `src/test/annualReview/adminSystemScores.test.ts`.
+
+---

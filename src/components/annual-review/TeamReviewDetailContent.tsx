@@ -19,6 +19,8 @@ import { shouldHideCriteriaCard, criteriaForStage } from '@/lib/annualReview/tem
 import { stageScoreGuardMessage } from '@/lib/annualReview/stageScoreGuard';
 import { SystemScoresPanel } from '@/components/annual-review/SystemScoresPanel';
 import { EligibilityInputsEditor } from '@/components/annual-review/EligibilityInputsEditor';
+import { AdminSystemScoresDialog } from '@/components/annual-review/AdminSystemScoresDialog';
+import { editableSystemScoreSlots } from '@/services/annualReview/adminSystemScores';
 import { deriveAutoInputs } from '@/lib/annualReview/eligibilityAutoFill';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -345,7 +347,11 @@ function TeamReviewDetailInner(props: any) {
   } = props;
   const { t } = useAnnualReviewI18n();
   const [eligDlgOpen, setEligDlgOpen] = useState(false);
+  const [sysDlgOpen, setSysDlgOpen] = useState(false);
   const canEditEligibility = effectiveRole === 'admin' || effectiveRole === 'hr_pms';
+  // ADR-217 — System Score corrections are admin-only (HR PMS keeps eligibility only).
+  const canEditSystemScores = effectiveRole === 'admin';
+  const editableSysSlots = editableSystemScoreSlots(template?.sections?.system_scores ?? []);
   // Terminal stages (last in the effective chain) complete the review on
   // submit rather than forward it. Relabel the CTA so reviewers — especially
   // Management, the new terminal stage per ADR-138 — see a clear final action.
@@ -432,13 +438,35 @@ function TeamReviewDetailInner(props: any) {
         readOnly
       />
 
-      {canEditEligibility && eligibilityCriteria.length > 0 && (
-        <div className="flex justify-end -mt-2">
-          <Button size="sm" variant="outline" onClick={() => setEligDlgOpen(true)} className="gap-1.5">
-            <Pencil className="h-3.5 w-3.5" />
-            Fill eligibility inputs
-          </Button>
+      {((canEditEligibility && eligibilityCriteria.length > 0)
+        || (canEditSystemScores && editableSysSlots.length > 0)) && (
+        <div className="flex flex-wrap justify-end gap-2 -mt-2">
+          {canEditSystemScores && editableSysSlots.length > 0 && (
+            <Button size="sm" variant="outline" onClick={() => setSysDlgOpen(true)} className="gap-1.5">
+              <Pencil className="h-3.5 w-3.5" />
+              Update system scores
+            </Button>
+          )}
+          {canEditEligibility && eligibilityCriteria.length > 0 && (
+            <Button size="sm" variant="outline" onClick={() => setEligDlgOpen(true)} className="gap-1.5">
+              <Pencil className="h-3.5 w-3.5" />
+              Fill eligibility inputs
+            </Button>
+          )}
         </div>
+      )}
+
+      {canEditSystemScores && (
+        <AdminSystemScoresDialog
+          open={sysDlgOpen}
+          onOpenChange={setSysDlgOpen}
+          instanceId={instance.id}
+          employeeLabel={instance.employee?.full_name ?? instance.employee?.employee_code ?? undefined}
+          overallStatus={instance.overall_status}
+          systemScores={template?.sections?.system_scores ?? []}
+          storedRaw={(instance.system_scores_raw ?? {}) as Record<string, number>}
+          storedPoints={(resolvedSystemScores ?? {}) as Record<string, number>}
+        />
       )}
 
       <Dialog open={eligDlgOpen} onOpenChange={setEligDlgOpen}>
