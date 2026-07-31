@@ -28,6 +28,8 @@ import {
   isRenamedFromCurrent,
 } from '@/lib/prevMonthCanonicalMatch';
 import { resolveEffectiveChain, isPercolatedSiblingSubmission } from '@/lib/multimonthCycle';
+import { useAuth } from '@/contexts/AuthContext';
+import { resolveStageFirstActionDates } from '@/lib/review/stageFirstActionDate';
 import { resolveSelfAchievedValue } from '@/lib/review/resolveSelfAchievedValue';
 
 const MONTHS = [
@@ -406,9 +408,16 @@ export function KpiJourneySection({
 
   // Fetch performer profiles for audit logs
   const auditUserIds = useMemo(() => {
-    const ids = auditLogs.map((l: any) => l.performed_by);
-    return [...new Set(ids)] as string[];
+    return [...new Set(auditLogs.map((l: any) => l.performed_by))] as string[];
   }, [auditLogs]);
+
+  // ADR-209 — admin-only first-action date per stage (from immutable audit log)
+  const { effectiveRole } = useAuth();
+  const isAdminViewer = effectiveRole === 'admin';
+  const stageFirstActionDates = useMemo(
+    () => resolveStageFirstActionDates(auditLogs as any),
+    [auditLogs],
+  );
 
   const { data: auditProfiles = [] } = useQuery({
     queryKey: ['kpi-journey-audit-profiles', auditUserIds],
@@ -849,6 +858,8 @@ export function KpiJourneySection({
                 employeeCode={resolvedEmployeeCode !== '-' ? resolvedEmployeeCode : null}
                 isLoading={isLoading && !submission}
                 autoAdvancedResyncHint={stage === 'self' && !!(data as any).autoAdvancedResyncHint}
+                firstActionAt={stageFirstActionDates[stage] ?? null}
+                showFirstActionDate={isAdminViewer}
               />
             );
           })}

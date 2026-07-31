@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LucideIcon, FileText, ExternalLink } from 'lucide-react';
+import { format } from 'date-fns';
 import { openStorageFileGroup, buildEvidenceFileName } from '@/lib/storageDownload';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -42,6 +43,14 @@ interface ReviewStageCardProps {
    * and no employee evidence exists yet.
    */
   autoAdvancedResyncHint?: boolean;
+  /**
+   * ADR-209 — ISO timestamp of the FIRST recorded action at this stage,
+   * derived from `kpi_audit_logs`. Rendered only when
+   * `showFirstActionDate` is true (admin-only).
+   */
+  firstActionAt?: string | null;
+  /** ADR-209 — admin-only gate for the first-action date label. */
+  showFirstActionDate?: boolean;
 }
 
 const iconColorClasses = {
@@ -88,6 +97,8 @@ export function ReviewStageCard({
   employeeCode,
   isLoading = false,
   autoAdvancedResyncHint = false,
+  firstActionAt = null,
+  showFirstActionDate = false,
 }: ReviewStageCardProps) {
   const isPending = status === 'pending';
   const isCurrent = status === 'current';
@@ -112,11 +123,31 @@ export function ReviewStageCard({
       )}
     >
       {/* Header */}
-      <div className="flex items-center gap-1.5 sm:gap-2 mb-2">
+      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-2">
         <div className={cn('h-5 w-5 sm:h-6 sm:w-6 rounded-full flex items-center justify-center', iconColorClasses[iconColor])}>
           <Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
         </div>
-        <span className="text-xs font-medium">{title}</span>
+        <span className="text-xs font-medium min-w-0">{title}</span>
+        {showFirstActionDate && firstActionAt && (
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  data-testid="stage-first-action-date"
+                  className="text-[10px] text-muted-foreground cursor-help"
+                >
+                  1st: {format(new Date(firstActionAt), 'dd MMM yyyy')}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <p className="text-xs">
+                  First recorded action at this stage (admin-only) ·{' '}
+                  {format(new Date(firstActionAt), 'dd MMM yyyy, hh:mm a')}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
         {isCurrent && (
           <Badge variant="outline" className="ml-auto text-[10px] px-1.5 py-0">
             Current
