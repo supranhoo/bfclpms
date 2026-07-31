@@ -16,8 +16,8 @@ export function VarianceTable({ bands }: { bands: BandRow[] }) {
             <TableRow>
               <TableHead>Rating</TableHead>
               <TableHead className="text-right">Count</TableHead>
-              <TableHead className="text-right">Actual %</TableHead>
               <TableHead className="text-right">Target %</TableHead>
+              <TableHead className="text-right">Actual %</TableHead>
               <TableHead className="text-right">Variance %</TableHead>
               <TableHead>Compliance</TableHead>
             </TableRow>
@@ -27,8 +27,8 @@ export function VarianceTable({ bands }: { bands: BandRow[] }) {
               <TableRow key={b.band}>
                 <TableCell className="font-medium">{b.label} ({b.band})</TableCell>
                 <TableCell className="text-right tabular-nums">{b.count}</TableCell>
-                <TableCell className="text-right tabular-nums">{b.actualPct}%</TableCell>
                 <TableCell className="text-right tabular-nums">{b.targetPct}%</TableCell>
+                <TableCell className="text-right tabular-nums">{b.actualPct}%</TableCell>
                 <TableCell className="text-right tabular-nums">{b.variancePct > 0 ? `+${b.variancePct}` : b.variancePct}%</TableCell>
                 <TableCell><ComplianceChip level={b.compliance} /></TableCell>
               </TableRow>
