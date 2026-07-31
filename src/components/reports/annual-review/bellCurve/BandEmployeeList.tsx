@@ -217,7 +217,24 @@ export function BandEmployeeList({
                 <td className="p-2 text-right tabular-nums">{formatRating5(e.dept_head_rating_5 ?? null)}</td>
                 <td className="p-2 text-right tabular-nums">{formatRating5(e.bu_head_rating_5 ?? null)}</td>
                 <td className="p-2 text-right tabular-nums">
-                  {formatSlabPercent(effectiveSlabPercent(resolveSlabPercent(e.rating, slabs), status))}
+                  {(() => {
+                    const raw = resolveSlabPercent(e.rating, slabs);
+                    const capped = isSlabCapped(raw, status, cap);
+                    return (
+                      <>
+                        {formatSlabPercent(effectiveSlabPercent(raw, status, cap))}
+                        {capped && (
+                          <Badge
+                            variant="outline"
+                            className="ml-2 text-[10px]"
+                            title={`Exemption cap: top ${cap.topTiersExcluded ?? 0} tier(s) excluded — computed ${formatSlabPercent(raw)}`}
+                          >
+                            Capped
+                          </Badge>
+                        )}
+                      </>
+                    );
+                  })()}
                 </td>
                 <td className="p-2">
                   {status === 'unknown' ? (
