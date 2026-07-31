@@ -17,6 +17,10 @@ import {
   type BellCurveInput,
   SCORING_SOURCE_LABELS,
 } from '@/lib/annualReview/bellCurve';
+import { DEFAULT_RATING_SLABS, formatSlabPercent, resolveSlabPercent, type RatingSlab } from '@/lib/annualReview/ratingSlab';
+import {
+  effectiveSlabPercent, isSlabCapped, type SlabCapOptions,
+} from '@/lib/annualReview/effectiveEligibility';
 
 function safeName(s: string) {
   return s.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -29,11 +33,14 @@ function bandLabelOf(rating: number | null, banding: Banding): string {
   return def ? `${def.label} ${def.sub}` : 'Unrated';
 }
 
-function employeeRows(rows: BellCurveInput[], banding: Banding) {
+function employeeRows(rows: BellCurveInput[], banding: Banding, cap?: SlabCapOptions) {
+  const slabs: ReadonlyArray<RatingSlab> = cap?.slabs ?? DEFAULT_RATING_SLABS;
   return rows
     .filter((r) => !r.is_excluded)
     .map((r) => {
       const rating = ratingOf(r);
+      const status = r.eligibility_status ?? 'unknown';
+      const raw = resolveSlabPercent(rating, slabs);
       return {
         'Employee Code': r.employee_code ?? '',
         'Employee Name': r.employee_name ?? '',
@@ -44,6 +51,8 @@ function employeeRows(rows: BellCurveInput[], banding: Banding) {
         'Final Score': r.total_score ?? '',
         'Rating (/5)': rating ?? '',
         [banding.mode === 'slab' ? 'Slab Band' : 'Rating Band']: bandLabelOf(rating, banding),
+        'Slab %': formatSlabPercent(effectiveSlabPercent(raw, status, cap)),
+        'Exemption Cap Applied': isSlabCapped(raw, status, cap) ? 'Yes' : '',
         'Scoring Source': SCORING_SOURCE_LABELS[scoringSourceOf(r)],
       };
     });
@@ -79,6 +88,7 @@ export async function exportBellCurveExcel(
   cycleName: string,
   filterNote?: string,
   banding: Banding = makeBanding('rating', config),
+  cap?: SlabCapOptions,
 ) {
   const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
@@ -86,7 +96,7 @@ export async function exportBellCurveExcel(
   const summary = summarize(rows, banding, config);
   const bandTitle = banding.mode === 'slab' ? 'Slab' : 'Rating';
 
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(employeeRows(rows, banding)), 'Employee Distribution');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(employeeRows(rows, banding, cap)), 'Employee Distribution');
   XLSX.utils.book_append_sheet(
     wb,
     XLSX.utils.json_to_sheet([...bands].reverse().map((b) => {
