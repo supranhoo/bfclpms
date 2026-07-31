@@ -268,7 +268,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
             <Button
               variant="outline" size="sm" className="gap-2"
               disabled={scoped.length === 0}
-              onClick={() => exportBellCurveExcel(scoped, config, cycleName, `${filterNote} · ${modeNote}`, banding).catch((e) => toast.error((e as Error).message))}
+              onClick={() => exportBellCurveExcel(scoped, config, cycleName, `${filterNote} · ${modeNote}`, banding, capOptions).catch((e) => toast.error((e as Error).message))}
             >
               <Download className="h-4 w-4" /> Excel
             </Button>
