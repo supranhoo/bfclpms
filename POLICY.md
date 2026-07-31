@@ -1,3 +1,12 @@
+### §AR-REPORT-PMS-GRADE-FILTER — Annual Review reports filter by PMS Grade (ADR-219, v2.66.191, 2026-07-31)
+- The Annual Review Report and the Bell Curve Analysis tab MUST both expose a **PMS Grade** filter using the employee's master-data grade (`profiles.pms_grade`).
+- The comprehensive report RPC `get_annual_review_comprehensive_report` MUST return both the grade text (`grade`, mapped from `profiles.pms_grade`) and the grade ID (`pms_grade_id`, mapped from `profiles.pms_grade_id`) so client-side and server-side filters can identify the same grade.
+- The Bell Curve tab MUST derive its PMS Grade options from the loaded comprehensive report dataset and narrow all downstream charts, KPIs, tables, and exports to the selected grade.
+- The main Annual Review Report MUST use the existing `get_distinct_active_pms_grades` RPC to populate the PMS Grade dropdown and pass the selected value to the server-side `pmsGrade` filter already implemented in `listInstancesPaginated`, so the Detail tab, status counts, and export all respect the grade scope.
+- The PMS Grade filter is a **filter only**; it MUST NOT add new report columns, alter the rating calculation, or change the bell curve banding.
+- The implementation MUST NOT create new tables or columns; it is an additive extension to the existing comprehensive report RPC return type and the existing UI filter surface.
+- Regression guard: client-side filters must continue to work when no grade is selected (`All grades`), and server-side filtering must resolve to an empty set rather than an error when no employees match the selected grade.
+
 ### §AR-DEPT-TERMINAL-OVERRIDE — Department-scoped terminal reviewer override (ADR-198, v2.66.186, 2026-07-28)
 - Applied cohorts: **EHS-Health** (v2.66.186, BU Head Amit Kumar Sharma excluded, Firoz Ahmad terminal) and **EHS-Safety** (v2.66.187, same BU Head excluded, Firoz Ahmad terminal). Any further department contraction MUST follow this clause verbatim.
 - HR/admin may contract a department's Annual Review chain so the Department Head is the terminal reviewer. The removal MUST clear the downstream reviewer id (`bu_head_id`) as well as the stage entry in `enabled_stages`; a dangling reviewer id is forbidden.
