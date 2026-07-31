@@ -169,11 +169,20 @@ export default function ChangeHistoryReport() {
           </CardTitle>
           {canExport && (
             <Button variant="outline" size="sm" onClick={handleExport} disabled={exporting || total === 0}>
-              <Download className="h-4 w-4 mr-2" />{exporting ? 'Exporting…' : 'Export Excel'}
+              <Download className="h-4 w-4 mr-2" />
+              {exporting
+                ? exportProgress && exportProgress.total > 0
+                  ? `Exporting ${exportProgress.done.toLocaleString()} of ${exportProgress.total.toLocaleString()}…`
+                  : 'Exporting…'
+                : 'Export Excel'}
             </Button>
           )}
         </CardHeader>
         <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Reporting manager, functional manager, department and designation changes are recorded from 31 Jul 2026 onwards.
+            Earlier changes to these fields were never stored and cannot be shown.
+          </p>
           {isError && (
             <p className="text-sm text-destructive">
               Could not load change history: {error instanceof Error ? error.message : 'Unknown error'}
