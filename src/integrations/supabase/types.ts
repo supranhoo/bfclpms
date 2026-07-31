@@ -662,6 +662,89 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_calibration_audit: {
+        Row: {
+          action: string
+          computed_rating: number | null
+          computed_score: number | null
+          created_at: string
+          id: string
+          instance_id: string
+          new_rating: number | null
+          old_rating: number | null
+          performed_by: string | null
+          reason: string
+        }
+        Insert: {
+          action: string
+          computed_rating?: number | null
+          computed_score?: number | null
+          created_at?: string
+          id?: string
+          instance_id: string
+          new_rating?: number | null
+          old_rating?: number | null
+          performed_by?: string | null
+          reason: string
+        }
+        Update: {
+          action?: string
+          computed_rating?: number | null
+          computed_score?: number | null
+          created_at?: string
+          id?: string
+          instance_id?: string
+          new_rating?: number | null
+          old_rating?: number | null
+          performed_by?: string | null
+          reason?: string
+        }
+        Relationships: []
+      }
+      annual_review_calibrations: {
+        Row: {
+          calibrated_by: string | null
+          calibrated_rating: number
+          computed_rating: number | null
+          computed_score: number | null
+          created_at: string
+          id: string
+          instance_id: string
+          reason: string
+          updated_at: string
+        }
+        Insert: {
+          calibrated_by?: string | null
+          calibrated_rating: number
+          computed_rating?: number | null
+          computed_score?: number | null
+          created_at?: string
+          id?: string
+          instance_id: string
+          reason: string
+          updated_at?: string
+        }
+        Update: {
+          calibrated_by?: string | null
+          calibrated_rating?: number
+          computed_rating?: number | null
+          computed_score?: number | null
+          created_at?: string
+          id?: string
+          instance_id?: string
+          reason?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_calibrations_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: true
+            referencedRelation: "annual_review_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       annual_review_criteria_assignments: {
         Row: {
           archetype_code: string | null
@@ -14947,6 +15030,18 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_bulk_calibrate_final_rating: {
+        Args: { p_instance_ids: string[]; p_rating: number; p_reason: string }
+        Returns: Json
+      }
+      admin_calibrate_final_rating: {
+        Args: { p_instance_id: string; p_rating: number; p_reason: string }
+        Returns: Json
+      }
+      admin_clear_final_rating_calibration: {
+        Args: { p_instance_id: string; p_reason: string }
+        Returns: Json
+      }
       admin_reassign_orphaned_reviewers: {
         Args: {
           p_instance_ids: string[]
@@ -15868,6 +15963,10 @@ export type Database = {
           bu_head_score: number
           business_unit_id: string
           business_unit_name: string
+          calibrated_at: string
+          calibrated_by_name: string
+          calibrated_rating: number
+          calibration_reason: string
           criteria_weight: number
           cycle_default_stages: Json
           days_pending: number

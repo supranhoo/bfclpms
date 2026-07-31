@@ -308,6 +308,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
               bandLabel={def.label}
               bandSub={def.sub}
               slabs={slabs.length > 0 ? slabs : undefined}
+              canCalibrate={effectiveRole === 'admin'}
               onClose={close}
             />
           );
