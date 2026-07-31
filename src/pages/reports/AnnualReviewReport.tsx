@@ -24,6 +24,12 @@ import {
   formatSlabPercent,
 } from '@/lib/annualReview/ratingSlab';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
+import { useAnnualReviewCalibrations } from '@/hooks/useAnnualReviewCalibrations';
+import { effectiveRating, isCalibrated } from '@/lib/annualReview/effectiveRating';
+import { useAuth } from '@/contexts/AuthContext';
+import { Badge } from '@/components/ui/badge';
+import { CalibrateRatingDialog, type CalibrationTarget } from '@/components/annual-review/CalibrateRatingDialog';
+import { SlidersHorizontal } from 'lucide-react';
 
 type StatusFilter = 'all' | 'not_started' | 'pending_self' | 'pending_manager' | 'pending_skip' | 'pending_bu' | 'pending_hr' | 'completed';
 
@@ -35,6 +41,9 @@ type StatusFilter = 'all' | 'not_started' | 'pending_self' | 'pending_manager' |
  */
 export default function AnnualReviewReport() {
   const { data: cycles = [] } = useCycles();
+  const { effectiveRole } = useAuth();
+  const canCalibrate = effectiveRole === 'admin';
+  const [calibrationTarget, setCalibrationTarget] = useState<CalibrationTarget | null>(null);
   const [cycleId, setCycleId] = useState<string | undefined>(undefined);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
@@ -57,6 +66,11 @@ export default function AnnualReviewReport() {
     [rows, ratingBand],
   );
 
+  const { data: calibrations = {} } = useAnnualReviewCalibrations(filtered.map((r) => r.id));
+  /** Effective (calibrated when present) rating for a listed instance. */
+  const ratingFor = (id: string, score: number | null) =>
+    effectiveRating({ total_score: score, calibrated_rating: calibrations[id]?.calibrated_rating ?? null });
+
   const ratingOptions = useMemo(() => {
     const set = new Set<string>();
     for (const r of rows) if (r.final_rating) set.add(r.final_rating);
@@ -73,8 +87,11 @@ export default function AnnualReviewReport() {
         'Stage': i.overall_status,
         'Total Score': i.total_score ?? '',
         'Final Rating': i.final_rating ?? '',
-        'Final Rating (out of 5)': toRatingOutOf5(i.total_score) ?? '',
-        'Slab %': resolveSlabPercent(toRatingOutOf5(i.total_score), slabs) ?? '',
+        'Final Rating (out of 5)': ratingFor(i.id, i.total_score) ?? '',
+        'Slab %': resolveSlabPercent(ratingFor(i.id, i.total_score), slabs) ?? '',
+        'Computed Rating': toRatingOutOf5(i.total_score) ?? '',
+        'Calibrated Rating': calibrations[i.id]?.calibrated_rating ?? '',
+        'Calibration Reason': calibrations[i.id]?.calibration_reason ?? '',
         'Finalized At': i.finalized_at ?? '',
       }));
       const ws = XLSX.utils.json_to_sheet(data);
