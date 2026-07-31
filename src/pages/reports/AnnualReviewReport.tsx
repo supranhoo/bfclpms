@@ -308,6 +308,15 @@ export default function AnnualReviewReport() {
         <TabsContent value="by-reviewer"><ReviewerQueuesTab cycleId={cycleId} /></TabsContent>
         <TabsContent value="pending"><PendingDrilldownTab cycleId={cycleId} /></TabsContent>
       </Tabs>
+
+      {calibrationTarget && (
+        <CalibrateRatingDialog
+          open
+          onOpenChange={(v) => { if (!v) setCalibrationTarget(null); }}
+          targets={[calibrationTarget]}
+          slabs={slabs && slabs.length > 0 ? slabs : undefined}
+        />
+      )}
     </div>
   );
 }
