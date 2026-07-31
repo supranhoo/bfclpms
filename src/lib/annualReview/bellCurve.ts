@@ -157,7 +157,8 @@ export function bandForRating(rating: number | null | undefined): RatingBand | n
 }
 
 export function ratingOf(row: BellCurveInput): number | null {
-  return toRatingOutOf5(row.total_score);
+  // ADR-220 — an admin calibration overrides the computed rating everywhere.
+  return effectiveRating(row);
 }
 
 /** Non-excluded, rated employees only — the distribution denominator. */
