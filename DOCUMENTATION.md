@@ -7788,3 +7788,9 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - `ChangeHistoryReport.tsx`: live "Exporting X of Y…" button label, ceiling-specific warning toast, and a capture-start note for the newly tracked fields.
 - Tests: 5 new cases in `src/test/reports/changeHistory.test.ts` (category routing, filter option, manager-change labelling/resolution, ceiling).
 - Policy: POLICY.md §CHG-HISTORY-CAPTURE-COMPLETENESS.
+
+### v2.66.216 — ADR-216 Stage update RLS aligned to the effective chain (2026-07-31)
+- RCA: self-review submit failed with `new row violates row-level security policy for table "annual_review_instances"` for employee 100406. `advance_annual_review_status` derives the next status from `annual_review_effective_chain` (duplicate reviewers skipped, `dept_head_id = bu_head_id` → `pending_bu`) while `instances_stage_update` WITH CHECK derived it from raw `enabled_stages` (→ `pending_dept` only). 2 in-flight instances affected; recurs for any review with a shared reviewer across consecutive stages.
+- Migration: added `public.annual_review_allowed_next_status(uuid, annual_review_status)` (STABLE, SECURITY DEFINER, pinned search_path — required to avoid RLS recursion) and recreated `instances_stage_update` so every reviewer slot also accepts the effective-chain-derived next status. USING clause unchanged.
+- Tests: `src/test/annualReview/stageUpdatePolicyEffectiveChain.test.ts`.
+- Docs: `docs/adr/ADR-216.md`; Policy: POLICY.md §AR-STAGE-UPDATE-EFFECTIVE-CHAIN.
