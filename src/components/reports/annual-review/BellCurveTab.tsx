@@ -12,6 +12,7 @@ import { fetchComprehensiveReport, type ComprehensiveRow } from '@/services/annu
 import {
   BAND_MODE_LABELS,
   computeBands,
+  employeesInBand,
   groupBands,
   heatmapBands,
   makeBanding,
@@ -33,6 +34,7 @@ import { BellCurveChart } from './bellCurve/BellCurveChart';
 import { DistributionBarChart } from './bellCurve/DistributionBarChart';
 import { VarianceTable } from './bellCurve/VarianceTable';
 import { RatingHeatmap } from './bellCurve/RatingHeatmap';
+import { BandEmployeeList } from './bellCurve/BandEmployeeList';
 import { ComplianceChip } from './bellCurve/ComplianceChip';
 import { BellCurveConfigDialog } from './bellCurve/BellCurveConfigDialog';
 import { exportBellCurveExcel, exportBellCurvePdf } from './bellCurve/bellCurveExport';
@@ -294,6 +296,22 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
         defs={banding.defs}
         hasTargets={hasTargets}
         selectedIds={selectedIds}
+        drilldownResetKey={`${view}|${bandMode}|${bu}|${dept}|${manager}|${division}|${pmsGrade}|${scoringSource}`}
+        renderDrilldown={(rowId, bandKey, close) => {
+          const def = banding.defs.find((d) => d.key === bandKey);
+          const group = heat.find((h) => h.id === rowId);
+          if (!def || !group) return null;
+          return (
+            <BandEmployeeList
+              employees={employeesInBand(filtered, view, rowId, banding, bandKey)}
+              groupName={group.name}
+              bandLabel={def.label}
+              bandSub={def.sub}
+              slabs={slabs.length > 0 ? slabs : undefined as never}
+              onClose={close}
+            />
+          );
+        }}
         onToggle={(id) => setGroupSel((s) => ({
           ...s,
           [view]: s[view].includes(id) ? s[view].filter((x) => x !== id) : [...s[view], id],

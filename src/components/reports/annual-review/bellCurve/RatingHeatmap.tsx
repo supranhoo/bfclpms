@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -165,11 +165,8 @@ export function RatingHeatmap({
             </thead>
             <tbody>
               {visible.map((r) => (
-                <>
-                <tr
-                  key={r.id}
-                  className={cn(selected.has(r.id) && 'bg-primary/5 ring-2 ring-primary/40')}
-                >
+                <Fragment key={r.id}>
+                <tr className={cn(selected.has(r.id) && 'bg-primary/5 ring-2 ring-primary/40')}>
                   <td className="p-2" onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={selected.has(r.id)}
@@ -208,13 +205,13 @@ export function RatingHeatmap({
                   <td className="p-2 text-right tabular-nums">{r.total}</td>
                 </tr>
                 {expanded?.rowId === r.id && renderDrilldown && (
-                  <tr key={`${r.id}-drill`}>
+                  <tr>
                     <td colSpan={defs.length + 3} className="p-2">
                       {renderDrilldown(r.id, expanded.bandKey, () => setExpanded(null))}
                     </td>
                   </tr>
                 )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>
