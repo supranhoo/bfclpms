@@ -7777,3 +7777,14 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - `src/pages/admin/WorkflowConfig.tsx` no longer passes `profiles` to the exporter.
 - Tests: `src/test/reports/workflowConfigExport.test.ts` (8 cases incl. the blank-row regression, empty-roster guard, template precedence, period-config exclusion and inactive-reviewer handling).
 - Policy: POLICY.md §WF-CONFIG-EXPORT-SELF-SUFFICIENT.
+
+### v2.70 — ADR-215 Manager changes captured; Change History export uncapped
+
+- RCA: ADR-213's 21-field logger `public.log_profile_identity_change()` was created but never bound to `public.profiles`; the table still ran the 4-field `trg_profiles_identity_audit`. `profile.field_changed` had 0 rows, so reporting-manager, functional-manager, department, designation, grade, level, location, DOJ, mobile and portal-access changes were never recorded.
+- Migration: dropped `trg_profiles_identity_audit` and `trg_profiles_identity_audit_fn()`; created `trg_profiles_field_audit AFTER UPDATE ON public.profiles` bound to the 21-field logger.
+- `get_change_history`: profile field changes now classify into a new `reporting_org` category for `reporting_manager_id`, `functional_manager_id`, `department_id`, `designation`. Legacy `profile.identity_changed` branch retained for the 24 pre-existing rows.
+- `src/lib/reports/changeHistory.ts`: added `reporting_org` to `ChangeCategory`, `CATEGORY_LABEL` ("Reporting & Org"), `CATEGORY_OPTIONS`, plus `REPORTING_ORG_FIELDS` and `categoryForField()` mirroring the RPC.
+- `src/hooks/useChangeHistory.ts`: `CHANGE_HISTORY_EXPORT_CAP` 5,000 → 100,000 (runaway guard, not a business cap); `fetchChangeHistoryForExport` loops until a short page, returns `total`, and accepts an `onProgress` callback.
+- `ChangeHistoryReport.tsx`: live "Exporting X of Y…" button label, ceiling-specific warning toast, and a capture-start note for the newly tracked fields.
+- Tests: 5 new cases in `src/test/reports/changeHistory.test.ts` (category routing, filter option, manager-change labelling/resolution, ceiling).
+- Policy: POLICY.md §CHG-HISTORY-CAPTURE-COMPLETENESS.

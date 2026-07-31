@@ -5506,3 +5506,17 @@ Rules:
 7. **Pure builders.** Row construction lives in pure, exported functions outside the component so blank-output regressions are unit-testable.
 
 **Guard.** `src/test/reports/workflowConfigExport.test.ts`.
+
+---
+
+## §CHG-HISTORY-CAPTURE-COMPLETENESS — Audited fields must have a live capture path (ADR-215)
+
+1. **Editable implies audited.** Any field an administrator can change from the employee editor MUST have a capture path that records before, after, timestamp and actor. Reporting manager, functional manager, department and designation are explicitly in scope.
+2. **One capture path.** Profile change capture lives in a single trigger (`trg_profiles_field_audit` → `public.log_profile_identity_change()`) with the tracked-field list in that one function. Adding a field to the list is the only step required; parallel per-field triggers are prohibited because they drift.
+3. **A function is not a feature.** Creating an audit function without attaching its trigger is an incomplete change. Any migration that adds or widens capture MUST be verified by confirming the trigger is bound and that the corresponding audit action produces rows.
+4. **Org movement is its own category.** Manager/department/designation changes surface under `reporting_org` ("Reporting & Org"). The client `categoryForField` and the server category expression are mirrors and must be changed together.
+5. **Identifiers are never shown raw.** Audited values that are foreign keys resolve to human names via `resolve_change_value`.
+6. **No silent capture gaps.** Where capture began later than the data it describes, the report states the capture start date. An empty result must never be presentable as "no changes occurred".
+7. **Exports are complete by default.** Report exports page until the server returns a short page. Any remaining ceiling is a runaway guard set far above realistic volume, is disclosed in the file header and in a toast when it fires, and is never a silent business cap.
+
+**Guard.** `src/test/reports/changeHistory.test.ts`.
