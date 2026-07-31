@@ -5,7 +5,6 @@
  * view and the exports. Ratings come from the ADR-212 SSOT
  * (`toRatingOutOf5(total_score)`); this module only bands, aggregates and
  * compares them against the admin-configured target distribution.
-import type { EligibilityStatus } from './effectiveEligibility';
  */
 import {
   DEFAULT_RATING_SLABS,
@@ -14,6 +13,7 @@ import {
   type RatingSlab,
 } from './ratingSlab';
 import { effectiveRating } from './effectiveRating';
+import type { EligibilityStatus } from './effectiveEligibility';
 
 export type RatingBand = 1 | 2 | 3 | 4 | 5;
 export type ComplianceLevel = 'green' | 'amber' | 'red';
