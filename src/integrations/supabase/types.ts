@@ -2049,6 +2049,60 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_self_restore_repair_2026_07: {
+        Row: {
+          archive_id: string | null
+          created_at: string
+          cycle_id: string | null
+          employee_code: string | null
+          employee_id: string
+          id: string
+          instance_id: string
+          performed_by: string | null
+          prior_status: string | null
+          prior_template_id: string | null
+          reason: string
+          restored_response: Json | null
+          restored_response_id: string | null
+          restored_status: string | null
+          restored_template_id: string | null
+        }
+        Insert: {
+          archive_id?: string | null
+          created_at?: string
+          cycle_id?: string | null
+          employee_code?: string | null
+          employee_id: string
+          id?: string
+          instance_id: string
+          performed_by?: string | null
+          prior_status?: string | null
+          prior_template_id?: string | null
+          reason: string
+          restored_response?: Json | null
+          restored_response_id?: string | null
+          restored_status?: string | null
+          restored_template_id?: string | null
+        }
+        Update: {
+          archive_id?: string | null
+          created_at?: string
+          cycle_id?: string | null
+          employee_code?: string | null
+          employee_id?: string
+          id?: string
+          instance_id?: string
+          performed_by?: string | null
+          prior_status?: string | null
+          prior_template_id?: string | null
+          reason?: string
+          restored_response?: Json | null
+          restored_response_id?: string | null
+          restored_status?: string | null
+          restored_template_id?: string | null
+        }
+        Relationships: []
+      }
       annual_review_self_review_bundle_items: {
         Row: {
           bundle_id: string

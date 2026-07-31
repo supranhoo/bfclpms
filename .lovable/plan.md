@@ -1,49 +1,43 @@
-## Goal
+## What happened (verified from data)
 
-Show the **first submission / first action date** on every Review Journey stage card (Self, Manager, Skip-Level, HR PMS, Auditor, Management) as small gray text in the card header — **visible only to Admins**.
+Instance `febfb82a…` for Chandan Kumar Pandit (101885), cycle `b82a935f…`:
 
-## Assumptions
+- On **31-Jul-2026 04:58 UTC** a force-reset with reason **"EXCLUDED CHANDAN"** ran against this instance.
+- The archive row (`annual_review_reset_archive` id `057a37ce…`) shows the pre-reset state: `prior_status = pending_bu`, `prior_template_id = a6e88cd5…`, and one wiped response — the **self** response, `is_locked = true`, `submitted_at = 2026-07-17 11:34:04`, with 12 qualitative answers (`f_*` keys), empty `criteria_scores`, `weighted_score = 0`.
+- Current state: `overall_status = pending_self`, `template_id = eb87efa6…` ("Generic W - (With KRA)"), **zero rows** in `annual_review_responses`. So the self-review content survives only in the archive.
+- `enabled_stages` is `["self","bu_head"]` — unchanged by the reset.
+- `bu_head_id` is currently `79fe4ca0…` (the 24-Jul Management remap), not the old self-as-BU-Head value.
 
-- "1st submission" = the earliest immutable `kpi_audit_logs` entry for that stage on that KPI. It stays fixed even if the KPI is sent back and re-submitted (`review_submissions.submitted_at` is overwritten on resubmit, so it is not usable for this).
-- Admin = `effectiveRole === 'admin'` from `AuthContext` (same gate used elsewhere, so the admin role-switch masking is respected).
-- Presentation-only change — no schema, no writes, no workflow logic.
+Decisions confirmed with you: **full rollback to pre-reset**, but **keep the current BU Head**.
 
-## Risk & Impact
+## Target end state
 
-- **Data impact:** none. Read-only, uses the audit-log query that `KpiJourneySection` already runs (`['kpi-journey-audit-logs', kpi.id]`) — no extra network calls.
-- **Workflow/permission impact:** none. Non-admins see the card exactly as today.
-- **UI impact:** one extra line of `text-[10px] text-muted-foreground` in the stage-card header row (the red-boxed area in your screenshot). Cards keep their height on mobile because the date sits inline next to the title, wrapping only when needed.
-- **Regression risk:** low; the only shared component touched is `ReviewStageCard`, and the new prop is optional so all other call sites are unchanged.
-- **Scalability:** derivation is an O(n) pass over already-loaded logs, memoized.
+| Field | Restore to |
+|---|---|
+| `template_id` | `a6e88cd5…` (original, so the saved `f_*` answers render) |
+| self response | re-inserted verbatim from archive, `is_locked = true`, original `submitted_at`/`created_at` |
+| `overall_status` | `pending_bu` (BU Head Review Pending) |
+| `bu_head_id` | unchanged (`79fe4ca0…`) |
+| aggregates (`total_score`, `criteria_weighted_score`, `final_rating`, `finalized_*`) | stay NULL — correct for a mid-workflow `pending_bu` instance |
 
-## Step-by-step
+## Steps
 
-1. **New SSOT module `src/lib/review/stageFirstActionDate.ts`**
-   - Export `STAGE_FIRST_ACTION_ACTIONS`: stage → set of qualifying audit actions.
-     - `self`: `SELF_REVIEW_SUBMITTED`, `BACKFILL_SELF_REVIEW_SUBMITTED`, `ADMIN_DATA_ENTRY_SELF`
-     - `manager`: `MANAGER_FORWARDED`, `MANAGER_NA_CONFIRMED`, `BACKFILL_MANAGER_REVIEWED`, `ADMIN_DATA_ENTRY_MANAGER`
-     - `skip_level`: `SKIP_LEVEL_FORWARDED`, `BACKFILL_SKIP_LEVEL_REVIEWED`, `ADMIN_DATA_ENTRY_SKIP_LEVEL`
-     - `hr_pms`: `HR_PMS_FORWARDED`, `HR_PMS_NA_CONFIRMED`, `BULK_STAGE_SIGNOFF_HR_PMS`, `BACKFILL_HR_PMS_REVIEWED`, `ADMIN_DATA_ENTRY_HR_PMS`
-     - `auditor`: `AUDITOR_REVIEWED`, `AUDITOR_FORWARDED`, `BULK_STAGE_SIGNOFF_AUDITOR`, `BACKFILL_AUDITOR_REVIEWED`, `ADMIN_DATA_ENTRY_AUDITOR`
-     - `management`: `MANAGEMENT_APPROVED`, `BACKFILL_MANAGEMENT_REVIEWED`, `ADMIN_DATA_ENTRY_MANAGEMENT`, `ADMIN_BULK_OVERRIDE_FORCE_APPROVE`
-   - Export `resolveStageFirstActionDates(logs)` → `Record<stage, string | null>` returning the **earliest** `created_at` per stage (generic `STATUS_TRANSITION` rows are ignored to avoid false positives).
-   - *Verification:* unit test with a log fixture containing a submit → send-back → re-submit sequence; asserts the first date wins.
+1. **Pre-flight reads** (no writes): confirm template `a6e88cd5…` still exists and is usable, confirm no response rows have appeared since, confirm no `annual_review_assignment_overrides` or `template_override_id` conflict with restoring `template_id`.
+2. **Restore in one transaction** (data change, not a schema migration):
+   - Insert the self response back into `annual_review_responses` straight from the archive JSON (same `id`, `reviewer_id`, `reviewer_role='self'`, `qualitative_responses`, `criteria_scores`, `evidence`, timestamps, `is_locked = true`).
+   - Set `template_id = a6e88cd5…` on the instance.
+   - Set `overall_status = 'pending_bu'`.
+   - Leave `bu_head_id` and `enabled_stages` untouched.
+3. **Trigger considerations**: `trg_ar_no_downstream_rewind` (ADR-184) only blocks *rewinds* past an actioned later stage — moving `pending_self → pending_bu` is forward, no bypass flag needed. ADR-172's `trg_ar_stage_score_required` is submission-time only and this template's self stage is narrative (zero criteria), matching ADR-197. If the template-immutability trigger from ADR-117 objects, it applies only when a `template_override_id` exists — none here, verified.
+4. **Audit trail**: write the before/after snapshot into a dated repair table `annual_review_self_restore_repair_2026_07` (instance id, employee, prior status/template, restored response id, reason, `performed_by = NULL` since this is a system-run repair), consistent with ADR-183/185 repair practice. The original archive row is left intact.
+5. **Verification queries**: re-read the instance + responses and confirm status `pending_bu`, one locked self response with the 17-Jul submitted_at, template `a6e88cd5…`, and that the BU Head (`79fe4ca0…`) sees it in `get_my_annual_review_queue`.
+6. **Docs/policy sync**: add **ADR-210 — Reset rollback from `annual_review_reset_archive`** and **POLICY §AR-RESET-ROLLBACK**, stating that force-reset archives are the authoritative rollback source and that a restore must re-anchor `overall_status` to the archived `prior_status` (re-validated against current `enabled_stages`) rather than leaving the instance at `pending_self`.
+7. **Regression test**: `src/test/annualReview/resetRollback.test.ts` covering archive→response reconstruction, status re-anchoring, and the "keep current reviewer mapping" rule.
 
-2. **`ReviewStageCard.tsx`** — add optional props `firstActionAt?: string | null` and `showFirstActionDate?: boolean`. When both are set, render in the header row, right of the title:
-   `1st: 05 Jun 2026` in `text-[10px] text-muted-foreground` with a tooltip `First recorded action at this stage (admin-only)`. Nothing renders when the date is unknown.
+## Risk & impact
 
-3. **`KpiJourneySection.tsx`** — memoize `resolveStageFirstActionDates(auditLogs)` (logs are already fetched here), read `effectiveRole` from `useAuth()`, and pass `firstActionAt={firstActionDates[stage]}` + `showFirstActionDate={effectiveRole === 'admin'}` into each `ReviewStageCard`. Same wiring for the "Previous Months" mini-cards is **out of scope** (they use a separate compact renderer).
-
-4. **Docs/policy sync** — add `docs/adr/ADR-209.md` (Stage first-action date visibility) and a `POLICY §AR-STAGE-FIRST-ACTION-DATE` entry stating: date derives from the earliest stage audit action, never from `submitted_at`, and is admin-only.
-
-## UI changes (exact)
-
-- **Where:** Review Journey stage cards inside the KPI review sheet (`KpiReviewPanel` → `KpiJourneySection`) — the header row of each card, exactly the red-boxed spot in your screenshot.
-- **What:** small gray `1st: DD MMM YYYY` label, tooltip on hover/tap.
-- **Interaction:** none; purely informational, no layout shift for non-admins.
-- **Responsive:** the label sits in a flex header with `min-w-0` + wrap so narrow mobile cards push it to a second line rather than truncating the stage title.
-
-## Tests
-
-- `src/test/stageFirstActionDate.test.ts` — earliest-wins, resubmit ignored, unknown stage → null, backfill/admin-data-entry actions counted, `STATUS_TRANSITION` ignored.
-- `src/test/reviewStageCardFirstActionDate.test.tsx` — renders the date when `showFirstActionDate` is true, renders nothing when false or when the date is null.
+- **Data impact**: one instance, one response row re-inserted, one dated audit row created. Additive; no schema change.
+- **Workflow impact**: the review re-enters the BU Head's queue; employee loses the (unwanted) editable self stage.
+- **Regression risk**: low — scoped to a single instance id, no shared function or trigger is modified.
+- **Rollback**: delete the restored response row and set the instance back to `pending_self` / template `eb87efa6…`; the dated audit table holds the exact before-state.
+- **Open item to flag**: whoever ran "EXCLUDED CHANDAN" may have intended to exclude this employee from the cycle. This restore assumes that was a mistake, per your message. If exclusion was actually intended, the correct action is `bulk_exclude_annual_review_instances`, not a reset — I will not do that here.
