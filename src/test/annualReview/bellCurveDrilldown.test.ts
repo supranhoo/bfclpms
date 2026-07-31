@@ -68,7 +68,7 @@ describe('employeesInBand (ADR-218c)', () => {
   it('sorts by rating, highest first', () => {
     const banding = makeBanding('rating', cfg);
     const all = banding.defs.flatMap((d) => employeesInBand(rows, 'department', 'd1', banding, d.key));
-    const inBand = employeesInBand([emp('a', 80), emp('b', 90)], 'department', 'd1', banding, '4');
+    const inBand = employeesInBand([emp('a', 80), emp('b', 84)], 'department', 'd1', banding, '4');
     expect(all.length).toBe(3);
     expect(inBand.map((e) => e.instance_id)).toEqual(['b', 'a']);
   });
