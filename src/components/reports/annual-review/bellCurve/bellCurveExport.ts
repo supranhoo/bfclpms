@@ -166,9 +166,9 @@ export async function exportBellCurvePdf(
     margin: { left: 450 },
     tableWidth: 350,
     styles: { fontSize: 8 },
-    head: [['Rating', 'Count', 'Actual %', 'Target %', 'Var %', 'Status']],
+    head: [['Rating', 'Count', 'Target %', 'Actual %', 'Var %', 'Status']],
     body: [...bands].reverse().map((b) => [
-      `${b.label} (${b.band})`, b.count, `${b.actualPct}%`, `${b.targetPct}%`, `${b.variancePct}%`, b.compliance,
+      `${b.label} (${b.band})`, b.count, `${b.targetPct}%`, `${b.actualPct}%`, `${b.variancePct}%`, b.compliance,
     ]),
   });
 
