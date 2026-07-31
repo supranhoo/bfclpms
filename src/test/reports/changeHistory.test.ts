@@ -69,3 +69,52 @@ describe('changeHistory presentation contract (ADR-213)', () => {
     expect(toExportRow({ ...base, changed_by: 'u', changed_by_name: null })['Changed By']).toBe('System user');
   });
 });
+
+// ── ADR-215 ────────────────────────────────────────────────────────────────
+describe('ADR-215 — reporting/org capture and uncapped export', () => {
+  it('routes manager, department and designation changes to Reporting & Org', () => {
+    expect(categoryForField('reporting_manager_id')).toBe('reporting_org');
+    expect(categoryForField('functional_manager_id')).toBe('reporting_org');
+    expect(categoryForField('department_id')).toBe('reporting_org');
+    expect(categoryForField('designation')).toBe('reporting_org');
+  });
+
+  it('keeps status and plain detail fields out of Reporting & Org', () => {
+    expect(categoryForField('is_active')).toBe('status');
+    expect(categoryForField('employment_status')).toBe('status');
+    expect(categoryForField('email')).toBe('employee_details');
+    expect(categoryForField('mobile_number')).toBe('employee_details');
+  });
+
+  it('exposes Reporting & Org as a user-selectable filter with a readable label', () => {
+    expect(CATEGORY_OPTIONS.map(o => o.value)).toContain('reporting_org');
+    expect(categoryLabel('reporting_org')).toBe('Reporting & Org');
+  });
+
+  it('labels a manager change readably and shows resolved names, not ids', () => {
+    const row = toExportRow({
+      event_id: 'e1',
+      occurred_at: '2026-07-31T10:00:00.000Z',
+      category: 'reporting_org',
+      employee_id: 'emp-1',
+      employee_name: 'Anup Kumar',
+      employee_code: '101381',
+      field_label: 'reporting_manager_id',
+      old_value: 'Awadhesh Kumar Singh',
+      new_value: 'Umesh Mehta',
+      changed_by: 'adm-1',
+      changed_by_name: 'HR Admin',
+      context: null,
+      total_count: 1,
+    });
+    expect(row['Category']).toBe('Reporting & Org');
+    expect(row['What Changed']).toBe('Reporting Manager');
+    expect(row['Old Value']).toBe('Awadhesh Kumar Singh');
+    expect(row['New Value']).toBe('Umesh Mehta');
+  });
+
+  it('the export ceiling is a runaway guard far above the old 5,000 business cap', () => {
+    expect(CHANGE_HISTORY_EXPORT_CAP).toBeGreaterThan(5000);
+    expect(CHANGE_HISTORY_EXPORT_CAP).toBe(100_000);
+  });
+});
