@@ -7794,3 +7794,10 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Migration: added `public.annual_review_allowed_next_status(uuid, annual_review_status)` (STABLE, SECURITY DEFINER, pinned search_path — required to avoid RLS recursion) and recreated `instances_stage_update` so every reviewer slot also accepts the effective-chain-derived next status. USING clause unchanged.
 - Tests: `src/test/annualReview/stageUpdatePolicyEffectiveChain.test.ts`.
 - Docs: `docs/adr/ADR-216.md`; Policy: POLICY.md §AR-STAGE-UPDATE-EFFECTIVE-CHAIN.
+
+### v2.66.217 — ADR-217 Admin System Score correction from the review page (2026-07-31)
+- Feature: admin-only "Update system scores" button beside "Fill eligibility inputs" on the Annual Review detail page opens a dialog to correct raw achievement values (LTI, STI, UA/UC NM, 5S, Trainings…). Points preview live from the template bands; carry_kra slots excluded.
+- Migration: new audit table `annual_review_system_score_edits` (admin-read, RLS) and `admin_update_system_scores_raw(uuid, jsonb, jsonb, jsonb, text)` — admin-gated, reason-mandatory, bidirectional, works on `completed`, recomputes `total_score`/`final_rating` via `annual_review_compute_final_summary`. ADR-171's monotonic bulk RPC unchanged.
+- Code: `src/services/annualReview/adminSystemScores.ts`, `src/components/annual-review/AdminSystemScoresDialog.tsx`, wiring in `TeamReviewDetailContent.tsx`.
+- Tests: `src/test/annualReview/adminSystemScores.test.ts` (6).
+- Policy: POLICY.md §AR-SYSTEM-SCORE-ADMIN-CORRECTION.
