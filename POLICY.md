@@ -5427,3 +5427,15 @@ Rules:
 4. **The window is the same window.** The KPI picker reuses the §12.2 anchored evaluation window used to raise the suggestion. It must never query its own independent range.
 5. **Manual areas remain valid.** KPI selection augments free-text improvement areas; it is never mandatory, because non-KPI gaps (behaviour, compliance) must remain expressible.
 6. **Published policy parity.** The PMS Policy document (§12 Performance Improvement Plans, `app_settings.pms_policy_content`) carries the approved PIP standard §12.1–§12.12; the PIP draft numbering §15.x maps one-to-one onto it. Code guardrails and the published policy must be amended together.
+
+---
+
+### §AR-STAGE-FIRST-ACTION-DATE — Admin-only first-action date on Review Journey stage cards (ADR-209, 2026-07-31)
+
+1. **Audit log is the only source.** The "1st" date shown on a Review Journey stage card is the EARLIEST qualifying entry for that stage in `kpi_audit_logs`. `review_submissions.submitted_at` MUST NOT be used — it is overwritten on every resubmission after a send-back and therefore cannot express a first submission.
+2. **One resolver.** Stage→action mapping and the earliest-wins reduction live in `src/lib/review/stageFirstActionDate.ts`. No component may re-derive them inline.
+3. **Qualifying actions only.** Generic rows (`STATUS_TRANSITION`, `SUBMISSION_SCORE_CHANGED`, `RECONCILE_STATUS`) and send-backs are excluded; only a stage owner's own submission/sign-off (including backfill and admin-data-entry equivalents) counts.
+4. **Admin-only.** The label renders only when `effectiveRole === 'admin'`, so the admin role-switch mask is honoured. Non-admins see the card unchanged.
+5. **Read-only.** Presentation only — no schema, no writes, no workflow effect. Absence of a date renders nothing (never a placeholder that implies "not submitted").
+
+**Guard.** `src/test/stageFirstActionDate.test.ts`, `src/test/reviewStageCardFirstActionDate.test.tsx`.
