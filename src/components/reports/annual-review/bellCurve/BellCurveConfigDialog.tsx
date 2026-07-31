@@ -3,8 +3,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { BAND_LABELS, BAND_ORDER, targetsSum, validateConfig, type BellCurveConfig } from '@/lib/annualReview/bellCurve';
+import { slabCapPercent, formatSlabPercent } from '@/lib/annualReview/ratingSlab';
+import { useAnnualReviewRatingSlabs } from '@/hooks/useAnnualReviewRatingSlabs';
 import { useSaveBellCurveConfig } from '@/hooks/useBellCurveConfig';
 
 const FIELD: Record<number, keyof BellCurveConfig> = {
@@ -23,6 +26,7 @@ export function BellCurveConfigDialog({
   const [draft, setDraft] = useState<BellCurveConfig>(config);
   const [scopeCycle, setScopeCycle] = useState(false);
   const save = useSaveBellCurveConfig();
+  const { data: slabs = [] } = useAnnualReviewRatingSlabs();
 
   useEffect(() => {
     if (open) {
@@ -36,6 +40,10 @@ export function BellCurveConfigDialog({
 
   const sum = targetsSum(draft);
   const error = validateConfig(draft);
+  const capPercent = slabCapPercent(
+    slabs.length > 0 ? slabs : undefined,
+    draft.exempted_top_tiers_excluded ?? 0,
+  );
 
   const onSave = async () => {
     if (error) { toast.error(error); return; }
@@ -92,6 +100,42 @@ export function BellCurveConfigDialog({
               <Label className="text-sm">Amber threshold (±%)</Label>
               <Input type="number" className="h-10" value={String(draft.amber_threshold)} onChange={(e) => set('amber_threshold', e.target.value)} />
             </div>
+          </div>
+
+          <div className="space-y-3 border-t pt-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <Label className="text-sm">Exemption increment cap</Label>
+                <p className="text-xs text-muted-foreground">
+                  Employees made eligible through an approved exemption cannot receive the highest increment tiers.
+                </p>
+              </div>
+              <Switch
+                checked={draft.exempted_slab_cap_enabled !== false}
+                onCheckedChange={(v) => setDraft((d) => ({ ...d, exempted_slab_cap_enabled: v }))}
+              />
+            </div>
+            {draft.exempted_slab_cap_enabled !== false && (
+              <div className="flex items-center gap-3">
+                <Label className="flex-1 text-sm">Top tiers excluded</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={6}
+                  className="w-28 h-10 text-right"
+                  value={String(draft.exempted_top_tiers_excluded ?? 2)}
+                  onChange={(e) => setDraft((d) => ({
+                    ...d,
+                    exempted_top_tiers_excluded: e.target.value === '' ? 0 : Math.trunc(Number(e.target.value)),
+                  }))}
+                />
+              </div>
+            )}
+            {draft.exempted_slab_cap_enabled !== false && (
+              <p className="text-xs text-muted-foreground">
+                Exempted employees can receive at most {formatSlabPercent(capPercent)}.
+              </p>
+            )}
           </div>
 
           {cycleId && (
