@@ -1,49 +1,49 @@
+## Goal
+
+Show the **first submission / first action date** on every Review Journey stage card (Self, Manager, Skip-Level, HR PMS, Auditor, Management) as small gray text in the card header — **visible only to Admins**.
+
 ## Assumptions
 
-- "This" in item 1 = the **Create Performance Improvement Plan** form (currently a cramped modal).
-- Low-scoring KPIs come from the **same evaluation window** as the suggestion (anchor month + 3/6-month window), using the stored `review_submissions.final_score` (never recomputed client-side).
-- "KPI without formula & scoring logic" = show only **KRA → KPI name** (and the score), never `criteria` / `r5..r0` / target text.
-- PMS Policy = the DB-stored document (`app_settings.pms_policy_content`) edited via the existing Policy editor; it gets the §15 PIP draft already agreed in ADR-205/207.
+- "1st submission" = the earliest immutable `kpi_audit_logs` entry for that stage on that KPI. It stays fixed even if the KPI is sent back and re-submitted (`review_submissions.submitted_at` is overwritten on resubmit, so it is not usable for this).
+- Admin = `effectiveRole === 'admin'` from `AuthContext` (same gate used elsewhere, so the admin role-switch masking is respected).
+- Presentation-only change — no schema, no writes, no workflow logic.
 
-## Risk & Impact Report
+## Risk & Impact
 
-- **Data impact:** No schema change. `improvement_areas` stays a `text[]`; KPI selections are appended as `KRA — KPI` strings, so existing plans and reports are unaffected. Policy text is a single `app_settings` row update (previous text preserved for rollback).
-- **Workflow impact:** None. Creation guardrails (duration, cadence, overlap, RM2 gate) are untouched.
-- **UI/UX impact:** New route replaces the modal; Suggestions and "New PIP" navigate to it. Full responsive layout, sticky action bar.
-- **Regression risk:** Medium-low — the dialog is used from two places (PIP Management, Monthly Trend report). Both call sites get updated; the shared form body is extracted, not rewritten.
-- **Scalability:** KPI lookup is scoped to one employee × window (tens of rows); a hard `limit` is still applied.
-- **Rollback:** Route addition is additive; the dialog wrapper can be re-enabled by reverting two call sites. Policy revert = restore previous text.
+- **Data impact:** none. Read-only, uses the audit-log query that `KpiJourneySection` already runs (`['kpi-journey-audit-logs', kpi.id]`) — no extra network calls.
+- **Workflow/permission impact:** none. Non-admins see the card exactly as today.
+- **UI impact:** one extra line of `text-[10px] text-muted-foreground` in the stage-card header row (the red-boxed area in your screenshot). Cards keep their height on mobile because the date sits inline next to the title, wrapping only when needed.
+- **Regression risk:** low; the only shared component touched is `ReviewStageCard`, and the new prop is optional so all other call sites are unchanged.
+- **Scalability:** derivation is an O(n) pass over already-loaded logs, memoized.
 
-## Plan
+## Step-by-step
 
-### 1. Full-page create route
-- Extract the current form body into `src/components/pip/PIPCreateForm.tsx` (unchanged validation, guardrails, submit logic).
-- New page `src/pages/admin/PIPCreate.tsx` at route `/admin/pip/new`, registered in `App.tsx` under the same admin guard as `/admin/pip`.
-  - `PageHeader` with title, description, `backTo="/admin/pip"`.
-  - Two-column layout ≥`lg` (left: employee, dates, reason, areas; right: success criteria, support, milestones), single column on mobile. `max-w-7xl`, sticky bottom action bar with Cancel / Create.
-- Prefill via query params: `?employee=<id>&trigger=<source>` plus trigger context passed through router `state` (falls back to re-deriving the reason from the candidate row when state is absent).
-- `PIPCreateDialog` becomes a thin wrapper / is removed once both call sites — `PIPManagement.tsx` and `MonthlyTrendView.tsx` — navigate to the route.
-- **Verification:** `/admin/pip/new` loads standalone, browser back returns to the list, create still succeeds.
+1. **New SSOT module `src/lib/review/stageFirstActionDate.ts`**
+   - Export `STAGE_FIRST_ACTION_ACTIONS`: stage → set of qualifying audit actions.
+     - `self`: `SELF_REVIEW_SUBMITTED`, `BACKFILL_SELF_REVIEW_SUBMITTED`, `ADMIN_DATA_ENTRY_SELF`
+     - `manager`: `MANAGER_FORWARDED`, `MANAGER_NA_CONFIRMED`, `BACKFILL_MANAGER_REVIEWED`, `ADMIN_DATA_ENTRY_MANAGER`
+     - `skip_level`: `SKIP_LEVEL_FORWARDED`, `BACKFILL_SKIP_LEVEL_REVIEWED`, `ADMIN_DATA_ENTRY_SKIP_LEVEL`
+     - `hr_pms`: `HR_PMS_FORWARDED`, `HR_PMS_NA_CONFIRMED`, `BULK_STAGE_SIGNOFF_HR_PMS`, `BACKFILL_HR_PMS_REVIEWED`, `ADMIN_DATA_ENTRY_HR_PMS`
+     - `auditor`: `AUDITOR_REVIEWED`, `AUDITOR_FORWARDED`, `BULK_STAGE_SIGNOFF_AUDITOR`, `BACKFILL_AUDITOR_REVIEWED`, `ADMIN_DATA_ENTRY_AUDITOR`
+     - `management`: `MANAGEMENT_APPROVED`, `BACKFILL_MANAGEMENT_REVIEWED`, `ADMIN_DATA_ENTRY_MANAGEMENT`, `ADMIN_BULK_OVERRIDE_FORCE_APPROVE`
+   - Export `resolveStageFirstActionDates(logs)` → `Record<stage, string | null>` returning the **earliest** `created_at` per stage (generic `STATUS_TRANSITION` rows are ignored to avoid false positives).
+   - *Verification:* unit test with a log fixture containing a submit → send-back → re-submit sequence; asserts the first date wins.
 
-### 2. Areas of Improvement — low-scoring KPI picker
-- New hook `src/hooks/useLowScoringKpis.ts`: given `employeeId` + window months + threshold, fetch `kpis(id, kra_name, kpi_name, review_period, review_year)` joined to `review_submissions(final_score)` for those periods, keep rows where `final_score` is non-null and **below the PIP threshold**, exclude N/A rows, sort ascending by score.
-- New component `src/components/pip/LowScoringKpiPicker.tsx`: checkbox list grouped by KRA, each row showing `KPI name` + `Month · score` badge only (no formula, no scoring logic, no target). Empty state, skeleton while loading, disabled with a hint until an employee is selected.
-- Selections merge into `improvement_areas` alongside the existing generic chips (both kept). Zod rule unchanged: at least one area total.
-- Stored form of a KPI area: `"KRA — KPI (Mon YYYY)"`, so PIP detail/reports render it without extra joins.
-- **Verification:** unit tests for the filter/threshold/grouping helper in `src/test/pip/lowScoringKpis.test.ts`.
+2. **`ReviewStageCard.tsx`** — add optional props `firstActionAt?: string | null` and `showFirstActionDate?: boolean`. When both are set, render in the header row, right of the title:
+   `1st: 05 Jun 2026` in `text-[10px] text-muted-foreground` with a tooltip `First recorded action at this stage (admin-only)`. Nothing renders when the date is unknown.
 
-### 3. PMS Policy document update
-- Update the stored PMS Policy (`app_settings.pms_policy_content`) to include the full **§15 Performance Improvement Plan** section from the ADR-205/207 draft: triggers (§15.2 monthly, §15.3 annual), initiation and RM2 sign-off (§15.5), support & resources (§15.6), duration/cadence and no-overlap (§15.7), employee acknowledgement (§15.9), outcomes, and the 3-month sustain window (§15.12) — noting all numeric bounds are admin-configurable.
-- Mirror the same section into `POLICY.md`, add a `DOCUMENTATION.md` version-history entry, and write ADR-208 covering items 1, 2 and 4.
+3. **`KpiJourneySection.tsx`** — memoize `resolveStageFirstActionDates(auditLogs)` (logs are already fetched here), read `effectiveRole` from `useAuth()`, and pass `firstActionAt={firstActionDates[stage]}` + `showFirstActionDate={effectiveRole === 'admin'}` into each `ReviewStageCard`. Same wiring for the "Previous Months" mini-cards is **out of scope** (they use a separate compact renderer).
 
-### 4. "Initiate PIP" must preselect the employee
-- **Root cause (confirmed in `PIPCreateDialog.tsx` line 233):** the employee `Select` is bound with `defaultValue={field.value}` instead of `value={field.value}`. The dialog mounts once with an empty default, so the later `form.setValue('employee_id', …)` updates form state but the trigger keeps rendering the placeholder — exactly the blank field in your screenshot.
-- Fix: controlled `value={field.value}` in the extracted form; on the new route the employee also arrives via the URL param, so the value is correct on first render. When arriving from a suggestion the field is shown read-only with a "Change employee" affordance so the trigger context stays consistent with the chosen person.
-- **Verification:** regression test asserting the form renders the preselected employee's name, plus a manual pass from Suggestions → Initiate PIP.
+4. **Docs/policy sync** — add `docs/adr/ADR-209.md` (Stage first-action date visibility) and a `POLICY §AR-STAGE-FIRST-ACTION-DATE` entry stating: date derives from the earliest stage audit action, never from `submitted_at`, and is admin-only.
 
-## Technical notes
+## UI changes (exact)
 
-- Score source stays `review_submissions.final_score` (universal scoring SSOT) — the picker never recomputes.
-- Threshold read from the existing `getPipThreshold()` setting; no hardcoded 2.00.
-- Window months reuse `trailingWindow()` / `buildMonthRange()` from `usePIPCandidates` so the picker and the suggestion row can never diverge.
-- Tests: existing 45 PIP tests must stay green; new tests added for the KPI helper and prefill.
+- **Where:** Review Journey stage cards inside the KPI review sheet (`KpiReviewPanel` → `KpiJourneySection`) — the header row of each card, exactly the red-boxed spot in your screenshot.
+- **What:** small gray `1st: DD MMM YYYY` label, tooltip on hover/tap.
+- **Interaction:** none; purely informational, no layout shift for non-admins.
+- **Responsive:** the label sits in a flex header with `min-w-0` + wrap so narrow mobile cards push it to a second line rather than truncating the stage title.
+
+## Tests
+
+- `src/test/stageFirstActionDate.test.ts` — earliest-wins, resubmit ignored, unknown stage → null, backfill/admin-data-entry actions counted, `STATUS_TRANSITION` ignored.
+- `src/test/reviewStageCardFirstActionDate.test.tsx` — renders the date when `showFirstActionDate` is true, renders nothing when false or when the date is null.
