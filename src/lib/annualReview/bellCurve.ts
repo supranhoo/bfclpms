@@ -10,9 +10,9 @@ import {
   DEFAULT_RATING_SLABS,
   describeSlab,
   resolveSlab,
-  toRatingOutOf5,
   type RatingSlab,
 } from './ratingSlab';
+import { effectiveRating } from './effectiveRating';
 
 export type RatingBand = 1 | 2 | 3 | 4 | 5;
 export type ComplianceLevel = 'green' | 'amber' | 'red';
