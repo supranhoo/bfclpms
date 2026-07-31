@@ -10,20 +10,25 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchComprehensiveReport, type ComprehensiveRow } from '@/services/annualReview/comprehensiveReport';
 import {
-  computeDistribution,
-  computeSummary,
-  groupDistribution,
-  heatmapMatrix,
+  BAND_MODE_LABELS,
+  computeBands,
+  groupBands,
+  heatmapBands,
+  makeBanding,
   matchesScoringSource,
   normalizationHints,
+  summarize,
   SCORING_SOURCE_LABELS,
   SCORING_SOURCE_ORDER,
   scoringSourceOf,
+  type BandMode,
+  type BandRow,
   type BellCurveInput,
   type GroupKey,
   type ScoringSource,
 } from '@/lib/annualReview/bellCurve';
 import { useBellCurveConfig } from '@/hooks/useBellCurveConfig';
+import { useAnnualReviewRatingSlabs } from '@/hooks/useAnnualReviewRatingSlabs';
 import { BellCurveChart } from './bellCurve/BellCurveChart';
 import { DistributionBarChart } from './bellCurve/DistributionBarChart';
 import { VarianceTable } from './bellCurve/VarianceTable';
@@ -63,8 +68,10 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
     staleTime: 60_000,
   });
   const { data: config } = useBellCurveConfig(cycleId);
+  const { data: slabs = [] } = useAnnualReviewRatingSlabs();
 
   const [view, setView] = useState<GroupKey>('department');
+  const [bandMode, setBandMode] = useState<BandMode>('rating');
   const [bu, setBu] = useState(ALL);
   const [dept, setDept] = useState(ALL);
   const [manager, setManager] = useState(ALL);
@@ -131,18 +138,28 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
     });
   }, [filtered, selectedIds, view]);
 
-  const bands = useMemo(() => (config ? computeDistribution(scoped, config) : []), [scoped, config]);
-  const summary = useMemo(() => (config ? computeSummary(scoped, config) : null), [scoped, config]);
-  const groups = useMemo(() => (config ? groupDistribution(scoped, view, config) : []), [scoped, view, config]);
-  const heat = useMemo(() => (config ? heatmapMatrix(filtered, view, config) : []), [filtered, view, config]);
-  const hints = useMemo(() => (config ? normalizationHints(bands, config) : []), [bands, config]);
+  const banding = useMemo(
+    () => (config ? makeBanding(bandMode, config, slabs) : null),
+    [config, bandMode, slabs],
+  );
+  const bands = useMemo(() => (config && banding ? computeBands(scoped, banding, config) : []), [scoped, banding, config]);
+  const summary = useMemo(() => (config && banding ? summarize(scoped, banding, config) : null), [scoped, banding, config]);
+  const groups = useMemo(() => (config && banding ? groupBands(scoped, view, banding, config) : []), [scoped, view, banding, config]);
+  const heat = useMemo(() => (config && banding ? heatmapBands(filtered, view, banding, config) : []), [filtered, view, banding, config]);
+  const hints = useMemo(
+    () => (config && banding?.hasTargets ? normalizationHints(bands as BandRow[], config) : []),
+    [bands, banding, config],
+  );
 
   if (!cycleId) {
     return <Card><CardContent className="p-8 text-center text-muted-foreground">Pick a cycle to view the bell curve.</CardContent></Card>;
   }
-  if (isLoading || !config || !summary) {
+  if (isLoading || !config || !summary || !banding) {
     return <Card><CardContent className="p-8 flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading distribution…</CardContent></Card>;
   }
+
+  const hasTargets = banding.hasTargets;
+  const modeNote = `Bands: ${BAND_MODE_LABELS[bandMode]}`;
 
   const viewLabel = view === 'department' ? 'Department'
     : view === 'business_unit' ? 'Business Unit'
@@ -155,12 +172,18 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
           <div>
             <CardTitle className="text-base">Bell Curve Analysis</CardTitle>
             <CardDescription>
-              Target {config.target_5}/{config.target_4}/{config.target_3}/{config.target_2}/{config.target_1}% ·
-              green ±{config.green_threshold}% · amber ±{config.amber_threshold}%
+              {hasTargets ? (
+                <>
+                  Target {config.target_5}/{config.target_4}/{config.target_3}/{config.target_2}/{config.target_1}% ·
+                  green ±{config.green_threshold}% · amber ±{config.amber_threshold}%
+                </>
+              ) : (
+                <>Grouped by increment slab (ADR-212) — no targets are defined for slab bands</>
+              )}
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            {canConfigure && (
+            {canConfigure && hasTargets && (
               <Button variant="outline" size="sm" className="gap-2" onClick={() => setConfigOpen(true)}>
                 <Settings2 className="h-4 w-4" /> Configure targets
               </Button>
@@ -168,20 +191,29 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
             <Button
               variant="outline" size="sm" className="gap-2"
               disabled={scoped.length === 0}
-              onClick={() => exportBellCurveExcel(scoped, config, cycleName, filterNote).catch((e) => toast.error((e as Error).message))}
+              onClick={() => exportBellCurveExcel(scoped, config, cycleName, `${filterNote} · ${modeNote}`, banding).catch((e) => toast.error((e as Error).message))}
             >
               <Download className="h-4 w-4" /> Excel
             </Button>
             <Button
               variant="outline" size="sm" className="gap-2"
               disabled={scoped.length === 0}
-              onClick={() => exportBellCurvePdf(scoped, config, cycleName, filterNote).catch((e) => toast.error((e as Error).message))}
+              onClick={() => exportBellCurvePdf(scoped, config, cycleName, `${filterNote} · ${modeNote}`, banding).catch((e) => toast.error((e as Error).message))}
             >
               <FileText className="h-4 w-4" /> PDF
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs">Band mode</Label>
+            <Tabs value={bandMode} onValueChange={(v) => setBandMode(v as BandMode)}>
+              <TabsList className="flex-wrap h-auto">
+                <TabsTrigger value="rating">Rating bands (1–5)</TabsTrigger>
+                <TabsTrigger value="slab">Slab %</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
           <Tabs value={view} onValueChange={(v) => setView(v as GroupKey)}>
             <TabsList className="flex-wrap h-auto">
               <TabsTrigger value="department">Department</TabsTrigger>
@@ -217,18 +249,23 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard label="Total Employees" value={summary.totalEmployees} hint={`${summary.unratedEmployees} unrated`} />
         <KpiCard label="Average Rating" value={summary.averageRating !== null ? summary.averageRating.toFixed(2) : '—'} hint="out of 5" />
-        <KpiCard label="Highest Rating Count" value={summary.highestBandCount} hint="Outstanding (5)" />
-        <KpiCard label="Lowest Rating Count" value={summary.lowestBandCount} hint="Unsatisfactory (1)" />
-        <KpiCard label="Bell Curve Compliance" value={`${summary.compliancePct}%`} hint={`${summary.greenBands} green · ${summary.amberBands} amber · ${summary.redBands} red`} />
+        <KpiCard label={hasTargets ? 'Highest Rating Count' : 'Top Slab Count'} value={summary.highestBandCount} hint={summary.highestBandLabel} />
+        <KpiCard label={hasTargets ? 'Lowest Rating Count' : 'Lowest Slab Count'} value={summary.lowestBandCount} hint={summary.lowestBandLabel} />
+        {hasTargets ? (
+          <KpiCard label="Bell Curve Compliance" value={`${summary.compliancePct}%`} hint={`${summary.greenBands} green · ${summary.amberBands} amber · ${summary.redBands} red`} />
+        ) : (
+          <KpiCard label="Bands In Use" value={`${summary.bandsInUse}/${banding.defs.length}`} hint="slabs with at least one employee" />
+        )}
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
-        <BellCurveChart bands={bands} config={config} denom={summary.ratedEmployees} />
-        <DistributionBarChart bands={bands} />
+        <BellCurveChart bands={bands} config={config} denom={summary.ratedEmployees} hasTargets={hasTargets} />
+        <DistributionBarChart bands={bands} hasTargets={hasTargets} />
       </div>
 
-      <VarianceTable bands={bands} />
+      <VarianceTable bands={bands} hasTargets={hasTargets} bandTitle={hasTargets ? 'Rating' : 'Slab'} />
 
+      {hasTargets && (
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2"><Lightbulb className="h-4 w-4" /> Normalization recommendations</CardTitle>
@@ -249,10 +286,13 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
           )}
         </CardContent>
       </Card>
+      )}
 
       <RatingHeatmap
         rows={heat}
         title={viewLabel}
+        defs={banding.defs}
+        hasTargets={hasTargets}
         selectedIds={selectedIds}
         onToggle={(id) => setGroupSel((s) => ({
           ...s,
@@ -274,8 +314,8 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
                 <th className="p-3 text-left font-medium">{viewLabel}</th>
                 <th className="p-3 text-right font-medium">Rated</th>
                 <th className="p-3 text-right font-medium">Avg rating</th>
-                <th className="p-3 text-right font-medium">Compliance %</th>
-                <th className="p-3 text-left font-medium">Status</th>
+                {hasTargets && <th className="p-3 text-right font-medium">Compliance %</th>}
+                {hasTargets && <th className="p-3 text-left font-medium">Status</th>}
               </tr>
             </thead>
             <tbody>
@@ -284,12 +324,12 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
                   <td className="p-3 font-medium">{g.name}</td>
                   <td className="p-3 text-right tabular-nums">{g.summary.ratedEmployees}</td>
                   <td className="p-3 text-right tabular-nums">{g.summary.averageRating?.toFixed(2) ?? '—'}</td>
-                  <td className="p-3 text-right tabular-nums">{g.summary.compliancePct}%</td>
-                  <td className="p-3"><ComplianceChip level={g.worstCompliance} /></td>
+                  {hasTargets && <td className="p-3 text-right tabular-nums">{g.summary.compliancePct}%</td>}
+                  {hasTargets && <td className="p-3"><ComplianceChip level={g.worstCompliance ?? 'green'} /></td>}
                 </tr>
               ))}
               {groups.length === 0 && (
-                <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">No data for the current filters.</td></tr>
+                <tr><td colSpan={hasTargets ? 5 : 3} className="p-6 text-center text-muted-foreground">No data for the current filters.</td></tr>
               )}
             </tbody>
           </table>

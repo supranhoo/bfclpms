@@ -6,7 +6,13 @@
  * (`toRatingOutOf5(total_score)`); this module only bands, aggregates and
  * compares them against the admin-configured target distribution.
  */
-import { toRatingOutOf5 } from './ratingSlab';
+import {
+  DEFAULT_RATING_SLABS,
+  describeSlab,
+  resolveSlab,
+  toRatingOutOf5,
+  type RatingSlab,
+} from './ratingSlab';
 
 export type RatingBand = 1 | 2 | 3 | 4 | 5;
 export type ComplianceLevel = 'green' | 'amber' | 'red';
@@ -166,39 +172,149 @@ export function complianceFor(variance: number, config: BellCurveConfig): Compli
   return 'red';
 }
 
-export interface BandRow {
-  band: RatingBand;
+/* ------------------------------------------------------------------ *
+ * ADR-218b — band modes: rating bands (1..5) or increment slab bands.
+ * ------------------------------------------------------------------ */
+
+export type BandMode = 'rating' | 'slab';
+
+export const BAND_MODE_LABELS: Record<BandMode, string> = {
+  rating: 'Rating bands',
+  slab: 'Slab %',
+};
+
+/** One column / bucket of a distribution, independent of the band mode. */
+export interface BandDef {
+  /** Stable identity used for sorting, keys and map lookups. */
+  key: string;
+  /** Primary label, e.g. "Outstanding" or "12%". */
   label: string;
-  count: number;
-  actualPct: number;
-  targetPct: number;
-  targetCount: number;
-  variancePct: number;
-  compliance: ComplianceLevel;
+  /** Secondary label, e.g. "(5)" or "3.50 – under 4.00". */
+  sub: string;
+  /** Target share of the population; null when the mode has no targets. */
+  targetPct: number | null;
 }
 
-export function computeDistribution(rows: BellCurveInput[], config: BellCurveConfig): BandRow[] {
+/** Rating-mode band definitions, lowest → highest. */
+export function ratingBandDefs(config: BellCurveConfig): BandDef[] {
+  return BAND_ORDER.map((band) => ({
+    key: String(band),
+    label: BAND_LABELS[band],
+    sub: `(${band})`,
+    targetPct: targetFor(config, band),
+  }));
+}
+
+function activeSlabs(slabs: ReadonlyArray<RatingSlab>): RatingSlab[] {
+  const active = slabs.filter((s) => s.is_active !== false);
+  const base = active.length > 0 ? active : (DEFAULT_RATING_SLABS as RatingSlab[]);
+  return base.slice().sort((a, b) => a.rating_from - b.rating_from);
+}
+
+export function slabBandKey(slab: RatingSlab): string {
+  return `slab:${slab.rating_from}`;
+}
+
+/** Slab-mode band definitions, lowest → highest. No targets are defined. */
+export function slabBandDefs(slabs: ReadonlyArray<RatingSlab> = DEFAULT_RATING_SLABS): BandDef[] {
+  return activeSlabs(slabs).map((s) => ({
+    key: slabBandKey(s),
+    label: `${Number(s.increment_percent)}%`,
+    sub: describeSlab(s),
+    targetPct: null,
+  }));
+}
+
+/** Resolved banding strategy shared by every chart, table and export. */
+export interface Banding {
+  mode: BandMode;
+  defs: BandDef[];
+  /** Bucket key for a /5 rating, or null when it falls outside every band. */
+  keyOf: (rating: number) => string | null;
+  hasTargets: boolean;
+}
+
+export function makeBanding(
+  mode: BandMode,
+  config: BellCurveConfig,
+  slabs: ReadonlyArray<RatingSlab> = DEFAULT_RATING_SLABS,
+): Banding {
+  if (mode === 'slab') {
+    const resolved = activeSlabs(slabs);
+    return {
+      mode,
+      defs: slabBandDefs(resolved),
+      keyOf: (rating) => {
+        const slab = resolveSlab(rating, resolved);
+        return slab ? slabBandKey(slab) : null;
+      },
+      hasTargets: false,
+    };
+  }
+  return {
+    mode: 'rating',
+    defs: ratingBandDefs(config),
+    keyOf: (rating) => {
+      const band = bandForRating(rating);
+      return band === null ? null : String(band);
+    },
+    hasTargets: true,
+  };
+}
+
+/** A single distribution row. Target fields are null when the mode has no targets. */
+export interface DistRow {
+  key: string;
+  label: string;
+  sub: string;
+  count: number;
+  actualPct: number;
+  targetPct: number | null;
+  targetCount: number | null;
+  variancePct: number | null;
+  compliance: ComplianceLevel | null;
+}
+
+/** Rating-mode row — keeps the numeric band for legacy consumers. */
+export interface BandRow extends DistRow {
+  band: RatingBand;
+}
+
+export function computeBands(
+  rows: BellCurveInput[],
+  banding: Banding,
+  config: BellCurveConfig,
+): DistRow[] {
   const rated = ratedRows(rows);
   const denom = rated.length;
-  const counts = new Map<RatingBand, number>();
-  for (const r of rated) counts.set(r.band, (counts.get(r.band) ?? 0) + 1);
-
-  return BAND_ORDER.map((band) => {
-    const count = counts.get(band) ?? 0;
+  const counts = new Map<string, number>();
+  for (const r of rated) {
+    const key = banding.keyOf(r.rating);
+    if (key === null) continue;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return banding.defs.map((def) => {
+    const count = counts.get(def.key) ?? 0;
     const actualPct = denom > 0 ? round1((count / denom) * 100) : 0;
-    const targetPct = targetFor(config, band);
-    const variancePct = round1(actualPct - targetPct);
+    if (def.targetPct === null) {
+      return { ...def, count, actualPct, targetCount: null, variancePct: null, compliance: null };
+    }
+    const variancePct = round1(actualPct - def.targetPct);
     return {
-      band,
-      label: BAND_LABELS[band],
+      ...def,
       count,
       actualPct,
-      targetPct,
-      targetCount: Math.round((targetPct / 100) * denom),
+      targetCount: Math.round((def.targetPct / 100) * denom),
       variancePct,
       compliance: complianceFor(variancePct, config),
     };
   });
+}
+
+/** Rating-mode distribution (ADR-218 behaviour, unchanged). */
+export function computeDistribution(rows: BellCurveInput[], config: BellCurveConfig): BandRow[] {
+  return computeBands(rows, makeBanding('rating', config), config)
+    .map((r) => ({ ...r, band: Number(r.key) as RatingBand }));
 }
 
 export interface BellCurveSummary {
@@ -213,28 +329,47 @@ export interface BellCurveSummary {
   greenBands: number;
   amberBands: number;
   redBands: number;
+  /** Number of bands with at least one employee (used when no targets exist). */
+  bandsInUse: number;
+  /** Labels of the top / bottom band, so KPI cards stay mode-agnostic. */
+  highestBandLabel: string;
+  lowestBandLabel: string;
 }
 
-export function computeSummary(rows: BellCurveInput[], config: BellCurveConfig): BellCurveSummary {
+export function summarize(
+  rows: BellCurveInput[],
+  banding: Banding,
+  config: BellCurveConfig,
+): BellCurveSummary {
   const eligible = rows.filter((r) => !r.is_excluded);
   const rated = ratedRows(rows);
-  const bands = computeDistribution(rows, config);
+  const bands = computeBands(rows, banding, config);
   const avg = rated.length > 0 ? round2(rated.reduce((a, r) => a + r.rating, 0) / rated.length) : null;
   const green = bands.filter((b) => b.compliance === 'green').length;
   const amber = bands.filter((b) => b.compliance === 'amber').length;
   const red = bands.filter((b) => b.compliance === 'red').length;
+  const top = bands[bands.length - 1];
+  const bottom = bands[0];
   return {
     totalEmployees: eligible.length,
     ratedEmployees: rated.length,
     unratedEmployees: eligible.length - rated.length,
     averageRating: avg,
-    highestBandCount: bands.find((b) => b.band === 5)?.count ?? 0,
-    lowestBandCount: bands.find((b) => b.band === 1)?.count ?? 0,
-    compliancePct: round1((green / BAND_ORDER.length) * 100),
+    highestBandCount: top?.count ?? 0,
+    lowestBandCount: bottom?.count ?? 0,
+    highestBandLabel: top ? `${top.label} ${top.sub}` : '—',
+    lowestBandLabel: bottom ? `${bottom.label} ${bottom.sub}` : '—',
+    compliancePct: bands.length > 0 ? round1((green / bands.length) * 100) : 0,
     greenBands: green,
     amberBands: amber,
     redBands: red,
+    bandsInUse: bands.filter((b) => b.count > 0).length,
   };
+}
+
+/** Rating-mode summary (ADR-218 behaviour, unchanged). */
+export function computeSummary(rows: BellCurveInput[], config: BellCurveConfig): BellCurveSummary {
+  return summarize(rows, makeBanding('rating', config), config);
 }
 
 export type GroupKey = 'department' | 'business_unit' | 'division' | 'manager';
@@ -252,13 +387,14 @@ export interface GroupDistribution {
   id: string;
   name: string;
   summary: BellCurveSummary;
-  bands: BandRow[];
-  worstCompliance: ComplianceLevel;
+  bands: DistRow[];
+  worstCompliance: ComplianceLevel | null;
 }
 
-export function groupDistribution(
+export function groupBands(
   rows: BellCurveInput[],
   key: GroupKey,
+  banding: Banding,
   config: BellCurveConfig,
 ): GroupDistribution[] {
   const buckets = new Map<string, { name: string; rows: BellCurveInput[] }>();
@@ -271,21 +407,32 @@ export function groupDistribution(
   }
   return Array.from(buckets.entries())
     .map(([id, bucket]) => {
-      const bands = computeDistribution(bucket.rows, config);
-      const worst: ComplianceLevel = bands.some((b) => b.compliance === 'red')
-        ? 'red'
-        : bands.some((b) => b.compliance === 'amber')
-          ? 'amber'
-          : 'green';
+      const bands = computeBands(bucket.rows, banding, config);
+      const worst: ComplianceLevel | null = !banding.hasTargets
+        ? null
+        : bands.some((b) => b.compliance === 'red')
+          ? 'red'
+          : bands.some((b) => b.compliance === 'amber')
+            ? 'amber'
+            : 'green';
       return {
         id,
         name: bucket.name,
-        summary: computeSummary(bucket.rows, config),
+        summary: summarize(bucket.rows, banding, config),
         bands,
         worstCompliance: worst,
       };
     })
     .sort((a, b) => b.summary.ratedEmployees - a.summary.ratedEmployees);
+}
+
+/** Rating-mode grouping (ADR-218 behaviour, unchanged). */
+export function groupDistribution(
+  rows: BellCurveInput[],
+  key: GroupKey,
+  config: BellCurveConfig,
+): GroupDistribution[] {
+  return groupBands(rows, key, makeBanding('rating', config), config);
 }
 
 export interface NormalizationHint {
@@ -297,10 +444,10 @@ export interface NormalizationHint {
 }
 
 /** Plain-language normalization suggestions for a manager / group. */
-export function normalizationHints(bands: BandRow[], config: BellCurveConfig): NormalizationHint[] {
+export function normalizationHints(bands: BandRow[], _config: BellCurveConfig): NormalizationHint[] {
   const hints: NormalizationHint[] = [];
   for (const b of bands) {
-    if (b.compliance === 'green') continue;
+    if (b.compliance === 'green' || b.compliance === null || b.targetCount === null) continue;
     const delta = b.count - b.targetCount;
     if (delta === 0) continue;
     const over = delta > 0;
@@ -326,26 +473,42 @@ export interface HeatmapRow {
   id: string;
   name: string;
   total: number;
-  cells: Array<{ band: RatingBand; count: number; pct: number; variancePct: number; compliance: ComplianceLevel }>;
+  cells: Array<{
+    key: string;
+    count: number;
+    pct: number;
+    variancePct: number | null;
+    compliance: ComplianceLevel | null;
+  }>;
 }
 
-export function heatmapMatrix(
+export function heatmapBands(
   rows: BellCurveInput[],
   key: GroupKey,
+  banding: Banding,
   config: BellCurveConfig,
 ): HeatmapRow[] {
-  return groupDistribution(rows, key, config).map((g) => ({
+  return groupBands(rows, key, banding, config).map((g) => ({
     id: g.id,
     name: g.name,
     total: g.summary.ratedEmployees,
     cells: g.bands.map((b) => ({
-      band: b.band,
+      key: b.key,
       count: b.count,
       pct: b.actualPct,
       variancePct: b.variancePct,
       compliance: b.compliance,
     })),
   }));
+}
+
+/** Rating-mode heat map (ADR-218 behaviour, unchanged). */
+export function heatmapMatrix(
+  rows: BellCurveInput[],
+  key: GroupKey,
+  config: BellCurveConfig,
+): HeatmapRow[] {
+  return heatmapBands(rows, key, makeBanding('rating', config), config);
 }
 
 /**

@@ -5,11 +5,14 @@ import {
   complianceFor,
   computeDistribution,
   computeSummary,
+  computeBands,
   groupDistribution,
   heatmapMatrix,
+  makeBanding,
   matchesScoringSource,
   normalizationHints,
   scoringSourceOf,
+  summarize,
   targetCurvePoints,
   targetsSum,
   validateConfig,
@@ -177,5 +180,57 @@ describe('bellCurve — KRA / Non-KRA scoring source (ADR-218a)', () => {
     expect(computeSummary(kraOnly, cfg).ratedEmployees).toBe(2);
     expect(computeSummary(nonOnly, cfg).ratedEmployees).toBe(2);
     expect(computeSummary(all, cfg).ratedEmployees).toBe(5);
+  });
+});
+
+describe('ADR-218b — slab band mode', () => {
+  const cfg = DEFAULT_BELL_CURVE_CONFIG;
+  const row = (id: string, score: number | null): BellCurveInput => ({
+    instance_id: id, employee_code: id, employee_name: id, total_score: score,
+  });
+
+  it('buckets employees into slab bands using the ADR-212 SSOT', () => {
+    const banding = makeBanding('slab', cfg);
+    // ratings: 1.5, 2.00, 3.00, 4.50
+    const rows = [row('a', 30), row('b', 40), row('c', 60), row('d', 90)];
+    const bands = computeBands(rows, banding, cfg);
+    const byLabel = Object.fromEntries(bands.map((b) => [b.label, b.count]));
+    expect(byLabel['0%']).toBe(1);
+    expect(byLabel['4%']).toBe(1);
+    expect(byLabel['8%']).toBe(1);
+    expect(byLabel['20%']).toBe(1);
+    expect(bands.reduce((a, b) => a + b.count, 0)).toBe(4);
+  });
+
+  it('has no targets, variance or compliance in slab mode', () => {
+    const banding = makeBanding('slab', cfg);
+    expect(banding.hasTargets).toBe(false);
+    const bands = computeBands([row('a', 90)], banding, cfg);
+    for (const b of bands) {
+      expect(b.targetPct).toBeNull();
+      expect(b.variancePct).toBeNull();
+      expect(b.compliance).toBeNull();
+    }
+  });
+
+  it('excludes unrated employees from the slab denominator', () => {
+    const banding = makeBanding('slab', cfg);
+    const rows = [row('a', 90), row('b', null)];
+    const bands = computeBands(rows, banding, cfg);
+    const total = bands.reduce((a, b) => a + b.actualPct, 0);
+    expect(Math.round(total)).toBe(100);
+    expect(summarize(rows, banding, cfg).unratedEmployees).toBe(1);
+  });
+
+  it('falls back to the seeded slab master when none is configured', () => {
+    expect(makeBanding('slab', cfg, []).defs).toHaveLength(7);
+  });
+
+  it('leaves rating-mode results unchanged', () => {
+    const rows = [row('a', 90), row('b', 60)];
+    const viaMode = computeBands(rows, makeBanding('rating', cfg), cfg);
+    const legacy = computeDistribution(rows, cfg);
+    expect(viaMode.map((b) => b.count)).toEqual(legacy.map((b) => b.count));
+    expect(legacy.every((b) => b.compliance !== null)).toBe(true);
   });
 });

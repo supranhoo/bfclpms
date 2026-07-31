@@ -1,20 +1,24 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
-import type { BandRow } from '@/lib/annualReview/bellCurve';
+import type { DistRow } from '@/lib/annualReview/bellCurve';
 
-export function DistributionBarChart({ bands }: { bands: BandRow[] }) {
+export function DistributionBarChart({
+  bands, hasTargets = true,
+}: { bands: DistRow[]; hasTargets?: boolean }) {
   const data = bands.map((b) => ({
     name: b.label,
-    short: `${b.label.split(' ')[0]} (${b.band})`,
+    short: hasTargets ? `${b.label.split(' ')[0]} ${b.sub}` : b.label,
     Actual: b.count,
-    Target: b.targetCount,
+    Target: b.targetCount ?? 0,
     actualPct: b.actualPct,
   }));
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Distribution Bar Chart</CardTitle>
-        <CardDescription>Actual vs target employee count per rating</CardDescription>
+        <CardDescription>
+          {hasTargets ? 'Actual vs target employee count per rating' : 'Employee count per increment slab'}
+        </CardDescription>
       </CardHeader>
       <CardContent className="h-[280px]">
         <ResponsiveContainer width="100%" height="100%">
@@ -34,7 +38,7 @@ export function DistributionBarChart({ bands }: { bands: BandRow[] }) {
             <Bar dataKey="Actual" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]}>
               <LabelList dataKey="actualPct" position="top" formatter={(v: number) => `${v}%`} className="fill-muted-foreground" style={{ fontSize: 10 }} />
             </Bar>
-            <Bar dataKey="Target" fill="hsl(var(--muted-foreground))" fillOpacity={0.45} radius={[4, 4, 0, 0]} />
+            {hasTargets && <Bar dataKey="Target" fill="hsl(var(--muted-foreground))" fillOpacity={0.45} radius={[4, 4, 0, 0]} />}
           </BarChart>
         </ResponsiveContainer>
       </CardContent>
