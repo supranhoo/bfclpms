@@ -100,6 +100,14 @@ export interface BellCurveInput {
   kra_weight?: number | null;
   total_score: number | null;
   is_excluded?: boolean;
+  /** ADR-179 stage ratings (/5) surfaced in the heat map drill-down. */
+  dept_head_rating_5?: number | null;
+  bu_head_rating_5?: number | null;
+  /** ADR-220 — admin calibration of the final rating. */
+  calibrated_rating?: number | null;
+  calibration_reason?: string | null;
+  calibrated_by_name?: string | null;
+  calibrated_at?: string | null;
 }
 
 /** ADR-218a — KRA / Non-KRA scoring source filter values. */
