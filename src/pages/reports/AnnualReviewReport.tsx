@@ -25,7 +25,7 @@ import {
 } from '@/lib/annualReview/ratingSlab';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useAnnualReviewCalibrations } from '@/hooks/useAnnualReviewCalibrations';
-import { effectiveRating, isCalibrated } from '@/lib/annualReview/effectiveRating';
+import { effectiveRating } from '@/lib/annualReview/effectiveRating';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { CalibrateRatingDialog, type CalibrationTarget } from '@/components/annual-review/CalibrateRatingDialog';
