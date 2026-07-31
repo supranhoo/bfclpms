@@ -8,6 +8,7 @@
 
 export type ChangeCategory =
   | 'employee_details'
+  | 'reporting_org'
   | 'status'
   | 'workflow_mapping'
   | 'annual_review';
@@ -30,6 +31,7 @@ export interface ChangeHistoryRow {
 
 export const CATEGORY_LABEL: Record<string, string> = {
   employee_details: 'Employee Details',
+  reporting_org: 'Reporting & Org',
   status: 'Active / Status',
   workflow_mapping: 'Workflow Mapping',
   annual_review: 'Annual Review',
@@ -37,10 +39,30 @@ export const CATEGORY_LABEL: Record<string, string> = {
 
 export const CATEGORY_OPTIONS: { value: ChangeCategory; label: string }[] = [
   { value: 'employee_details', label: CATEGORY_LABEL.employee_details },
+  { value: 'reporting_org', label: CATEGORY_LABEL.reporting_org },
   { value: 'status', label: CATEGORY_LABEL.status },
   { value: 'workflow_mapping', label: CATEGORY_LABEL.workflow_mapping },
   { value: 'annual_review', label: CATEGORY_LABEL.annual_review },
 ];
+
+/**
+ * ADR-215: fields that describe where a person sits in the organisation.
+ * Kept next to the labels so the client filter and the server category
+ * expression in `get_change_history` cannot drift apart silently.
+ */
+export const REPORTING_ORG_FIELDS = [
+  'reporting_manager_id',
+  'functional_manager_id',
+  'department_id',
+  'designation',
+] as const;
+
+/** Category a profile field change belongs to (mirrors the RPC). */
+export function categoryForField(field: string): ChangeCategory {
+  if (field === 'is_active' || field === 'employment_status') return 'status';
+  if ((REPORTING_ORG_FIELDS as readonly string[]).includes(field)) return 'reporting_org';
+  return 'employee_details';
+}
 
 const FIELD_LABEL: Record<string, string> = {
   full_name: 'Full Name',
