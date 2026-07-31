@@ -100,8 +100,9 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
       (bu === ALL || r.business_unit_id === bu)
       && (dept === ALL || r.department_id === dept)
       && (manager === ALL || r.manager_id === manager)
-      && (division === ALL || r.division_id === division));
-  }, [rows, isManagerScope, user?.id, bu, dept, manager, division]);
+      && (division === ALL || r.division_id === division)
+      && (pmsGrade === ALL || r.grade === pmsGrade));
+  }, [rows, isManagerScope, user?.id, bu, dept, manager, division, pmsGrade]);
 
   // Heat map always lists every group in the filtered set; the selection
   // narrows the charts, KPIs and exports only.
