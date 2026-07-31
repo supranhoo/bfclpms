@@ -9,6 +9,8 @@ import {
   computeSummary,
   groupDistribution,
   ratingOf,
+  scoringSourceOf,
+  SCORING_SOURCE_LABELS,
   targetCurvePoints,
   type BellCurveConfig,
   type BellCurveInput,
@@ -34,6 +36,7 @@ function employeeRows(rows: BellCurveInput[]) {
         'Final Score': r.total_score ?? '',
         'Rating (/5)': rating ?? '',
         'Rating Band': band ? `${BAND_LABELS[band]} (${band})` : 'Unrated',
+        'Scoring Source': SCORING_SOURCE_LABELS[scoringSourceOf(r)],
       };
     });
 }
@@ -59,6 +62,7 @@ export async function exportBellCurveExcel(
   rows: BellCurveInput[],
   config: BellCurveConfig,
   cycleName: string,
+  filterNote?: string,
 ) {
   const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
@@ -86,6 +90,7 @@ export async function exportBellCurveExcel(
     wb,
     XLSX.utils.json_to_sheet([{
       Cycle: cycleName,
+      Filters: filterNote ?? '',
       'Total Employees': summary.totalEmployees,
       'Rated Employees': summary.ratedEmployees,
       Unrated: summary.unratedEmployees,
@@ -105,6 +110,7 @@ export async function exportBellCurvePdf(
   rows: BellCurveInput[],
   config: BellCurveConfig,
   cycleName: string,
+  filterNote?: string,
 ) {
   const { default: jsPDF } = await import('jspdf');
   const { default: autoTable } = await import('jspdf-autotable');
@@ -115,7 +121,10 @@ export async function exportBellCurvePdf(
   doc.setFontSize(16);
   doc.text('Bell Curve Analysis', 40, 40);
   doc.setFontSize(10);
-  doc.text(`${cycleName} · generated ${new Date().toLocaleString()}`, 40, 58);
+  doc.text(
+    `${cycleName} · generated ${new Date().toLocaleString()}${filterNote ? ` · ${filterNote}` : ''}`,
+    40, 58,
+  );
 
   // KPI strip
   const kpis: Array<[string, string]> = [

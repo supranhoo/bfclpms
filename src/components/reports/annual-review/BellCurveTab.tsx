@@ -14,9 +14,14 @@ import {
   computeSummary,
   groupDistribution,
   heatmapMatrix,
+  matchesScoringSource,
   normalizationHints,
+  SCORING_SOURCE_LABELS,
+  SCORING_SOURCE_ORDER,
+  scoringSourceOf,
   type BellCurveInput,
   type GroupKey,
+  type ScoringSource,
 } from '@/lib/annualReview/bellCurve';
 import { useBellCurveConfig } from '@/hooks/useBellCurveConfig';
 import { BellCurveChart } from './bellCurve/BellCurveChart';
@@ -65,6 +70,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
   const [manager, setManager] = useState(ALL);
   const [division, setDivision] = useState(ALL);
   const [pmsGrade, setPmsGrade] = useState(ALL);
+  const [scoringSource, setScoringSource] = useState<string>(ALL);
   const [configOpen, setConfigOpen] = useState(false);
   // Multi-select drill-down on the heat map, per grouping view.
   const [groupSel, setGroupSel] = useState<Record<GroupKey, string[]>>({
@@ -87,6 +93,9 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
       manager: pick((r) => [r.manager_id, r.manager_name]),
       division: pick((r) => [r.division_id, r.division_name]),
       grade: pick((r) => [r.grade, r.grade]),
+      scoringSource: SCORING_SOURCE_ORDER
+        .filter((s) => rows.some((r) => scoringSourceOf(r as BellCurveInput) === s))
+        .map((s) => [s, SCORING_SOURCE_LABELS[s]] as [string, string]),
     };
   }, [rows]);
 
@@ -101,8 +110,13 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
       && (dept === ALL || r.department_id === dept)
       && (manager === ALL || r.manager_id === manager)
       && (division === ALL || r.division_id === division)
-      && (pmsGrade === ALL || r.grade === pmsGrade));
-  }, [rows, isManagerScope, user?.id, bu, dept, manager, division, pmsGrade]);
+      && (pmsGrade === ALL || r.grade === pmsGrade)
+      && matchesScoringSource(r, scoringSource === ALL ? null : (scoringSource as ScoringSource)));
+  }, [rows, isManagerScope, user?.id, bu, dept, manager, division, pmsGrade, scoringSource]);
+
+  const filterNote = scoringSource === ALL
+    ? 'Scoring source: All'
+    : `Scoring source: ${SCORING_SOURCE_LABELS[scoringSource as ScoringSource]}`;
 
   // Heat map always lists every group in the filtered set; the selection
   // narrows the charts, KPIs and exports only.
@@ -154,14 +168,14 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
             <Button
               variant="outline" size="sm" className="gap-2"
               disabled={scoped.length === 0}
-              onClick={() => exportBellCurveExcel(scoped, config, cycleName).catch((e) => toast.error((e as Error).message))}
+              onClick={() => exportBellCurveExcel(scoped, config, cycleName, filterNote).catch((e) => toast.error((e as Error).message))}
             >
               <Download className="h-4 w-4" /> Excel
             </Button>
             <Button
               variant="outline" size="sm" className="gap-2"
               disabled={scoped.length === 0}
-              onClick={() => exportBellCurvePdf(scoped, config, cycleName).catch((e) => toast.error((e as Error).message))}
+              onClick={() => exportBellCurvePdf(scoped, config, cycleName, filterNote).catch((e) => toast.error((e as Error).message))}
             >
               <FileText className="h-4 w-4" /> PDF
             </Button>
@@ -176,13 +190,14 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
               <TabsTrigger value="manager">Manager</TabsTrigger>
             </TabsList>
           </Tabs>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
             {([
               ['Business Unit', bu, setBu, options.bu],
               ['Department', dept, setDept, options.dept],
               ['Manager', manager, setManager, options.manager],
               ['Division / Location', division, setDivision, options.division],
               ['PMS Grade', pmsGrade, setPmsGrade, options.grade],
+              ['Scoring Source (KRA)', scoringSource, setScoringSource, options.scoringSource],
             ] as const).map(([label, value, setter, opts]) => (
               <div key={label} className="space-y-1">
                 <Label className="text-xs">{label}</Label>

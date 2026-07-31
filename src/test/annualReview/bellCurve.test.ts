@@ -7,7 +7,9 @@ import {
   computeSummary,
   groupDistribution,
   heatmapMatrix,
+  matchesScoringSource,
   normalizationHints,
+  scoringSourceOf,
   targetCurvePoints,
   targetsSum,
   validateConfig,
@@ -138,5 +140,42 @@ describe('bellCurve — target curve', () => {
     const peak = pts.reduce((a, p) => (p.y > a.y ? p : a));
     expect(peak.x).toBeGreaterThan(2.5);
     expect(peak.x).toBeLessThan(3.5);
+  });
+});
+describe('bellCurve — KRA / Non-KRA scoring source (ADR-218a)', () => {
+  const kra = row(1, 90, { scoring_mode: 'With KRA' });
+  const blended = row(2, 70, { scoring_mode: 'Blended' });
+  const nonKra = row(3, 50, { scoring_mode: 'Without KRA' });
+  const legacyKra = row(4, 80, { kra_weight: 60 });
+  const legacyNon = row(5, 40, {});
+
+  it('normalises the report scoring_mode text', () => {
+    expect(scoringSourceOf(kra)).toBe('kra');
+    expect(scoringSourceOf(blended)).toBe('blended');
+    expect(scoringSourceOf(nonKra)).toBe('non_kra');
+  });
+
+  it('falls back to kra_weight when scoring_mode is missing', () => {
+    expect(scoringSourceOf(legacyKra)).toBe('kra');
+    expect(scoringSourceOf(legacyNon)).toBe('non_kra');
+  });
+
+  it('matches everything when no source is selected', () => {
+    for (const r of [kra, blended, nonKra]) expect(matchesScoringSource(r, null)).toBe(true);
+  });
+
+  it('keeps blended separate from KRA and Non-KRA', () => {
+    expect(matchesScoringSource(blended, 'kra')).toBe(false);
+    expect(matchesScoringSource(blended, 'non_kra')).toBe(false);
+    expect(matchesScoringSource(blended, 'blended')).toBe(true);
+  });
+
+  it('narrows the distribution denominator to the filtered set', () => {
+    const all = [kra, blended, nonKra, legacyKra, legacyNon];
+    const kraOnly = all.filter((r) => matchesScoringSource(r, 'kra'));
+    const nonOnly = all.filter((r) => matchesScoringSource(r, 'non_kra'));
+    expect(computeSummary(kraOnly, cfg).ratedEmployees).toBe(2);
+    expect(computeSummary(nonOnly, cfg).ratedEmployees).toBe(2);
+    expect(computeSummary(all, cfg).ratedEmployees).toBe(5);
   });
 });

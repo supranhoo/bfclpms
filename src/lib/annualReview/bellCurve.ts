@@ -88,8 +88,42 @@ export interface BellCurveInput {
   manager_name?: string | null;
   /** PMS grade text (profiles.pms_grade) for ADR-219 grade filtering. */
   grade?: string | null;
+  /** ADR-218a — 'With KRA' | 'Blended' | 'Without KRA' (report RPC `scoring_mode`). */
+  scoring_mode?: string | null;
+  /** KRA pool weight; fallback when `scoring_mode` is absent. */
+  kra_weight?: number | null;
   total_score: number | null;
   is_excluded?: boolean;
+}
+
+/** ADR-218a — KRA / Non-KRA scoring source filter values. */
+export type ScoringSource = 'kra' | 'blended' | 'non_kra';
+
+export const SCORING_SOURCE_LABELS: Record<ScoringSource, string> = {
+  kra: 'With KRA',
+  blended: 'Blended',
+  non_kra: 'Without KRA',
+};
+
+/** Canonical order for the Scoring Source dropdown. */
+export const SCORING_SOURCE_ORDER: ScoringSource[] = ['kra', 'blended', 'non_kra'];
+
+/**
+ * Normalises the report's `scoring_mode` text into a filter value. Falls back
+ * to `kra_weight` when the mode is missing so no employee disappears from both
+ * the KRA and the Non-KRA selection.
+ */
+export function scoringSourceOf(row: BellCurveInput): ScoringSource {
+  const mode = (row.scoring_mode ?? '').trim().toLowerCase();
+  if (mode === 'with kra') return 'kra';
+  if (mode === 'blended') return 'blended';
+  if (mode === 'without kra') return 'non_kra';
+  return (Number(row.kra_weight) || 0) > 0 ? 'kra' : 'non_kra';
+}
+
+export function matchesScoringSource(row: BellCurveInput, source: ScoringSource | null): boolean {
+  if (!source) return true;
+  return scoringSourceOf(row) === source;
 }
 
 function round1(n: number): number {
