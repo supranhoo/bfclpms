@@ -64,6 +64,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
   const [dept, setDept] = useState(ALL);
   const [manager, setManager] = useState(ALL);
   const [division, setDivision] = useState(ALL);
+  const [pmsGrade, setPmsGrade] = useState(ALL);
   const [configOpen, setConfigOpen] = useState(false);
   // Multi-select drill-down on the heat map, per grouping view.
   const [groupSel, setGroupSel] = useState<Record<GroupKey, string[]>>({
@@ -85,6 +86,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
       dept: pick((r) => [r.department_id, r.department_name]),
       manager: pick((r) => [r.manager_id, r.manager_name]),
       division: pick((r) => [r.division_id, r.division_name]),
+      grade: pick((r) => [r.grade, r.grade]),
     };
   }, [rows]);
 
@@ -98,8 +100,9 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
       (bu === ALL || r.business_unit_id === bu)
       && (dept === ALL || r.department_id === dept)
       && (manager === ALL || r.manager_id === manager)
-      && (division === ALL || r.division_id === division));
-  }, [rows, isManagerScope, user?.id, bu, dept, manager, division]);
+      && (division === ALL || r.division_id === division)
+      && (pmsGrade === ALL || r.grade === pmsGrade));
+  }, [rows, isManagerScope, user?.id, bu, dept, manager, division, pmsGrade]);
 
   // Heat map always lists every group in the filtered set; the selection
   // narrows the charts, KPIs and exports only.
@@ -173,12 +176,13 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
               <TabsTrigger value="manager">Manager</TabsTrigger>
             </TabsList>
           </Tabs>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             {([
               ['Business Unit', bu, setBu, options.bu],
               ['Department', dept, setDept, options.dept],
               ['Manager', manager, setManager, options.manager],
               ['Division / Location', division, setDivision, options.division],
+              ['PMS Grade', pmsGrade, setPmsGrade, options.grade],
             ] as const).map(([label, value, setter, opts]) => (
               <div key={label} className="space-y-1">
                 <Label className="text-xs">{label}</Label>

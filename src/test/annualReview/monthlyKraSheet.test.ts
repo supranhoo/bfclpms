@@ -12,7 +12,7 @@ function row(over: Partial<ComprehensiveRow> = {}): ComprehensiveRow {
     instance_id: 'i1', employee_id: 'e1', employee_code: '101785', employee_name: 'Ankit C',
     designation: 'Eng', department_id: null, department_name: 'IT',
     business_unit_id: null, business_unit_name: 'CORP', division_id: null, division_name: null,
-    grade: null, doj: null, overall_status: 'completed', is_excluded: false, excluded_reason: null,
+    grade: null, pms_grade_id: null, doj: null, overall_status: 'completed', is_excluded: false, excluded_reason: null,
     enabled_stages: null, self_score: null, manager_score: null, dept_head_score: null,
     bu_head_score: null, hr_score: null, management_score: null, total_score: 91.72,
     final_rating: 'Outstanding', finalized_at: null, updated_at: null, days_pending: null,

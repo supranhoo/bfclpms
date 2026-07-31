@@ -15914,6 +15914,7 @@ export type Database = {
           manager_rating_5: number
           manager_score: number
           overall_status: Database["public"]["Enums"]["annual_review_status"]
+          pms_grade_id: string
           rating_source: string
           scoring_mode: string
           self_comment: string

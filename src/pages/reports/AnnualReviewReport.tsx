@@ -23,6 +23,7 @@ import {
   formatRating5,
   formatSlabPercent,
 } from '@/lib/annualReview/ratingSlab';
+import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 
 type StatusFilter = 'all' | 'not_started' | 'pending_self' | 'pending_manager' | 'pending_skip' | 'pending_bu' | 'pending_hr' | 'completed';
 
@@ -38,13 +39,15 @@ export default function AnnualReviewReport() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
   const [ratingBand, setRatingBand] = useState<string>('all');
+  const [pmsGrade, setPmsGrade] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
-  const args = cycleId ? { cycleId, page, pageSize, search, status } : undefined;
+  const args = cycleId ? { cycleId, page, pageSize, search, status, pmsGrade: pmsGrade === 'all' ? undefined : pmsGrade } : undefined;
   const { data: paged, isFetching } = useAnnualReviewInstancesPaginated(args);
   const { data: counts } = useCycleStatusCounts(cycleId);
   const { data: slabs } = useAnnualReviewRatingSlabs();
+  const { grades: gradeOptions } = useEmployeeFilterOptions({ enabledGrades: true });
   const rows = paged?.rows ?? [];
   const total = paged?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -97,7 +100,7 @@ export default function AnnualReviewReport() {
 
       <Card>
         <CardHeader><CardTitle className="text-base">Filters</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-4">
+        <CardContent className="grid gap-3 md:grid-cols-5">
           <div className="space-y-1">
             <Label>Cycle</Label>
             <Select value={cycleId ?? ''} onValueChange={(v) => { setCycleId(v); setPage(1); }}>
@@ -130,6 +133,16 @@ export default function AnnualReviewReport() {
               <SelectContent>
                 <SelectItem value="all">All ratings</SelectItem>
                 {ratingOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>PMS Grade</Label>
+            <Select value={pmsGrade} onValueChange={(v) => { setPmsGrade(v); setPage(1); }}>
+              <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All grades</SelectItem>
+                {gradeOptions.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

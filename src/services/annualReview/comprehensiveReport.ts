@@ -14,7 +14,10 @@ export interface ComprehensiveRow {
   business_unit_name: string | null;
   division_id: string | null;
   division_name: string | null;
+  /** profiles.pms_grade — ADR-219. */
   grade: string | null;
+  /** profiles.pms_grade_id — ADR-219. */
+  pms_grade_id: string | null;
   doj: string | null;
   overall_status: string;
   is_excluded: boolean;

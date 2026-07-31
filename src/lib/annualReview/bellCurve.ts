@@ -86,6 +86,8 @@ export interface BellCurveInput {
   division_name?: string | null;
   manager_id?: string | null;
   manager_name?: string | null;
+  /** PMS grade text (profiles.pms_grade) for ADR-219 grade filtering. */
+  grade?: string | null;
   total_score: number | null;
   is_excluded?: boolean;
 }

@@ -17,7 +17,7 @@ const baseRow = (over: Partial<ComprehensiveRow> = {}): ComprehensiveRow => ({
   designation: null, department_id: null, department_name: null,
   business_unit_id: null, business_unit_name: null,
   division_id: null, division_name: null,
-  grade: null, doj: null,
+  grade: null, pms_grade_id: null, doj: null,
   overall_status: 'completed', is_excluded: false, excluded_reason: null,
   enabled_stages: ['self', 'dept_head', 'bu_head'],
   self_score: 0, manager_score: null, dept_head_score: null,
