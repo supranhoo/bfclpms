@@ -64,6 +64,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
   const [dept, setDept] = useState(ALL);
   const [manager, setManager] = useState(ALL);
   const [division, setDivision] = useState(ALL);
+  const [pmsGrade, setPmsGrade] = useState(ALL);
   const [configOpen, setConfigOpen] = useState(false);
   // Multi-select drill-down on the heat map, per grouping view.
   const [groupSel, setGroupSel] = useState<Record<GroupKey, string[]>>({
