@@ -71,13 +71,6 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
   });
   const selectedIds = groupSel[view];
 
-  const groupIdOf = (r: BellCurveInput): string | null => (
-    view === 'department' ? r.department_id ?? null
-      : view === 'business_unit' ? r.business_unit_id ?? null
-        : view === 'division' ? r.division_id ?? null
-          : r.manager_id ?? null
-  );
-
   const options = useMemo(() => {
     const pick = (get: (r: ComprehensiveRow) => [string | null, string | null]) => {
       const map = new Map<string, string>();
