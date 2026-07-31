@@ -5,8 +5,10 @@ import {
   categoryLabel,
   toExportRow,
   CATEGORY_OPTIONS,
+  categoryForField,
   type ChangeHistoryRow,
 } from '@/lib/reports/changeHistory';
+import { CHANGE_HISTORY_EXPORT_CAP } from '@/hooks/useChangeHistory';
 
 const base: ChangeHistoryRow = {
   event_id: 'e1',
