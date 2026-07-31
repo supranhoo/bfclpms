@@ -26,6 +26,8 @@ export interface ExportInput {
   byGrade: GroupSummary[];
   byDesignation: GroupSummary[];
   byStage: GroupSummary[];
+  /** ADR-212 — admin-configured rating slab bands (falls back to defaults). */
+  ratingSlabs?: ReadonlyArray<RatingSlab>;
 }
 
 /** ADR-188 — one shared KRA context for both the Employees column and the sheet. */
