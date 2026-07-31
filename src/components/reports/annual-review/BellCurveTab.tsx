@@ -16,6 +16,7 @@ import {
   groupBands,
   heatmapBands,
   makeBanding,
+  matchesEligibility,
   matchesScoringSource,
   normalizationHints,
   summarize,
@@ -30,6 +31,14 @@ import {
 } from '@/lib/annualReview/bellCurve';
 import { useBellCurveConfig } from '@/hooks/useBellCurveConfig';
 import { useAnnualReviewRatingSlabs } from '@/hooks/useAnnualReviewRatingSlabs';
+import { fetchTemplateEligibilityMaps } from '@/services/annualReview/eligibilityReportColumns';
+import {
+  ELIGIBILITY_STATUS_LABELS, ELIGIBILITY_STATUS_ORDER, resolveEligibility,
+  type EffectiveEligibility, type EligibilityStatus,
+} from '@/lib/annualReview/effectiveEligibility';
+import {
+  useEligibilityExemptionPolicy, useEligibilityExemptions,
+} from '@/hooks/annualReview/useEligibilityExemptions';
 import { BellCurveChart } from './bellCurve/BellCurveChart';
 import { DistributionBarChart } from './bellCurve/DistributionBarChart';
 import { VarianceTable } from './bellCurve/VarianceTable';
@@ -61,6 +70,9 @@ function KpiCard({ label, value, hint }: { label: string; value: string | number
 export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleName: string }) {
   const { effectiveRole, user } = useAuth();
   const canConfigure = effectiveRole === 'admin' || effectiveRole === 'hr_pms';
+  // ADR-221 — who may request vs decide eligibility exemptions.
+  const canApproveExemptions = effectiveRole === 'admin' || effectiveRole === 'hr_pms' || effectiveRole === 'management';
+  const canManageExemptions = canApproveExemptions;
   const isManagerScope = effectiveRole === 'manager' || effectiveRole === 'skip_level';
 
   const { data: rows = [], isLoading } = useQuery({
@@ -71,6 +83,19 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
   });
   const { data: config } = useBellCurveConfig(cycleId);
   const { data: slabs = [] } = useAnnualReviewRatingSlabs();
+  // ADR-221 — eligibility criteria (per template), exemptions and master policy.
+  const templateIds = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.template_id).filter(Boolean) as string[])),
+    [rows],
+  );
+  const { data: eligMaps = {} } = useQuery({
+    queryKey: ['ar-template-eligibility', templateIds.slice().sort().join(',')],
+    enabled: templateIds.length > 0,
+    staleTime: 5 * 60_000,
+    queryFn: () => fetchTemplateEligibilityMaps(templateIds),
+  });
+  const { data: exemptions = {} } = useEligibilityExemptions(cycleId);
+  const { data: exemptionPolicy = [] } = useEligibilityExemptionPolicy();
 
   const [view, setView] = useState<GroupKey>('department');
   const [bandMode, setBandMode] = useState<BandMode>('rating');
@@ -80,6 +105,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
   const [division, setDivision] = useState(ALL);
   const [pmsGrade, setPmsGrade] = useState(ALL);
   const [scoringSource, setScoringSource] = useState<string>(ALL);
+  const [eligibility, setEligibility] = useState<string>(ALL);
   const [configOpen, setConfigOpen] = useState(false);
   // Multi-select drill-down on the heat map, per grouping view.
   const [groupSel, setGroupSel] = useState<Record<GroupKey, string[]>>({
@@ -109,7 +135,21 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
   }, [rows]);
 
   const filtered = useMemo<BellCurveInput[]>(() => {
-    let base = rows as BellCurveInput[];
+    // Attach effective eligibility to every row before any filtering.
+    let base: BellCurveInput[] = (rows as ComprehensiveRow[]).map((r) => {
+      const res = resolveEligibility({
+        criteria: r.template_id ? eligMaps[r.template_id] : undefined,
+        inputs: r.eligibility_inputs ?? undefined,
+        exemptions: exemptions[r.instance_id] ?? [],
+        policy: exemptionPolicy,
+      });
+      return {
+        ...(r as unknown as BellCurveInput),
+        cycle_id: cycleId ?? null,
+        eligibility_status: res.status,
+        eligibility_pending: res.hasPendingExemption,
+      };
+    });
     // Managers and skip-level reviewers only ever see their own team.
     if (isManagerScope && user?.id) {
       base = base.filter((r) => r.manager_id === user.id);
@@ -120,8 +160,30 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
       && (manager === ALL || r.manager_id === manager)
       && (division === ALL || r.division_id === division)
       && (pmsGrade === ALL || r.grade === pmsGrade)
+      && matchesEligibility(r, eligibility === ALL ? null : (eligibility as EligibilityStatus))
       && matchesScoringSource(r, scoringSource === ALL ? null : (scoringSource as ScoringSource)));
-  }, [rows, isManagerScope, user?.id, bu, dept, manager, division, pmsGrade, scoringSource]);
+  }, [rows, eligMaps, exemptions, exemptionPolicy, cycleId, isManagerScope, user?.id,
+    bu, dept, manager, division, pmsGrade, scoringSource, eligibility]);
+
+  /** Full eligibility detail for the drill-down / exemption dialog. */
+  const eligibilityByInstance = useMemo(() => {
+    const map = new Map<string, EffectiveEligibility>();
+    for (const r of rows as ComprehensiveRow[]) {
+      map.set(r.instance_id, resolveEligibility({
+        criteria: r.template_id ? eligMaps[r.template_id] : undefined,
+        inputs: r.eligibility_inputs ?? undefined,
+        exemptions: exemptions[r.instance_id] ?? [],
+        policy: exemptionPolicy,
+      }));
+    }
+    return map;
+  }, [rows, eligMaps, exemptions, exemptionPolicy]);
+
+  const eligibilityCounts = useMemo(() => {
+    const c: Record<EligibilityStatus, number> = { eligible: 0, exempted: 0, ineligible: 0, unknown: 0 };
+    for (const r of filtered) c[(r.eligibility_status ?? 'unknown')] += 1;
+    return c;
+  }, [filtered]);
 
   const filterNote = scoringSource === ALL
     ? 'Scoring source: All'
@@ -232,6 +294,8 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
               ['Division / Location', division, setDivision, options.division],
               ['PMS Grade', pmsGrade, setPmsGrade, options.grade],
               ['Scoring Source (KRA)', scoringSource, setScoringSource, options.scoringSource],
+              ['Eligibility', eligibility, setEligibility,
+                ELIGIBILITY_STATUS_ORDER.map((s) => [s, ELIGIBILITY_STATUS_LABELS[s]] as [string, string])],
             ] as const).map(([label, value, setter, opts]) => (
               <div key={label} className="space-y-1">
                 <Label className="text-xs">{label}</Label>
@@ -248,7 +312,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
         </CardContent>
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <KpiCard label="Total Employees" value={summary.totalEmployees} hint={`${summary.unratedEmployees} unrated`} />
         <KpiCard label="Average Rating" value={summary.averageRating !== null ? summary.averageRating.toFixed(2) : '—'} hint="out of 5" />
         <KpiCard label={hasTargets ? 'Highest Rating Count' : 'Top Slab Count'} value={summary.highestBandCount} hint={summary.highestBandLabel} />
@@ -258,6 +322,11 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
         ) : (
           <KpiCard label="Bands In Use" value={`${summary.bandsInUse}/${banding.defs.length}`} hint="slabs with at least one employee" />
         )}
+        <KpiCard
+          label="Ineligible"
+          value={eligibilityCounts.ineligible}
+          hint={`${eligibilityCounts.exempted} exempted · ${eligibilityCounts.eligible} eligible`}
+        />
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -296,7 +365,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
         defs={banding.defs}
         hasTargets={hasTargets}
         selectedIds={selectedIds}
-        drilldownResetKey={`${view}|${bandMode}|${bu}|${dept}|${manager}|${division}|${pmsGrade}|${scoringSource}`}
+          drilldownResetKey={`${view}|${bandMode}|${bu}|${dept}|${manager}|${division}|${pmsGrade}|${scoringSource}|${eligibility}`}
         renderDrilldown={(rowId, bandKey, close) => {
           const def = banding.defs.find((d) => d.key === bandKey);
           const group = heat.find((h) => h.id === rowId);
@@ -309,6 +378,9 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
               bandSub={def.sub}
               slabs={slabs.length > 0 ? slabs : undefined}
               canCalibrate={effectiveRole === 'admin'}
+              eligibilityOf={(e) => eligibilityByInstance.get(e.instance_id) ?? null}
+              canManageExemptions={canManageExemptions}
+              canApproveExemptions={canApproveExemptions}
               onClose={close}
             />
           );

@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Download, Eye, Search, SlidersHorizontal, X } from 'lucide-react';
+import { Download, Eye, Search, ShieldAlert, SlidersHorizontal, X } from 'lucide-react';
 import {
   DEFAULT_RATING_SLABS, formatRating5, formatSlabPercent, resolveSlabPercent, type RatingSlab,
 } from '@/lib/annualReview/ratingSlab';
@@ -11,6 +11,11 @@ import { computedRating, isCalibrated } from '@/lib/annualReview/effectiveRating
 import type { BandEmployee } from '@/lib/annualReview/bellCurve';
 import { CalibrateRatingDialog, type CalibrationTarget } from '@/components/annual-review/CalibrateRatingDialog';
 import { ReviewFormViewerDialog } from '@/components/annual-review/ReviewFormViewerDialog';
+import {
+  ELIGIBILITY_STATUS_LABELS, effectiveSlabPercent, eligibilitySummary,
+  type EffectiveEligibility,
+} from '@/lib/annualReview/effectiveEligibility';
+import { ExemptionDialog } from './ExemptionDialog';
 
 const PAGE_SIZE = 25;
 
@@ -34,7 +39,8 @@ function targetOf(e: BandEmployee): CalibrationTarget {
  * ADR-220 adds admin-only single and bulk calibration of the final rating.
  */
 export function BandEmployeeList({
-  employees, groupName, bandLabel, bandSub, slabs = DEFAULT_RATING_SLABS, canCalibrate = false, onClose,
+  employees, groupName, bandLabel, bandSub, slabs = DEFAULT_RATING_SLABS, canCalibrate = false,
+  eligibilityOf, canManageExemptions = false, canApproveExemptions = false, onClose,
 }: {
   employees: BandEmployee[];
   groupName: string;
@@ -42,6 +48,10 @@ export function BandEmployeeList({
   bandSub: string;
   slabs?: ReadonlyArray<RatingSlab>;
   canCalibrate?: boolean;
+  /** ADR-221 — effective eligibility resolver for a drill-down row. */
+  eligibilityOf?: (e: BandEmployee) => EffectiveEligibility | null;
+  canManageExemptions?: boolean;
+  canApproveExemptions?: boolean;
   onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
@@ -49,6 +59,7 @@ export function BandEmployeeList({
   const [selected, setSelected] = useState<string[]>([]);
   const [dialogTargets, setDialogTargets] = useState<CalibrationTarget[] | null>(null);
   const [viewInstanceId, setViewInstanceId] = useState<string | null>(null);
+  const [exemptionFor, setExemptionFor] = useState<BandEmployee | null>(null);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -61,17 +72,18 @@ export function BandEmployeeList({
   const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const current = Math.min(page, pageCount - 1);
   const slice = visible.slice(current * PAGE_SIZE, current * PAGE_SIZE + PAGE_SIZE);
-  const colCount = canCalibrate ? 10 : 8;
+  const colCount = 9 + (canCalibrate ? 2 : 0) + (canManageExemptions ? 1 : 0);
 
   const exportCsv = () => {
     const header = [
       'Employee Code', 'Name', 'Grade', 'Manager',
       'Rating Given by Dept', 'Rating Given by BU', 'Slab %',
-      'Computed Rating', 'Calibrated Rating', 'Calibration Reason',
+      'Computed Rating', 'Calibrated Rating', 'Calibration Reason', 'Eligibility',
     ];
     const lines = [header.join(',')];
     for (const e of visible) {
-      const pct = resolveSlabPercent(e.rating, slabs);
+      const elig = eligibilityOf?.(e) ?? null;
+      const pct = effectiveSlabPercent(resolveSlabPercent(e.rating, slabs), elig?.status ?? 'unknown');
       const comp = computedRating(e);
       lines.push([
         e.employee_code, e.employee_name, e.grade ?? '', e.manager_name ?? '',
@@ -81,6 +93,7 @@ export function BandEmployeeList({
         comp === null ? '' : comp.toFixed(2),
         isCalibrated(e) ? Number(e.calibrated_rating).toFixed(2) : '',
         e.calibration_reason ?? '',
+        elig ? eligibilitySummary(elig) : '',
       ].map(csvCell).join(','));
     }
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -156,12 +169,17 @@ export function BandEmployeeList({
               <th className="p-2 text-right font-medium">Rating Given by Dept</th>
               <th className="p-2 text-right font-medium">Rating Given by BU</th>
               <th className="p-2 text-right font-medium">Slab %</th>
+              <th className="p-2 text-left font-medium">Eligibility</th>
               <th className="p-2 text-right font-medium">Form</th>
+              {canManageExemptions && <th className="p-2 text-right font-medium">Exemption</th>}
               {canCalibrate && <th className="p-2 text-right font-medium">Calibrate</th>}
             </tr>
           </thead>
           <tbody>
-            {slice.map((e) => (
+            {slice.map((e) => {
+              const elig = eligibilityOf?.(e) ?? null;
+              const status = elig?.status ?? 'unknown';
+              return (
               <tr key={e.instance_id} className="border-b last:border-0 hover:bg-muted/50">
                 {canCalibrate && (
                   <td className="p-2">
@@ -191,7 +209,23 @@ export function BandEmployeeList({
                 <td className="p-2 text-muted-foreground">{e.manager_name ?? '—'}</td>
                 <td className="p-2 text-right tabular-nums">{formatRating5(e.dept_head_rating_5 ?? null)}</td>
                 <td className="p-2 text-right tabular-nums">{formatRating5(e.bu_head_rating_5 ?? null)}</td>
-                <td className="p-2 text-right tabular-nums">{formatSlabPercent(resolveSlabPercent(e.rating, slabs))}</td>
+                <td className="p-2 text-right tabular-nums">
+                  {formatSlabPercent(effectiveSlabPercent(resolveSlabPercent(e.rating, slabs), status))}
+                </td>
+                <td className="p-2">
+                  {status === 'unknown' ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    <Badge
+                      variant={status === 'ineligible' ? 'destructive' : status === 'exempted' ? 'secondary' : 'outline'}
+                      className="text-[10px]"
+                      title={elig ? eligibilitySummary(elig) : undefined}
+                    >
+                      {ELIGIBILITY_STATUS_LABELS[status]}
+                      {elig?.hasPendingExemption ? ' · pending' : ''}
+                    </Badge>
+                  )}
+                </td>
                 <td className="p-2 text-right">
                   <Button
                     variant="ghost"
@@ -203,6 +237,18 @@ export function BandEmployeeList({
                     <span className="sr-only">View review form for {e.employee_name ?? 'employee'}</span>
                   </Button>
                 </td>
+                {canManageExemptions && (
+                  <td className="p-2 text-right">
+                    <Button
+                      variant="ghost" size="sm" className="h-8 gap-1 text-xs"
+                      disabled={!elig || elig.failures.length === 0}
+                      onClick={() => setExemptionFor(e)}
+                    >
+                      <ShieldAlert className="h-3.5 w-3.5" />
+                      <span className="sr-only">Manage exemption for {e.employee_name ?? 'employee'}</span>
+                    </Button>
+                  </td>
+                )}
                 {canCalibrate && (
                   <td className="p-2 text-right">
                     <Button
@@ -217,7 +263,8 @@ export function BandEmployeeList({
                   </td>
                 )}
               </tr>
-            ))}
+              );
+            })}
             {slice.length === 0 && (
               <tr><td colSpan={colCount} className="p-4 text-center text-muted-foreground">No employees match this search.</td></tr>
             )}
@@ -248,6 +295,19 @@ export function BandEmployeeList({
         slabs={slabs}
         onClose={() => setViewInstanceId(null)}
       />
+
+      {exemptionFor && eligibilityOf?.(exemptionFor) && (
+        <ExemptionDialog
+          open
+          onOpenChange={(v) => { if (!v) setExemptionFor(null); }}
+          instanceId={exemptionFor.instance_id}
+          cycleId={exemptionFor.cycle_id ?? null}
+          employeeId={exemptionFor.employee_id ?? null}
+          employeeName={exemptionFor.employee_name ?? 'Employee'}
+          result={eligibilityOf(exemptionFor)!}
+          canApprove={canApproveExemptions}
+        />
+      )}
     </div>
   );
 }

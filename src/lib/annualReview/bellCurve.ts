@@ -13,6 +13,7 @@ import {
   type RatingSlab,
 } from './ratingSlab';
 import { effectiveRating } from './effectiveRating';
+import type { EligibilityStatus } from './effectiveEligibility';
 
 export type RatingBand = 1 | 2 | 3 | 4 | 5;
 export type ComplianceLevel = 'green' | 'amber' | 'red';
@@ -108,6 +109,22 @@ export interface BellCurveInput {
   calibration_reason?: string | null;
   calibrated_by_name?: string | null;
   calibrated_at?: string | null;
+  /** ADR-221 — effective eligibility (raw criteria + approved exemptions). */
+  eligibility_status?: EligibilityStatus;
+  eligibility_summary?: string | null;
+  eligibility_pending?: boolean;
+  /** Passed through so the drill-down can open the exemption dialog. */
+  cycle_id?: string | null;
+  employee_id?: string | null;
+}
+
+/** ADR-221 — eligibility filter match (null = All). */
+export function matchesEligibility(
+  row: BellCurveInput,
+  status: EligibilityStatus | null,
+): boolean {
+  if (!status) return true;
+  return (row.eligibility_status ?? 'unknown') === status;
 }
 
 /** ADR-218a — KRA / Non-KRA scoring source filter values. */

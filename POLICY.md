@@ -5572,3 +5572,15 @@ Rules:
 **Guard.** `src/test/annualReview/bellCurve.test.ts` (24 cases), `src/test/annualReview/bellCurveDrilldown.test.ts` (6 cases).
 
 ---
+
+## §AR-ELIGIBILITY-EXEMPTION — Annual Review eligibility & exemption approval (ADR-221, 2026-07-31)
+
+1. **Effective eligibility.** An instance is `Eligible`, `Exempted (Eligible)`, `Ineligible` or `Not assessed`. It is resolved only by `src/lib/annualReview/effectiveEligibility.resolveEligibility()`, which evaluates the template's `sections.eligibility_criteria` against `eligibility_inputs` using the ADR-181 evaluator and then applies approved exemptions. Templates without eligibility criteria are `Not assessed` and render an em-dash.
+2. **Exemptable questions are master data.** `annual_review_eligibility_exemption_policy` decides which questions may be waived. Absent days and LWP are exemptable; disciplinary action and the 6-month / service-tenure window are never exemptable. A question with no matching master row is NOT exemptable. Never hardcode this list in the UI or the engine.
+3. **Approval workflow.** Exemptions are stored per `(instance_id, criterion_id)` in `annual_review_eligibility_exemptions` with a mandatory reason. Requesting is open to approvers and to users with assistance scope over the instance; approving, rejecting and revoking are restricted to Admin, HR PMS and Management. Self-approval is blocked for non-admins. `ar_elig_exemption_guard()` enforces both rules server-side, so a client bug can never waive a non-exemptable criterion.
+4. **Slab effect.** An `Ineligible` employee's increment slab is shown as 0% (`effectiveSlabPercent`). Ratings, bands and the bell-curve distribution are never altered by eligibility — it is a display and governance overlay only.
+5. **Surfaces.** Bell Curve Analysis carries an Eligibility filter and an Ineligible KPI card; the heat map drill-down carries the eligibility badge, the CSV eligibility column and the exemption action.
+
+**Guard.** `src/test/annualReview/effectiveEligibility.test.ts` (9 cases).
+
+---
