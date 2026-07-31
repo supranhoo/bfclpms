@@ -1,43 +1,30 @@
-## What happened (verified from data)
+## Assumptions
 
-Instance `febfb82a…` for Chandan Kumar Pandit (101885), cycle `b82a935f…`:
+"Make this pending self" = set Kumar Ambarish's annual review to **Self Review Pending** so he can open and submit his own form.
 
-- On **31-Jul-2026 04:58 UTC** a force-reset with reason **"EXCLUDED CHANDAN"** ran against this instance.
-- The archive row (`annual_review_reset_archive` id `057a37ce…`) shows the pre-reset state: `prior_status = pending_bu`, `prior_template_id = a6e88cd5…`, and one wiped response — the **self** response, `is_locked = true`, `submitted_at = 2026-07-17 11:34:04`, with 12 qualitative answers (`f_*` keys), empty `criteria_scores`, `weighted_score = 0`.
-- Current state: `overall_status = pending_self`, `template_id = eb87efa6…` ("Generic W - (With KRA)"), **zero rows** in `annual_review_responses`. So the self-review content survives only in the archive.
-- `enabled_stages` is `["self","bu_head"]` — unchanged by the reset.
-- `bu_head_id` is currently `79fe4ca0…` (the 24-Jul Management remap), not the old self-as-BU-Head value.
+## Verified current state (read-only queries, no writes)
 
-Decisions confirmed with you: **full rollback to pre-reset**, but **keep the current BU Head**.
+- Employee: Kumar Ambarish, `102014`, active, profile `ff680ae9…`.
+- Instance `b5428dbe…` in cycle `b82a935f…`: `overall_status = not_started`, `enabled_stages = [self, dept_head, bu_head]`, template `af2a2c7c…`.
+- One `annual_review_responses` row already exists: `reviewer_role = self`, `is_locked = false`, `submitted_at = NULL`, with 5 criteria scores at 4 and qualitative answers — i.e. an **unsubmitted self draft**.
+- Cycle distribution: 2078 completed, 492 excluded, 7 pending_bu, 1 pending_dept, 1 pending_self, and this single `not_started` row — so this is a one-off straggler, not a systemic bug.
 
-## Target end state
-
-| Field | Restore to |
-|---|---|
-| `template_id` | `a6e88cd5…` (original, so the saved `f_*` answers render) |
-| self response | re-inserted verbatim from archive, `is_locked = true`, original `submitted_at`/`created_at` |
-| `overall_status` | `pending_bu` (BU Head Review Pending) |
-| `bu_head_id` | unchanged (`79fe4ca0…`) |
-| aggregates (`total_score`, `criteria_weighted_score`, `final_rating`, `finalized_*`) | stay NULL — correct for a mid-workflow `pending_bu` instance |
+Note: because a self draft exists but the instance never left `not_started`, the likely cause is that the draft was saved without the status advancing. That diagnosis is unconfirmed; step 1 below checks it before anything else.
 
 ## Steps
 
-1. **Pre-flight reads** (no writes): confirm template `a6e88cd5…` still exists and is usable, confirm no response rows have appeared since, confirm no `annual_review_assignment_overrides` or `template_override_id` conflict with restoring `template_id`.
-2. **Restore in one transaction** (data change, not a schema migration):
-   - Insert the self response back into `annual_review_responses` straight from the archive JSON (same `id`, `reviewer_id`, `reviewer_role='self'`, `qualitative_responses`, `criteria_scores`, `evidence`, timestamps, `is_locked = true`).
-   - Set `template_id = a6e88cd5…` on the instance.
-   - Set `overall_status = 'pending_bu'`.
-   - Leave `bu_head_id` and `enabled_stages` untouched.
-3. **Trigger considerations**: `trg_ar_no_downstream_rewind` (ADR-184) only blocks *rewinds* past an actioned later stage — moving `pending_self → pending_bu` is forward, no bypass flag needed. ADR-172's `trg_ar_stage_score_required` is submission-time only and this template's self stage is narrative (zero criteria), matching ADR-197. If the template-immutability trigger from ADR-117 objects, it applies only when a `template_override_id` exists — none here, verified.
-4. **Audit trail**: write the before/after snapshot into a dated repair table `annual_review_self_restore_repair_2026_07` (instance id, employee, prior status/template, restored response id, reason, `performed_by = NULL` since this is a system-run repair), consistent with ADR-183/185 repair practice. The original archive row is left intact.
-5. **Verification queries**: re-read the instance + responses and confirm status `pending_bu`, one locked self response with the 17-Jul submitted_at, template `a6e88cd5…`, and that the BU Head (`79fe4ca0…`) sees it in `get_my_annual_review_queue`.
-6. **Docs/policy sync**: add **ADR-210 — Reset rollback from `annual_review_reset_archive`** and **POLICY §AR-RESET-ROLLBACK**, stating that force-reset archives are the authoritative rollback source and that a restore must re-anchor `overall_status` to the archived `prior_status` (re-validated against current `enabled_stages`) rather than leaving the instance at `pending_self`.
-7. **Regression test**: `src/test/annualReview/resetRollback.test.ts` covering archive→response reconstruction, status re-anchoring, and the "keep current reviewer mapping" rule.
+1. **Pre-flight reads** — confirm no reset-archive row or exclusion record for this instance, confirm the `self` stage is enabled (already seen), and check whether any trigger sets `not_started → pending_self` on draft save (to see if this is a repeatable gap or a one-off).
+2. **Data change (single row, not a schema migration)** — set `overall_status = 'pending_self'` on instance `b5428dbe…`. Leave the existing draft response, template, reviewer mappings and `enabled_stages` untouched.
+3. **Trigger check** — `not_started → pending_self` is a forward move, so the downstream-rewind guard (ADR-184) and the stage-score guard (ADR-172, submission-time only) do not apply. No bypass flag needed.
+4. **Audit trail** — write a before/after snapshot row into the dated repair table `annual_review_status_repair_2026_07` (instance id, employee, prior/new status, reason, `performed_by = NULL` for a system-run repair), consistent with ADR-183/185 practice.
+5. **Verification** — re-read the instance; confirm status `pending_self`, the draft still present and unlocked, and that the employee's own annual review page renders as editable rather than "Not Started".
+6. **Docs/policy sync** — if step 1 shows the draft-save path can leave an instance at `not_started`, record it as a small ADR + POLICY note (`§AR-DRAFT-IMPLIES-PENDING-SELF`) and add a guard so saving a self draft always advances `not_started → pending_self`. If it turns out to be a one-off from a manual/bulk action, document it as a data repair only.
+7. **Regression test** — extend the annual-review status tests with the "self draft exists ⇒ status must not be `not_started`" invariant.
 
 ## Risk & impact
 
-- **Data impact**: one instance, one response row re-inserted, one dated audit row created. Additive; no schema change.
-- **Workflow impact**: the review re-enters the BU Head's queue; employee loses the (unwanted) editable self stage.
-- **Regression risk**: low — scoped to a single instance id, no shared function or trigger is modified.
-- **Rollback**: delete the restored response row and set the instance back to `pending_self` / template `eb87efa6…`; the dated audit table holds the exact before-state.
-- **Open item to flag**: whoever ran "EXCLUDED CHANDAN" may have intended to exclude this employee from the cycle. This restore assumes that was a mistake, per your message. If exclusion was actually intended, the correct action is `bulk_exclude_annual_review_instances`, not a reset — I will not do that here.
+- **Data impact**: one status field on one row, plus one audit row. Additive, no schema change.
+- **Workflow impact**: the review enters the employee's own queue; downstream Dept Head / BU Head stages unchanged.
+- **UI impact**: the grid chip for 102014 changes from grey "Not Started" to "Self Review Pending"; his review page becomes editable.
+- **Regression risk**: very low — scoped to a single instance id; no shared function or trigger changes unless step 6 finds a real gap.
+- **Rollback**: set `overall_status` back to `not_started`; the audit row holds the exact before-state.
