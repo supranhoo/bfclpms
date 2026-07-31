@@ -87,6 +87,17 @@ export function RatingHeatmap({
                 className="h-9 w-[200px] pl-7 text-sm"
               />
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1 px-2 text-xs"
+              aria-label={modeLabel}
+              title={modeLabel}
+              onClick={() => setSortMode((m) => (m === 'count' ? 'pct' : 'count'))}
+            >
+              {sortMode === 'count' ? <Hash className="h-3.5 w-3.5" /> : <Percent className="h-3.5 w-3.5" />}
+              {sortMode === 'count' ? 'Number' : 'Percentage'}
+            </Button>
             {selected.size > 0 && (
               <Button variant="ghost" size="sm" className="gap-1" onClick={() => onClearSelection?.()}>
                 <X className="h-3.5 w-3.5" /> Clear ({selected.size})
