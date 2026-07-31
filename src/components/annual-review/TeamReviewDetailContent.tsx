@@ -447,12 +447,19 @@ function TeamReviewDetailInner(props: any) {
       />
 
       {((canEditEligibility && eligibilityCriteria.length > 0)
+        || canEditSystemScores
         || (canEditSystemScores && editableSysSlots.length > 0)) && (
         <div className="flex flex-wrap justify-end gap-2 -mt-2">
           {canEditSystemScores && editableSysSlots.length > 0 && (
             <Button size="sm" variant="outline" onClick={() => setSysDlgOpen(true)} className="gap-1.5">
               <Pencil className="h-3.5 w-3.5" />
               Update system scores
+            </Button>
+          )}
+          {canEditSystemScores && (
+            <Button size="sm" variant="outline" onClick={() => setCalDlgOpen(true)} className="gap-1.5">
+              <Pencil className="h-3.5 w-3.5" />
+              Calibrate final rating
             </Button>
           )}
           {canEditEligibility && eligibilityCriteria.length > 0 && (
@@ -462,6 +469,34 @@ function TeamReviewDetailInner(props: any) {
             </Button>
           )}
         </div>
+      )}
+
+      {calibration && (
+        <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+          <p className="font-medium">
+            Final rating calibrated to {formatRating5(calibration.calibrated_rating)} / 5
+            <span className="font-normal text-muted-foreground">
+              {' '}(computed {formatRating5(computedFinalRating)})
+            </span>
+          </p>
+          {calibration.calibration_reason && (
+            <p className="text-xs text-muted-foreground">Reason: {calibration.calibration_reason}</p>
+          )}
+        </div>
+      )}
+
+      {canEditSystemScores && (
+        <CalibrateRatingDialog
+          open={calDlgOpen}
+          onOpenChange={setCalDlgOpen}
+          targets={[{
+            instance_id: instance.id,
+            employee_name: instance.employee?.full_name ?? null,
+            employee_code: instance.employee?.employee_code ?? null,
+            computed_rating: computedFinalRating,
+            calibrated_rating: calibration?.calibrated_rating ?? null,
+          }]}
+        />
       )}
 
       {canEditSystemScores && (
