@@ -17,6 +17,7 @@ import {
   useChangeHistory,
   fetchChangeHistoryForExport,
   CHANGE_HISTORY_PAGE_SIZE,
+  CHANGE_HISTORY_EXPORT_CAP,
   type ChangeHistoryFilters,
 } from '@/hooks/useChangeHistory';
 import {
@@ -48,6 +49,7 @@ export default function ChangeHistoryReport() {
   const [department, setDepartment] = useState('all');
   const [page, setPage] = useState(1);
   const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{ done: number; total: number } | null>(null);
 
   const filters: ChangeHistoryFilters = useMemo(() => ({
     from: from ? new Date(`${from}T00:00:00`).toISOString() : null,
@@ -67,8 +69,12 @@ export default function ChangeHistoryReport() {
 
   const handleExport = async () => {
     setExporting(true);
+    setExportProgress({ done: 0, total: total || 0 });
     try {
-      const { rows: all, truncated } = await fetchChangeHistoryForExport(filters);
+      const { rows: all, truncated } = await fetchChangeHistoryForExport(
+        filters,
+        (done, t) => setExportProgress({ done, total: t }),
+      );
       if (all.length === 0) { toast.info('Nothing to export for the current filters.'); return; }
       const ws = XLSX.utils.aoa_to_sheet([
         ['Master Change History Report'],
@@ -80,11 +86,16 @@ export default function ChangeHistoryReport() {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Change History');
       XLSX.writeFile(wb, `Change_History_${new Date().toISOString().slice(0, 10)}.xlsx`);
-      if (truncated) toast.warning('Export capped at 5,000 rows — narrow the date range for a complete extract.');
+      if (truncated) {
+        toast.warning(
+          `Export stopped at the ${CHANGE_HISTORY_EXPORT_CAP.toLocaleString()}-row safety ceiling — narrow the date range for a complete extract.`,
+        );
+      }
     } catch (e) {
       toast.error(`Export failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
     } finally {
       setExporting(false);
+      setExportProgress(null);
     }
   };
 
