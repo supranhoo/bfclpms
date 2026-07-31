@@ -14883,6 +14883,13 @@ export type Database = {
           instance_id: string
         }[]
       }
+      annual_review_allowed_next_status: {
+        Args: {
+          p_from: Database["public"]["Enums"]["annual_review_status"]
+          p_instance_id: string
+        }
+        Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
       annual_review_bu_head_terminal_diagnostic: {
         Args: { p_cycle_id: string }
         Returns: {
