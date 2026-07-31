@@ -2,20 +2,20 @@ import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { getStageLabel, type WorkflowTemplate, type WorkflowConfig } from '@/hooks/useWorkflowConfig';
-import { CHAIN_STAGES, CHAIN_STAGE_LABEL, NA_REASON_LABEL, buildResolverContext, resolveChain, type ResolverProfile } from '@/lib/workflowResolver';
+import { buildResolverContext, type ResolverProfile } from '@/lib/workflowResolver';
+import {
+  buildEmployeeOverrideRows,
+  buildResolvedEmployeeRows,
+  unresolvedCount,
+  formatStages,
+  EM_DASH,
+  type ExportConfig,
+  type ExportTemplate,
+} from '@/lib/reports/workflowConfigExportRows';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRpcPaged } from '@/lib/fetchAll';
 import { useState } from 'react';
 import { toast } from 'sonner';
-
-interface Profile {
-  id: string;
-  full_name: string | null;
-  email: string;
-  employee_code: string | null;
-  pms_grade: string | null;
-  department_id: string | null;
-  reporting_manager_id: string | null;
-}
 
 interface Department {
   id: string;
@@ -26,12 +26,7 @@ interface WorkflowConfigExportProps {
   templates: WorkflowTemplate[];
   archivedTemplates: WorkflowTemplate[];
   configs: WorkflowConfig[];
-  profiles: Profile[];
   departments: Department[];
-}
-
-function formatStages(stages: string[]): string {
-  return stages.map(s => getStageLabel(s)).join(' → ');
 }
 
 function deriveMonth(reviewPeriod: string | null | undefined): string {
@@ -51,16 +46,17 @@ function deriveMonth(reviewPeriod: string | null | undefined): string {
   return p;
 }
 
-function getTemplateById(templates: WorkflowTemplate[], id: string) {
-  return templates.find(t => t.id === id);
-}
-
-function addHeader(ws: XLSX.WorkSheet, totalTemplates: number, totalOverrides: number) {
+function addHeader(
+  ws: XLSX.WorkSheet,
+  totalTemplates: number,
+  totalOverrides: number,
+  warning?: string,
+) {
   const now = new Date().toLocaleString();
   XLSX.utils.sheet_add_aoa(ws, [
     ['Workflow Configuration Report'],
     [`Generated: ${now} | Templates: ${totalTemplates} | Total Overrides: ${totalOverrides}`],
-    [],
+    warning ? [warning] : [],
   ], { origin: 'A1' });
 }
 
@@ -68,7 +64,6 @@ export function WorkflowConfigExport({
   templates,
   archivedTemplates,
   configs,
-  profiles,
   departments,
 }: WorkflowConfigExportProps) {
   const [busy, setBusy] = useState(false);
@@ -76,108 +71,18 @@ export function WorkflowConfigExport({
   const handleExport = async () => {
     setBusy(true);
     try {
-    const allTemplates = [...templates, ...archivedTemplates];
-    const templateMap = new Map(allTemplates.map(t => [t.id, t]));
-    const deptMap = new Map(departments.map(d => [d.id, d.name]));
-    const profileMap = new Map(profiles.map(p => [p.id, p]));
+      // ADR-214: the export fetches its own roster instead of relying on the
+      // screen's in-flight profile query. Previously a click before that query
+      // resolved produced a workbook where every employee cell printed "—".
+      const [rosterRows, roleRes] = await Promise.all([
+        fetchAllRpcPaged<any>((from, to) =>
+          supabase.rpc('get_reviewer_roster_slim').range(from, to),
+        ),
+        supabase.from('user_roles').select('user_id, role'),
+      ]);
+      if (roleRes.error) throw roleRes.error;
 
-    const wb = XLSX.utils.book_new();
-
-    // --- Sheet 1: Templates ---
-    const templatesRows = allTemplates.map(t => ({
-      'Template Name': t.display_name,
-      'Description': t.description || '',
-      'Stages': formatStages(t.stages),
-      'Stage Count': t.stages.length,
-      'Is Default': t.is_default ? 'Yes' : 'No',
-      'Status': t.is_active ? 'Active' : 'Archived',
-    }));
-    const ws1 = XLSX.utils.aoa_to_sheet([]);
-    addHeader(ws1, allTemplates.length, configs.length);
-    XLSX.utils.sheet_add_json(ws1, templatesRows, { origin: 'A4' });
-    ws1['!cols'] = [{ wch: 25 }, { wch: 35 }, { wch: 60 }, { wch: 12 }, { wch: 12 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, ws1, 'Templates');
-
-    // --- Sheet 2: Employee Overrides ---
-    const empConfigs = configs.filter(c => c.config_type === 'employee');
-    const empRows = empConfigs.map(c => {
-      const p = profileMap.get(c.config_value);
-      const tmpl = templateMap.get(c.workflow_template_id);
-      const manager = p?.reporting_manager_id ? profileMap.get(p.reporting_manager_id) : null;
-      const skipManager = manager?.reporting_manager_id ? profileMap.get(manager.reporting_manager_id) : null;
-      return {
-        'Employee Name': p?.full_name || '—',
-        'Employee Code': p?.employee_code || '—',
-        'Email': p?.email || '—',
-        'PMS Grade': p?.pms_grade || '—',
-        'Department': p?.department_id ? (deptMap.get(p.department_id) || '—') : '—',
-        'Reporting Manager': manager?.full_name || '—',
-        'Skip-Level Manager': skipManager?.full_name || '—',
-        'Assigned Template': tmpl?.display_name || '—',
-        'Stages': tmpl ? formatStages(tmpl.stages) : '—',
-        'Scope': c.review_period ? 'Period-Specific' : 'Global',
-        'Review Period': c.review_period || '—',
-        'Review Year': c.review_year ?? '—',
-        'Month': deriveMonth(c.review_period),
-      };
-    });
-    const ws2 = XLSX.utils.aoa_to_sheet([]);
-    addHeader(ws2, allTemplates.length, configs.length);
-    XLSX.utils.sheet_add_json(ws2, empRows.length ? empRows : [{ 'Employee Name': 'No employee overrides configured' }], { origin: 'A4' });
-    ws2['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 28 }, { wch: 12 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 20 }];
-    XLSX.utils.book_append_sheet(wb, ws2, 'Employee Overrides');
-
-    // --- Sheet 3: Department Assignments ---
-    const deptConfigs = configs.filter(c => c.config_type === 'department');
-    const deptRows = deptConfigs.map(c => {
-      const tmpl = templateMap.get(c.workflow_template_id);
-      return {
-        'Department': deptMap.get(c.config_value) || c.config_value,
-        'Assigned Template': tmpl?.display_name || '—',
-        'Stages': tmpl ? formatStages(tmpl.stages) : '—',
-        'Scope': c.review_period ? 'Period-Specific' : 'Global',
-        'Review Period': c.review_period || '—',
-        'Review Year': c.review_year ?? '—',
-        'Month': deriveMonth(c.review_period),
-      };
-    });
-    const ws3 = XLSX.utils.aoa_to_sheet([]);
-    addHeader(ws3, allTemplates.length, configs.length);
-    XLSX.utils.sheet_add_json(ws3, deptRows.length ? deptRows : [{ 'Department': 'No department assignments configured' }], { origin: 'A4' });
-    ws3['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 20 }];
-    XLSX.utils.book_append_sheet(wb, ws3, 'Department Assignments');
-
-    // --- Sheet 4: PMS Grade Assignments ---
-    const gradeConfigs = configs.filter(c => c.config_type === 'pms_grade');
-    const gradeRows = gradeConfigs.map(c => {
-      const tmpl = templateMap.get(c.workflow_template_id);
-      const empCount = profiles.filter(p => p.pms_grade === c.config_value).length;
-      return {
-        'PMS Grade': c.config_value,
-        'Employee Count': empCount,
-        'Assigned Template': tmpl?.display_name || '—',
-        'Stages': tmpl ? formatStages(tmpl.stages) : '—',
-        'Scope': c.review_period ? 'Period-Specific' : 'Global',
-        'Review Period': c.review_period || '—',
-        'Review Year': c.review_year ?? '—',
-        'Month': deriveMonth(c.review_period),
-      };
-    });
-    const ws4 = XLSX.utils.aoa_to_sheet([]);
-    addHeader(ws4, allTemplates.length, configs.length);
-    XLSX.utils.sheet_add_json(ws4, gradeRows.length ? gradeRows : [{ 'PMS Grade': 'No PMS grade assignments configured' }], { origin: 'A4' });
-    ws4['!cols'] = [{ wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 20 }];
-    XLSX.utils.book_append_sheet(wb, ws4, 'PMS Grade Assignments');
-
-    // --- Sheet 5: All Employees (Resolved) ---
-    // Period-aware resolution requires a (period, year). Since this export sits
-    // on /admin/workflow-config which has no global period selector, we resolve
-    // GLOBAL templates only (no period-specific overrides) so the sheet always
-    // produces something useful. The new in-app Workflow Resolution Report
-    // (/reports/workflow-resolution) is the period-aware surface.
-    try {
-      const { data: roleRows } = await supabase.from('user_roles').select('user_id, role');
-      const resolverProfiles: ResolverProfile[] = profiles.map(p => ({
+      const profiles: ResolverProfile[] = (rosterRows || []).map((p: any) => ({
         id: p.id,
         full_name: p.full_name,
         email: p.email,
@@ -185,71 +90,138 @@ export function WorkflowConfigExport({
         pms_grade: p.pms_grade,
         department_id: p.department_id,
         reporting_manager_id: p.reporting_manager_id,
-        is_active: true,
+        functional_manager_id: p.functional_manager_id ?? null,
+        is_active: p.is_active !== false,
       }));
-      const ctx = buildResolverContext(resolverProfiles, (roleRows as any) || []);
 
-      // Build per-employee global template (employee override > department > grade > default)
-      const empOverride = new Map<string, string>();
-      const deptOverride = new Map<string, string>();
-      const gradeOverride = new Map<string, string>();
-      for (const c of configs) {
-        if (c.review_period) continue; // skip period-specific
-        if (c.config_type === 'employee') empOverride.set(c.config_value, c.workflow_template_id);
-        else if (c.config_type === 'department') deptOverride.set(c.config_value, c.workflow_template_id);
-        else if (c.config_type === 'pms_grade') gradeOverride.set(c.config_value, c.workflow_template_id);
+      // Fail loudly rather than emitting a placeholder-only workbook.
+      if (profiles.length === 0) {
+        toast.error('Employee directory could not be loaded — export cancelled. Please retry; if it persists your account may not have directory access.');
+        return;
       }
-      const defaultTpl = allTemplates.find(t => t.is_default && t.is_active) || allTemplates[0];
 
-      const resolvedRows = resolverProfiles.map(p => {
-        let tplId: string | undefined;
-        let source: 'employee' | 'department' | 'pms_grade' | 'default' = 'default';
-        if (empOverride.has(p.id)) { tplId = empOverride.get(p.id); source = 'employee'; }
-        else if (p.department_id && deptOverride.has(p.department_id)) { tplId = deptOverride.get(p.department_id); source = 'department'; }
-        else if (p.pms_grade && gradeOverride.has(p.pms_grade)) { tplId = gradeOverride.get(p.pms_grade); source = 'pms_grade'; }
-        else { tplId = defaultTpl?.id; source = 'default'; }
-        const tpl = tplId ? templateMap.get(tplId) : undefined;
+      const allTemplates = [...templates, ...archivedTemplates];
+      const templateMap = new Map<string, ExportTemplate>(
+        allTemplates.map(t => [t.id, t as unknown as ExportTemplate]),
+      );
+      const deptMap = new Map(departments.map(d => [d.id, d.name]));
+      const profilesById = new Map(profiles.map(p => [p.id, p]));
+      const exportConfigs = configs as unknown as ExportConfig[];
 
-        const chain = resolveChain(p, {
-          templateId: tpl?.id ?? null,
-          templateName: tpl?.display_name ?? null,
-          stages: tpl?.stages ?? [],
-          source,
-        }, ctx);
+      const missing = unresolvedCount(exportConfigs, profilesById);
+      const warning = missing > 0
+        ? `WARNING: ${missing} employee override row(s) could not be matched to a directory record and are flagged as "Unresolved".`
+        : undefined;
+      if (missing > 0) {
+        toast.warning(`${missing} override row(s) could not be matched to an employee record — flagged in the file.`);
+      }
 
-        const cell = (st: any) => {
-          const s = chain.stages[st];
-          if (!s.inTemplate) return 'N/A — Stage not in template';
-          if (s.naReason) return `N/A — ${NA_REASON_LABEL[s.naReason]}`;
-          return s.users.map(u => u.full_name || u.email).join('; ');
-        };
+      const wb = XLSX.utils.book_new();
 
+      // --- Sheet 1: Templates ---
+      const templatesRows = allTemplates.map(t => ({
+        'Template Name': t.display_name,
+        'Description': t.description || '',
+        'Stages': formatStages(t.stages, getStageLabel),
+        'Stage Count': t.stages.length,
+        'Is Default': t.is_default ? 'Yes' : 'No',
+        'Status': t.is_active ? 'Active' : 'Archived',
+      }));
+      const ws1 = XLSX.utils.aoa_to_sheet([]);
+      addHeader(ws1, allTemplates.length, configs.length, warning);
+      XLSX.utils.sheet_add_json(ws1, templatesRows, { origin: 'A4' });
+      ws1['!cols'] = [{ wch: 25 }, { wch: 35 }, { wch: 60 }, { wch: 12 }, { wch: 12 }, { wch: 10 }];
+      XLSX.utils.book_append_sheet(wb, ws1, 'Templates');
+
+      // --- Sheet 2: Employee Overrides ---
+      const empRows = buildEmployeeOverrideRows({
+        configs: exportConfigs,
+        profilesById,
+        templatesById: templateMap,
+        departmentsById: deptMap,
+        stageLabel: getStageLabel,
+        monthOf: deriveMonth,
+      });
+      const ws2 = XLSX.utils.aoa_to_sheet([]);
+      addHeader(ws2, allTemplates.length, configs.length, warning);
+      XLSX.utils.sheet_add_json(
+        ws2,
+        empRows.length ? empRows : [{ 'Employee Name': 'No employee overrides configured' }],
+        { origin: 'A4' },
+      );
+      ws2['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 28 }, { wch: 14 }, { wch: 12 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(wb, ws2, 'Employee Overrides');
+
+      // --- Sheet 3: Department Assignments ---
+      const deptConfigs = configs.filter(c => c.config_type === 'department');
+      const deptRows = deptConfigs.map(c => {
+        const tmpl = templateMap.get(c.workflow_template_id);
         return {
-          'Employee Code': p.employee_code || '—',
-          'Employee Name': p.full_name || p.email,
-          'Department': p.department_id ? (deptMap.get(p.department_id) || '—') : '—',
-          'PMS Grade': p.pms_grade || '—',
-          'Resolved Template (Global)': tpl?.display_name || '—',
-          'Source': source,
-          ...Object.fromEntries(CHAIN_STAGES.map(s => [CHAIN_STAGE_LABEL[s], cell(s)])),
-          'Has N/A': chain.hasAnyNa ? 'Yes' : 'No',
+          'Department': deptMap.get(c.config_value) || c.config_value,
+          'Assigned Template': tmpl?.display_name || EM_DASH,
+          'Stages': tmpl ? formatStages(tmpl.stages, getStageLabel) : EM_DASH,
+          'Scope': c.review_period ? 'Period-Specific' : 'Global',
+          'Review Period': c.review_period || EM_DASH,
+          'Review Year': c.review_year ?? EM_DASH,
+          'Month': deriveMonth(c.review_period),
         };
       });
+      const ws3 = XLSX.utils.aoa_to_sheet([]);
+      addHeader(ws3, allTemplates.length, configs.length, warning);
+      XLSX.utils.sheet_add_json(ws3, deptRows.length ? deptRows : [{ 'Department': 'No department assignments configured' }], { origin: 'A4' });
+      ws3['!cols'] = [{ wch: 22 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(wb, ws3, 'Department Assignments');
 
+      // --- Sheet 4: PMS Grade Assignments ---
+      const gradeConfigs = configs.filter(c => c.config_type === 'pms_grade');
+      const gradeRows = gradeConfigs.map(c => {
+        const tmpl = templateMap.get(c.workflow_template_id);
+        const empCount = profiles.filter(p => p.pms_grade === c.config_value).length;
+        return {
+          'PMS Grade': c.config_value,
+          'Employee Count': empCount,
+          'Assigned Template': tmpl?.display_name || EM_DASH,
+          'Stages': tmpl ? formatStages(tmpl.stages, getStageLabel) : EM_DASH,
+          'Scope': c.review_period ? 'Period-Specific' : 'Global',
+          'Review Period': c.review_period || EM_DASH,
+          'Review Year': c.review_year ?? EM_DASH,
+          'Month': deriveMonth(c.review_period),
+        };
+      });
+      const ws4 = XLSX.utils.aoa_to_sheet([]);
+      addHeader(ws4, allTemplates.length, configs.length, warning);
+      XLSX.utils.sheet_add_json(ws4, gradeRows.length ? gradeRows : [{ 'PMS Grade': 'No PMS grade assignments configured' }], { origin: 'A4' });
+      ws4['!cols'] = [{ wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 50 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 20 }];
+      XLSX.utils.book_append_sheet(wb, ws4, 'PMS Grade Assignments');
+
+      // --- Sheet 5: All Employees (Resolved) ---
+      // Global templates only; the period-aware surface is
+      // /reports/workflow-resolution.
+      const ctx = buildResolverContext(profiles, (roleRes.data as any) || []);
+      const defaultTpl = templateMap.get(
+        (allTemplates.find(t => t.is_default && t.is_active) || allTemplates[0])?.id ?? '',
+      );
+      const resolvedRows = buildResolvedEmployeeRows({
+        profiles,
+        configs: exportConfigs,
+        templatesById: templateMap,
+        departmentsById: deptMap,
+        defaultTemplate: defaultTpl,
+        ctx,
+      });
       const ws5 = XLSX.utils.aoa_to_sheet([]);
-      addHeader(ws5, allTemplates.length, configs.length);
+      addHeader(ws5, allTemplates.length, configs.length, warning);
       XLSX.utils.sheet_add_json(ws5, resolvedRows.length ? resolvedRows : [{ 'Employee Code': 'No employees' }], { origin: 'A4' });
       ws5['!cols'] = [
-        { wch: 14 }, { wch: 24 }, { wch: 20 }, { wch: 12 }, { wch: 24 }, { wch: 12 },
+        { wch: 14 }, { wch: 24 }, { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 24 }, { wch: 12 },
         { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 22 }, { wch: 10 },
       ];
       XLSX.utils.book_append_sheet(wb, ws5, 'All Employees (Resolved)');
-    } catch (e) {
-      console.error('Failed to build resolved sheet', e);
-      toast.error('Resolved-chain sheet skipped (see console). Other sheets exported.');
-    }
 
-    XLSX.writeFile(wb, `Workflow_Configuration_Report.xlsx`);
+      XLSX.writeFile(wb, `Workflow_Configuration_Report.xlsx`);
+    } catch (e) {
+      console.error('Workflow configuration export failed', e);
+      toast.error(`Export failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
     } finally {
       setBusy(false);
     }
@@ -258,7 +230,7 @@ export function WorkflowConfigExport({
   return (
     <Button variant="outline" size="sm" onClick={handleExport} disabled={busy} className="gap-1.5">
       <Download className="h-4 w-4" />
-      {busy ? 'Exporting…' : 'Export Report'}
+      {busy ? 'Preparing…' : 'Export Report'}
     </Button>
   );
 }
