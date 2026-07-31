@@ -223,7 +223,15 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
   }
 
   const hasTargets = banding.hasTargets;
-  const modeNote = `Bands: ${BAND_MODE_LABELS[bandMode]}`;
+  const capOptions = {
+    slabs: slabs.length > 0 ? slabs : undefined,
+    capEnabled: config.exempted_slab_cap_enabled !== false,
+    topTiersExcluded: config.exempted_top_tiers_excluded ?? 0,
+  };
+  const capNote = capOptions.capEnabled && (capOptions.topTiersExcluded ?? 0) > 0
+    ? ` · Exempted: top ${capOptions.topTiersExcluded} tier(s) excluded`
+    : '';
+  const modeNote = `Bands: ${BAND_MODE_LABELS[bandMode]}${capNote}`;
 
   const viewLabel = view === 'department' ? 'Department'
     : view === 'business_unit' ? 'Business Unit'
@@ -250,6 +258,11 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
             {canConfigure && hasTargets && (
               <Button variant="outline" size="sm" className="gap-2" onClick={() => setConfigOpen(true)}>
                 <Settings2 className="h-4 w-4" /> Configure targets
+              </Button>
+            )}
+            {canConfigure && !hasTargets && (
+              <Button variant="outline" size="sm" className="gap-2" onClick={() => setConfigOpen(true)}>
+                <Settings2 className="h-4 w-4" /> Configure
               </Button>
             )}
             <Button
@@ -381,6 +394,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
               eligibilityOf={(e) => eligibilityByInstance.get(e.instance_id) ?? null}
               canManageExemptions={canManageExemptions}
               canApproveExemptions={canApproveExemptions}
+              capOptions={capOptions}
               onClose={close}
             />
           );
