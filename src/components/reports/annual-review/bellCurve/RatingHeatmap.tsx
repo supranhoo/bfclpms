@@ -3,12 +3,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowDown, ArrowUp, ArrowUpDown, Search, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Percent, Search, X, Hash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BAND_LABELS, BAND_ORDER, type HeatmapRow } from '@/lib/annualReview/bellCurve';
 
 type SortKey = 'name' | 'total' | 1 | 2 | 3 | 4 | 5;
 type SortDir = 'asc' | 'desc';
+type SortMode = 'count' | 'pct';
 
 function cellClass(compliance: string, count: number): string {
   if (count === 0) return 'bg-muted/40 text-muted-foreground';
@@ -37,6 +38,7 @@ export function RatingHeatmap({
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('total');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sortMode, setSortMode] = useState<SortMode>('count');
 
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
 
@@ -46,7 +48,8 @@ export function RatingHeatmap({
     const val = (r: HeatmapRow): string | number => {
       if (sortKey === 'name') return r.name.toLowerCase();
       if (sortKey === 'total') return r.total;
-      return r.cells.find((c) => c.band === sortKey)?.count ?? 0;
+      const cell = r.cells.find((c) => c.band === sortKey);
+      return sortMode === 'pct' ? (cell?.pct ?? 0) : (cell?.count ?? 0);
     };
     filtered.sort((a, b) => {
       const av = val(a); const bv = val(b);
@@ -54,7 +57,7 @@ export function RatingHeatmap({
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return filtered;
-  }, [rows, search, sortKey, sortDir]);
+  }, [rows, search, sortKey, sortDir, sortMode]);
 
   const toggleSort = (key: SortKey) => {
     if (key === sortKey) { setSortDir((d) => (d === 'asc' ? 'desc' : 'asc')); return; }
@@ -62,6 +65,7 @@ export function RatingHeatmap({
     setSortDir(key === 'name' ? 'asc' : 'desc');
   };
 
+  const modeLabel = sortMode === 'count' ? 'Sort by number' : 'Sort by percentage';
   const allVisibleSelected = visible.length > 0 && visible.every((r) => selected.has(r.id));
 
   return (
@@ -83,6 +87,17 @@ export function RatingHeatmap({
                 className="h-9 w-[200px] pl-7 text-sm"
               />
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1 px-2 text-xs"
+              aria-label={modeLabel}
+              title={modeLabel}
+              onClick={() => setSortMode((m) => (m === 'count' ? 'pct' : 'count'))}
+            >
+              {sortMode === 'count' ? <Hash className="h-3.5 w-3.5" /> : <Percent className="h-3.5 w-3.5" />}
+              {sortMode === 'count' ? 'Number' : 'Percentage'}
+            </Button>
             {selected.size > 0 && (
               <Button variant="ghost" size="sm" className="gap-1" onClick={() => onClearSelection?.()}>
                 <X className="h-3.5 w-3.5" /> Clear ({selected.size})
