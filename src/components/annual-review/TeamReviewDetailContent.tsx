@@ -348,6 +348,11 @@ function TeamReviewDetailInner(props: any) {
   const { t } = useAnnualReviewI18n();
   const [eligDlgOpen, setEligDlgOpen] = useState(false);
   const [sysDlgOpen, setSysDlgOpen] = useState(false);
+  // ADR-220 — admin calibration of the final rating.
+  const [calDlgOpen, setCalDlgOpen] = useState(false);
+  const { data: calibrations = {} } = useAnnualReviewCalibrations([instance.id]);
+  const calibration = calibrations[instance.id] ?? null;
+  const computedFinalRating = toRatingOutOf5(instance.total_score ?? null);
   const canEditEligibility = effectiveRole === 'admin' || effectiveRole === 'hr_pms';
   // ADR-217 — System Score corrections are admin-only (HR PMS keeps eligibility only).
   const canEditSystemScores = effectiveRole === 'admin';
