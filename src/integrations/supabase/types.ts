@@ -1748,6 +1748,42 @@ export type Database = {
           },
         ]
       }
+      annual_review_rating_slabs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          increment_percent: number
+          is_active: boolean
+          rating_from: number
+          rating_to: number | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          increment_percent?: number
+          is_active?: boolean
+          rating_from: number
+          rating_to?: number | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          increment_percent?: number
+          is_active?: boolean
+          rating_from?: number
+          rating_to?: number | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       annual_review_rescore_audit_2026_07: {
         Row: {
           created_at: string
