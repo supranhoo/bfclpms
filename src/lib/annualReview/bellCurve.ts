@@ -536,8 +536,6 @@ export function employeesInBand(
     .filter((r) => groupIdentity(r, key).id === groupId && banding.keyOf(r.rating) === bandKey)
     .sort((a, b) => b.rating - a.rating);
 }
-  return heatmapBands(rows, key, makeBanding('rating', config), config);
-}
 
 /**
  * Smooth normal curve sampled across the 1..5 axis, scaled so its peak matches
