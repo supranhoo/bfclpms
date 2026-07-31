@@ -7812,3 +7812,11 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Migration: recreated the CHECK constraint to accept both labels and recreated `admin_update_system_scores_raw` to write the canonical `system_scores.admin_override`. No data or column changes.
 - Tests: `src/test/annualReview/annualReviewAccessAuditActions.test.ts`.
 - Docs: `docs/adr/ADR-217.md` (Audit action label); Policy: POLICY.md §AR-SYSTEM-SCORE-ADMIN-CORRECTION.
+
+### v2.66.219 — ADR-222 Exemption increment cap (2026-07-31)
+- Feature: employees made eligible by an approved exemption (ADR-221) are excluded from the top N increment slab tiers. Configurable per cycle, default on with N = 2 (top 20% and 16% withheld → 12% ceiling on the default slab table).
+- Migration: `annual_review_bell_curve_config` + `exempted_slab_cap_enabled boolean default true`, `exempted_top_tiers_excluded integer default 2` (CHECK 0..6).
+- Code: `slabCapPercent()` in `src/lib/annualReview/ratingSlab.ts`; `SlabCapOptions`, capped `effectiveSlabPercent()` and `isSlabCapped()` in `src/lib/annualReview/effectiveEligibility.ts`; config plumbing in `useBellCurveConfig.ts` and `bellCurve.ts`.
+- UI: switch + tier input with live max-% hint in `BellCurveConfigDialog.tsx`; rule echoed in the `BellCurveTab` header; "Capped" badge + CSV flag in `BandEmployeeList.tsx`; `Exemption Cap Applied` column in `bellCurveExport.ts`; same capped %, badge and export column in the Annual Review Report grid (`AnnualReviewReport.tsx`).
+- Tests: `src/test/annualReview/effectiveEligibility.test.ts` (17 total, 8 new).
+- Docs: `docs/adr/ADR-222.md`; Policy: POLICY.md §AR-ELIGIBILITY-EXEMPTION item 6.
