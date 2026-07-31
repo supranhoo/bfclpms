@@ -1067,6 +1067,101 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_eligibility_exemption_policy: {
+        Row: {
+          created_at: string
+          id: string
+          is_exemptable: boolean
+          label: string
+          notes: string | null
+          question_key: string
+          requires_reason: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_exemptable?: boolean
+          label: string
+          notes?: string | null
+          question_key: string
+          requires_reason?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_exemptable?: boolean
+          label?: string
+          notes?: string | null
+          question_key?: string
+          requires_reason?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      annual_review_eligibility_exemptions: {
+        Row: {
+          created_at: string
+          criterion_id: string
+          criterion_name: string
+          cycle_id: string | null
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          employee_id: string | null
+          id: string
+          instance_id: string
+          reason: string | null
+          requested_at: string
+          requested_by: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          criterion_id: string
+          criterion_name: string
+          cycle_id?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          employee_id?: string | null
+          id?: string
+          instance_id: string
+          reason?: string | null
+          requested_at?: string
+          requested_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          criterion_id?: string
+          criterion_name?: string
+          cycle_id?: string | null
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          employee_id?: string | null
+          id?: string
+          instance_id?: string
+          reason?: string | null
+          requested_at?: string
+          requested_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_eligibility_exemptions_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       annual_review_empty_stage_repair_2026_07: {
         Row: {
           employee_code: string | null
@@ -15328,6 +15423,14 @@ export type Database = {
           run_id: string
         }[]
       }
+      ar_can_approve_eligibility_exemption: {
+        Args: { _user: string }
+        Returns: boolean
+      }
+      ar_eligibility_is_exemptable: {
+        Args: { _criterion_name: string }
+        Returns: boolean
+      }
       ar_expected_reviewer_slots: {
         Args: { p_instance_id: string }
         Returns: {
@@ -15335,6 +15438,7 @@ export type Database = {
           slot: string
         }[]
       }
+      ar_normalise_question: { Args: { _name: string }; Returns: string }
       archive_annual_review_response: {
         Args: { p_reason: string; p_response_id: string }
         Returns: undefined
