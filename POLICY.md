@@ -5542,7 +5542,7 @@ Rules:
 ---
 
 ## §AR-SYSTEM-SCORE-ADMIN-CORRECTION — Admins may correct System Score raw values in place (ADR-217, 2026-07-31)
-
+- Audit action label: every correction writes one `public.annual_review_access_audit` row with `action = 'system_scores.admin_override'` (whitelisted by the table's CHECK constraint). Any new admin annual-review audit action MUST be added to that whitelist in the same migration that starts writing it (ADR-217a).
 1. **Admin only.** The "Update system scores" action on the Annual Review detail page is gated on the `admin` role. HR PMS keeps eligibility-input editing only.
 2. **Raw values only.** Admins key in the measured achievement; appraisal points are ALWAYS derived from the template bands via `scoreFromRaw` (SSOT). Typing points directly is forbidden.
 3. **Bidirectional and status-agnostic.** Corrections may raise or lower a value and are permitted on any status, including `completed`. The monotonic ADR-171 RPC stays exclusive to bulk upload.
