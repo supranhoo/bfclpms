@@ -28,6 +28,8 @@ import {
   isRenamedFromCurrent,
 } from '@/lib/prevMonthCanonicalMatch';
 import { resolveEffectiveChain, isPercolatedSiblingSubmission } from '@/lib/multimonthCycle';
+import { useAuth } from '@/contexts/AuthContext';
+import { resolveStageFirstActionDates } from '@/lib/review/stageFirstActionDate';
 import { resolveSelfAchievedValue } from '@/lib/review/resolveSelfAchievedValue';
 
 const MONTHS = [
