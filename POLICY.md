@@ -5564,7 +5564,8 @@ Rules:
 6. **Scope.** HR/Admin/Management see the full cycle; managers and skip-level reviewers see only their own reporting line, always compared against the organisation targets.
 7. **Screen-only by default.** The bell curve is an on-screen dashboard. The existing Annual Review Report download is unchanged; Bell Curve Excel/PDF exports are separate, in-tab actions.
 8. **Advisory only.** Normalization recommendations never mutate a rating; they are guidance for the reviewer.
+9. **Scoring source filter (ADR-218a, 2026-07-31).** The tab exposes a **Scoring Source (KRA)** filter with three values — *With KRA*, *Blended*, *Without KRA* — derived from the comprehensive report's `scoring_mode`, falling back to `kra_weight > 0` when that text is absent so no employee is invisible to both the KRA and the Non-KRA selection. Blended employees (criteria + KRA weight) are never folded into either pure bucket. The filter narrows the KPI cards, curve, bar chart, variance table, heat map and both tab-local exports; the exports record the active selection. It is a presentation filter only — no scoring, schema or RPC change.
 
-**Guard.** `src/test/annualReview/bellCurve.test.ts` (14 cases).
+**Guard.** `src/test/annualReview/bellCurve.test.ts` (19 cases).
 
 ---
