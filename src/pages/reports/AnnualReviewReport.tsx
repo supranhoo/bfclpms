@@ -226,6 +226,7 @@ export default function AnnualReviewReport() {
                 <TableHead className="text-right">Rating</TableHead>
                 <TableHead className="text-right" title="Final Score converted to a 5-point rating.">Final Rating (/5)</TableHead>
                 <TableHead className="text-right" title="Increment slab resolved from the /5 rating.">Slab %</TableHead>
+                {canCalibrate && <TableHead className="text-right">Calibrate</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -239,12 +240,43 @@ export default function AnnualReviewReport() {
                   <TableCell><AnnualReviewStatusBadge status={i.overall_status} /></TableCell>
                   <TableCell className="text-right tabular-nums">{i.total_score?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-right">{i.final_rating ?? '—'}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatRating5(toRatingOutOf5(i.total_score))}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatSlabPercent(resolveSlabPercent(toRatingOutOf5(i.total_score), slabs))}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatRating5(ratingFor(i.id, i.total_score))}
+                    {calibrations[i.id] && (
+                      <Badge
+                        variant="outline"
+                        className="ml-2 text-[10px]"
+                        title={`Computed ${formatRating5(toRatingOutOf5(i.total_score))} → calibrated ${formatRating5(calibrations[i.id].calibrated_rating)}`
+                          + (calibrations[i.id].calibration_reason ? ` · ${calibrations[i.id].calibration_reason}` : '')}
+                      >
+                        Calibrated
+                      </Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{formatSlabPercent(resolveSlabPercent(ratingFor(i.id, i.total_score), slabs))}</TableCell>
+                  {canCalibrate && (
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-10 gap-1 text-xs"
+                        onClick={() => setCalibrationTarget({
+                          instance_id: i.id,
+                          employee_name: i.employee?.full_name ?? null,
+                          employee_code: i.employee?.employee_code ?? null,
+                          computed_rating: toRatingOutOf5(i.total_score),
+                          calibrated_rating: calibrations[i.id]?.calibrated_rating ?? null,
+                        })}
+                      >
+                        <SlidersHorizontal className="h-3.5 w-3.5" />
+                        <span className="sr-only">Calibrate {i.employee?.full_name ?? 'employee'}</span>
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableRow><TableCell colSpan={canCalibrate ? 8 : 7} className="text-center py-8 text-muted-foreground">
                   {cycleId ? 'No matching reviews.' : 'Pick a cycle to begin.'}
                 </TableCell></TableRow>
               )}
