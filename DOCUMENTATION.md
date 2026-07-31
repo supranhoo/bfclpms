@@ -7802,3 +7802,9 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Code: `src/services/annualReview/adminSystemScores.ts`, `src/components/annual-review/AdminSystemScoresDialog.tsx`, wiring in `TeamReviewDetailContent.tsx`.
 - Tests: `src/test/annualReview/adminSystemScores.test.ts` (6).
 - Policy: POLICY.md §AR-SYSTEM-SCORE-ADMIN-CORRECTION.
+
+### v2.66.218 — ADR-217a System Score correction audit label mismatch fixed (2026-07-31)
+- RCA: saving an admin System Score correction failed with `new row for relation "annual_review_access_audit" violates check constraint "annual_review_access_audit_action_check"`. `admin_update_system_scores_raw` wrote `system_scores.admin_edit`; the CHECK whitelist only contained `system_scores.admin_override`. The whole RPC rolled back, so no correction was ever persisted.
+- Migration: recreated the CHECK constraint to accept both labels and recreated `admin_update_system_scores_raw` to write the canonical `system_scores.admin_override`. No data or column changes.
+- Tests: `src/test/annualReview/annualReviewAccessAuditActions.test.ts`.
+- Docs: `docs/adr/ADR-217.md` (Audit action label); Policy: POLICY.md §AR-SYSTEM-SCORE-ADMIN-CORRECTION.
