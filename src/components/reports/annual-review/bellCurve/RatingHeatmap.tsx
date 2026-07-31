@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,7 @@ const sameKey = (a: SortKey, b: SortKey) =>
 
 export function RatingHeatmap({
   rows, title, defs, hasTargets = true, selectedIds = [], onToggle, onClearSelection, onSelectAll,
+  renderDrilldown, drilldownResetKey,
 }: {
   rows: HeatmapRow[];
   title: string;
@@ -40,11 +41,18 @@ export function RatingHeatmap({
   onToggle?: (id: string) => void;
   onClearSelection?: () => void;
   onSelectAll?: (ids: string[]) => void;
+  /** ADR-218c — expanded employee list rendered under the clicked cell. */
+  renderDrilldown?: (rowId: string, bandKey: string, close: () => void) => ReactNode;
+  /** Any change collapses the expanded cell (view / band mode / filters). */
+  drilldownResetKey?: string;
 }) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('total');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [sortMode, setSortMode] = useState<SortMode>('count');
+  const [expanded, setExpanded] = useState<{ rowId: string; bandKey: string } | null>(null);
+
+  useEffect(() => { setExpanded(null); }, [drilldownResetKey]);
 
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
 
@@ -157,10 +165,10 @@ export function RatingHeatmap({
             </thead>
             <tbody>
               {visible.map((r) => (
+                <>
                 <tr
                   key={r.id}
-                  className={cn('cursor-pointer', selected.has(r.id) && 'bg-primary/5 ring-2 ring-primary/40')}
-                  onClick={() => onToggle?.(r.id)}
+                  className={cn(selected.has(r.id) && 'bg-primary/5 ring-2 ring-primary/40')}
                 >
                   <td className="p-2" onClick={(e) => e.stopPropagation()}>
                     <Checkbox
@@ -169,20 +177,44 @@ export function RatingHeatmap({
                       onCheckedChange={() => onToggle?.(r.id)}
                     />
                   </td>
-                  <td className="p-2 font-medium max-w-[220px] truncate" title={r.name}>{r.name}</td>
+                  <td
+                    className="p-2 font-medium max-w-[220px] truncate cursor-pointer"
+                    title={r.name}
+                    onClick={() => onToggle?.(r.id)}
+                  >
+                    {r.name}
+                  </td>
                   {r.cells.map((c) => (
                     <td key={c.key} className="p-1">
-                      <div
-                        className={cn('rounded-md py-2 text-center tabular-nums min-h-[44px] flex flex-col justify-center', cellClass(c.compliance, c.count))}
-                        title={`${c.count} employees — ${c.pct}%${c.variancePct === null ? '' : ` (variance ${c.variancePct}%)`}`}
+                      <button
+                        type="button"
+                        disabled={c.count === 0 || !renderDrilldown}
+                        aria-expanded={expanded?.rowId === r.id && expanded.bandKey === c.key}
+                        onClick={() => setExpanded((e) =>
+                          e && e.rowId === r.id && e.bandKey === c.key ? null : { rowId: r.id, bandKey: c.key })}
+                        className={cn(
+                          'w-full rounded-md py-2 text-center tabular-nums min-h-[44px] flex flex-col justify-center transition',
+                          cellClass(c.compliance, c.count),
+                          c.count > 0 && renderDrilldown && 'cursor-pointer hover:ring-2 hover:ring-primary/50',
+                          expanded?.rowId === r.id && expanded.bandKey === c.key && 'ring-2 ring-primary',
+                        )}
+                        title={`${c.count} employees — ${c.pct}%${c.variancePct === null ? '' : ` (variance ${c.variancePct}%)`}${c.count > 0 ? ' · click to list employees' : ''}`}
                       >
                         <span className="font-semibold">{c.count}</span>
                         <span className="text-[10px] opacity-70">{c.pct}%</span>
-                      </div>
+                      </button>
                     </td>
                   ))}
                   <td className="p-2 text-right tabular-nums">{r.total}</td>
                 </tr>
+                {expanded?.rowId === r.id && renderDrilldown && (
+                  <tr key={`${r.id}-drill`}>
+                    <td colSpan={defs.length + 3} className="p-2">
+                      {renderDrilldown(r.id, expanded.bandKey, () => setExpanded(null))}
+                    </td>
+                  </tr>
+                )}
+                </>
               ))}
             </tbody>
           </table>
