@@ -86,6 +86,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
       dept: pick((r) => [r.department_id, r.department_name]),
       manager: pick((r) => [r.manager_id, r.manager_name]),
       division: pick((r) => [r.division_id, r.division_name]),
+      grade: pick((r) => [r.grade, r.grade]),
     };
   }, [rows]);
 
