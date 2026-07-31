@@ -13,7 +13,7 @@ import { CalibrateRatingDialog, type CalibrationTarget } from '@/components/annu
 import { ReviewFormViewerDialog } from '@/components/annual-review/ReviewFormViewerDialog';
 import {
   ELIGIBILITY_STATUS_LABELS, effectiveSlabPercent, eligibilitySummary,
-  type EffectiveEligibility,
+  isSlabCapped, type EffectiveEligibility, type SlabCapOptions,
 } from '@/lib/annualReview/effectiveEligibility';
 import { ExemptionDialog } from './ExemptionDialog';
 
@@ -40,7 +40,7 @@ function targetOf(e: BandEmployee): CalibrationTarget {
  */
 export function BandEmployeeList({
   employees, groupName, bandLabel, bandSub, slabs = DEFAULT_RATING_SLABS, canCalibrate = false,
-  eligibilityOf, canManageExemptions = false, canApproveExemptions = false, onClose,
+  eligibilityOf, canManageExemptions = false, canApproveExemptions = false, capOptions, onClose,
 }: {
   employees: BandEmployee[];
   groupName: string;
@@ -52,6 +52,8 @@ export function BandEmployeeList({
   eligibilityOf?: (e: BandEmployee) => EffectiveEligibility | null;
   canManageExemptions?: boolean;
   canApproveExemptions?: boolean;
+  /** ADR-222 — exemption increment cap settings from the bell curve config. */
+  capOptions?: SlabCapOptions;
   onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
@@ -60,6 +62,8 @@ export function BandEmployeeList({
   const [dialogTargets, setDialogTargets] = useState<CalibrationTarget[] | null>(null);
   const [viewInstanceId, setViewInstanceId] = useState<string | null>(null);
   const [exemptionFor, setExemptionFor] = useState<BandEmployee | null>(null);
+
+  const cap: SlabCapOptions = { slabs, ...(capOptions ?? {}) };
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -78,12 +82,14 @@ export function BandEmployeeList({
     const header = [
       'Employee Code', 'Name', 'Grade', 'Manager',
       'Rating Given by Dept', 'Rating Given by BU', 'Slab %',
-      'Computed Rating', 'Calibrated Rating', 'Calibration Reason', 'Eligibility',
+      'Computed Rating', 'Calibrated Rating', 'Calibration Reason', 'Eligibility', 'Exemption Cap Applied',
     ];
     const lines = [header.join(',')];
     for (const e of visible) {
       const elig = eligibilityOf?.(e) ?? null;
-      const pct = effectiveSlabPercent(resolveSlabPercent(e.rating, slabs), elig?.status ?? 'unknown');
+      const status = elig?.status ?? 'unknown';
+      const raw = resolveSlabPercent(e.rating, slabs);
+      const pct = effectiveSlabPercent(raw, status, cap);
       const comp = computedRating(e);
       lines.push([
         e.employee_code, e.employee_name, e.grade ?? '', e.manager_name ?? '',
@@ -94,6 +100,7 @@ export function BandEmployeeList({
         isCalibrated(e) ? Number(e.calibrated_rating).toFixed(2) : '',
         e.calibration_reason ?? '',
         elig ? eligibilitySummary(elig) : '',
+        isSlabCapped(raw, status, cap) ? 'Yes' : '',
       ].map(csvCell).join(','));
     }
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
