@@ -7767,3 +7767,13 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Wiring: route in `src/App.tsx` (via `ReportRoute`), tile in `ReportsHub.tsx`, catalog entry `RPT-CHG-001`, access defaults Admin + HR PMS (download Admin).
 - Tests: `src/test/reports/changeHistory.test.ts` (7 cases: field labelling, unknown-key fallback, empty-value rendering, category mapping, export column parity, system attribution).
 - Policy: POLICY.md §CHG-HISTORY-SSOT.
+
+### v2.69 — ADR-214 Workflow Configuration export blank-row fix
+
+- RCA: `WorkflowConfigExport` consumed the Workflow Config screen's `profiles` prop. Clicking Export before that ~2,600-row paged fetch resolved produced an empty lookup map and a workbook where all 397 employee override rows printed `—`; a partial roster under row-level access produced the same symptom for a subset. DB verified clean (397/397 `config_value` → `profiles.id`, 2,672 profiles).
+- New `src/lib/reports/workflowConfigExportRows.ts`: pure builders `buildEmployeeOverrideRows`, `buildResolvedEmployeeRows`, `resolveGlobalTemplate`, `unresolvedCount`, `unresolvedMarker`, `formatStages`.
+- `WorkflowConfigExport` now fetches its own roster via `fetchAllRpcPaged(get_reviewer_roster_slim)` plus `user_roles`, aborts with a toast when the roster is empty, renders `Unresolved (id: …)` for unmatched rows, adds a WARNING header line with the unresolved count, shows a "Preparing…" busy label, and feeds real `is_active` into `buildResolverContext`.
+- New "Employee Status" column on the Employee Overrides and All Employees (Resolved) sheets; inactive reviewers now resolve as `N/A — Resolved user inactive`.
+- `src/pages/admin/WorkflowConfig.tsx` no longer passes `profiles` to the exporter.
+- Tests: `src/test/reports/workflowConfigExport.test.ts` (8 cases incl. the blank-row regression, empty-roster guard, template precedence, period-config exclusion and inactive-reviewer handling).
+- Policy: POLICY.md §WF-CONFIG-EXPORT-SELF-SUFFICIENT.

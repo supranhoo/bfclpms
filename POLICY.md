@@ -5492,3 +5492,17 @@ Rules:
 7. **Retrospective honesty.** Workflow-mapping history begins at the ADR-213 migration date; the report states this in-page rather than implying complete history.
 
 **Guard.** `src/test/reports/changeHistory.test.ts`.
+
+---
+
+## §WF-CONFIG-EXPORT-SELF-SUFFICIENT — Report exports fetch their own data (ADR-214)
+
+1. **Self-sufficiency.** A report/export action MUST fetch the data it prints at invocation time. It may not depend on a parent screen's in-flight query state; passing `data || []` into an exporter is prohibited, because an un-resolved query silently degrades to placeholder-only output.
+2. **Directory source.** Employee lookups in admin exports read the SECURITY DEFINER roster (`get_reviewer_roster_slim` via `fetchAllRpcPaged`), never a direct paged `profiles` select, so the extract does not vary with the exporter's row-level visibility.
+3. **Fail loudly.** If the roster (or any mandatory dataset) is empty, the export ABORTS with a user-visible error. Writing a file whose rows are entirely placeholders is a defect, not a degraded success.
+4. **Name the gap.** Individually unresolvable references render `Unresolved (id: <short-id>)`, never `—`, and the sheet header carries a WARNING line with the unresolved count. `—` is reserved for values that are genuinely absent.
+5. **Busy state.** The trigger control stays disabled with a progress label for the whole fetch-and-build cycle, so an early click cannot produce a partial artefact.
+6. **Active status is data, never a constant.** Resolver inputs must carry the real `is_active` value; hardcoding `true` makes deactivated users appear as live reviewers, violating the Core rule to filter inactive users.
+7. **Pure builders.** Row construction lives in pure, exported functions outside the component so blank-output regressions are unit-testable.
+
+**Guard.** `src/test/reports/workflowConfigExport.test.ts`.
