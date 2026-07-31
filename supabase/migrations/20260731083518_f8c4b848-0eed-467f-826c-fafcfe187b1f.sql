@@ -1,0 +1,3 @@
+INSERT INTO public.report_registry (report_id, report_key, module_prefix, display_name, canonical_route, menu_key, description, is_active, sort_order)
+VALUES ('RPT-CHG-001','change-history','CHG','Master Change History','/reports/change-history','reports-change-history','Audit trail of workflow mapping updates, active/inactive changes and employee detail edits — with time and actor.', true, 0)
+ON CONFLICT (report_key) DO UPDATE SET display_name = EXCLUDED.display_name, canonical_route = EXCLUDED.canonical_route, is_active = true;
