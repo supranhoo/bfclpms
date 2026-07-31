@@ -65,6 +65,7 @@ export function RatingHeatmap({
     setSortDir(key === 'name' ? 'asc' : 'desc');
   };
 
+  const modeLabel = sortMode === 'count' ? 'Sort by number' : 'Sort by percentage';
   const allVisibleSelected = visible.length > 0 && visible.every((r) => selected.has(r.id));
 
   return (
