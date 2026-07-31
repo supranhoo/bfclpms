@@ -15,6 +15,7 @@ import { DepartmentSubmissionTab } from '@/components/reports/annual-review/Depa
 import { ReviewerQueuesTab } from '@/components/reports/annual-review/ReviewerQueuesTab';
 import { PendingDrilldownTab } from '@/components/reports/annual-review/PendingDrilldownTab';
 import { ComprehensiveTab } from '@/components/reports/annual-review/ComprehensiveTab';
+import { BellCurveTab } from '@/components/reports/annual-review/BellCurveTab';
 import { useAnnualReviewRatingSlabs } from '@/hooks/useAnnualReviewRatingSlabs';
 import {
   toRatingOutOf5,
@@ -162,8 +163,9 @@ export default function AnnualReviewReport() {
       )}
 
       <Tabs defaultValue="comprehensive" className="space-y-3">
-        <TabsList>
+        <TabsList className="flex-wrap h-auto">
           <TabsTrigger value="comprehensive">Comprehensive</TabsTrigger>
+          <TabsTrigger value="bell-curve">Bell Curve</TabsTrigger>
           <TabsTrigger value="detail">Detail</TabsTrigger>
           <TabsTrigger value="by-dept">By Department</TabsTrigger>
           <TabsTrigger value="by-reviewer">By Reviewer</TabsTrigger>
@@ -171,6 +173,9 @@ export default function AnnualReviewReport() {
         </TabsList>
         <TabsContent value="comprehensive">
           <ComprehensiveTab cycleId={cycleId} cycleName={cycles.find((c) => c.id === cycleId)?.name ?? 'Cycle'} />
+        </TabsContent>
+        <TabsContent value="bell-curve">
+          <BellCurveTab cycleId={cycleId} cycleName={cycles.find((c) => c.id === cycleId)?.name ?? 'Cycle'} />
         </TabsContent>
         <TabsContent value="detail">
           <Card>
