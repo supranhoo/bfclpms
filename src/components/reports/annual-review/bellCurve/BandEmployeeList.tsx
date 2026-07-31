@@ -3,13 +3,14 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Download, Search, SlidersHorizontal, X } from 'lucide-react';
+import { Download, Eye, Search, SlidersHorizontal, X } from 'lucide-react';
 import {
   DEFAULT_RATING_SLABS, formatRating5, formatSlabPercent, resolveSlabPercent, type RatingSlab,
 } from '@/lib/annualReview/ratingSlab';
 import { computedRating, isCalibrated } from '@/lib/annualReview/effectiveRating';
 import type { BandEmployee } from '@/lib/annualReview/bellCurve';
 import { CalibrateRatingDialog, type CalibrationTarget } from '@/components/annual-review/CalibrateRatingDialog';
+import { ReviewFormViewerDialog } from '@/components/annual-review/ReviewFormViewerDialog';
 
 const PAGE_SIZE = 25;
 
@@ -47,6 +48,7 @@ export function BandEmployeeList({
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
   const [dialogTargets, setDialogTargets] = useState<CalibrationTarget[] | null>(null);
+  const [viewInstanceId, setViewInstanceId] = useState<string | null>(null);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -59,7 +61,7 @@ export function BandEmployeeList({
   const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const current = Math.min(page, pageCount - 1);
   const slice = visible.slice(current * PAGE_SIZE, current * PAGE_SIZE + PAGE_SIZE);
-  const colCount = canCalibrate ? 9 : 7;
+  const colCount = canCalibrate ? 10 : 8;
 
   const exportCsv = () => {
     const header = [
@@ -154,6 +156,7 @@ export function BandEmployeeList({
               <th className="p-2 text-right font-medium">Rating Given by Dept</th>
               <th className="p-2 text-right font-medium">Rating Given by BU</th>
               <th className="p-2 text-right font-medium">Slab %</th>
+              <th className="p-2 text-right font-medium">Form</th>
               {canCalibrate && <th className="p-2 text-right font-medium">Calibrate</th>}
             </tr>
           </thead>
@@ -189,6 +192,17 @@ export function BandEmployeeList({
                 <td className="p-2 text-right tabular-nums">{formatRating5(e.dept_head_rating_5 ?? null)}</td>
                 <td className="p-2 text-right tabular-nums">{formatRating5(e.bu_head_rating_5 ?? null)}</td>
                 <td className="p-2 text-right tabular-nums">{formatSlabPercent(resolveSlabPercent(e.rating, slabs))}</td>
+                <td className="p-2 text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 gap-1 text-xs"
+                    onClick={() => setViewInstanceId(e.instance_id)}
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    <span className="sr-only">View review form for {e.employee_name ?? 'employee'}</span>
+                  </Button>
+                </td>
                 {canCalibrate && (
                   <td className="p-2 text-right">
                     <Button
@@ -228,6 +242,12 @@ export function BandEmployeeList({
           onDone={() => setSelected([])}
         />
       )}
+
+      <ReviewFormViewerDialog
+        instanceId={viewInstanceId}
+        slabs={slabs}
+        onClose={() => setViewInstanceId(null)}
+      />
     </div>
   );
 }
