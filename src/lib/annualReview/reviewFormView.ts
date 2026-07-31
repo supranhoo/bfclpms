@@ -55,6 +55,9 @@ export function buildStageBlocks(args: {
 }): StageBlock[] {
   const names = criterionNameMap(args.template);
   const criteriaIds = (args.template?.sections?.criteria ?? []).map((c) => c.id);
+  // Self-review field answers share the `qualitative_responses` map with
+  // criterion comments — never surface them as pseudo-criteria.
+  const fieldIds = new Set((args.template?.sections?.self_review_fields ?? []).map((f) => f.id));
   const byRole = new Map<AnnualReviewerRole, ReviewFormResponseRow>();
   for (const r of args.responses ?? []) byRole.set(r.reviewer_role, r);
 
@@ -70,7 +73,7 @@ export function buildStageBlocks(args: {
         ...criteriaIds,
         ...Object.keys(scores),
         ...Object.keys(comments),
-      ]));
+      ])).filter((id) => !fieldIds.has(id));
       const criteria: CriterionAnswer[] = ids.map((id) => {
         const raw = scores[id];
         const text = comments[id];
