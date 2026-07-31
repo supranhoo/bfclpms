@@ -5544,3 +5544,18 @@ Rules:
 **Guard.** `src/test/annualReview/adminSystemScores.test.ts`.
 
 ---
+
+## §AR-BELL-CURVE — Bell Curve Analysis of annual ratings (ADR-218, 2026-08-01)
+
+1. **Rating source is fixed.** Bands come from the ADR-212 SSOT `toRatingOutOf5(total_score)`; the bell curve never recomputes a score. Band = nearest integer, clamped 1..5 (4.5 → 5).
+2. **Denominator.** Only non-excluded, rated employees count towards the distribution. Excluded and unrated employees are reported separately and never inflate a band.
+3. **Targets are master data.** Target percentages and the green/amber thresholds live in `public.annual_review_bell_curve_config` — a global default row plus optional cycle-specific overrides. No percentage is hardcoded in the UI. Targets must total 100%; amber must exceed green.
+4. **Configuration rights.** Admin and HR PMS may edit targets; everyone else reads.
+5. **Compliance.** |actual% − target%| ≤ green → green, ≤ amber → amber, otherwise red. Compliance % = share of the five bands that are green.
+6. **Scope.** HR/Admin/Management see the full cycle; managers and skip-level reviewers see only their own reporting line, always compared against the organisation targets.
+7. **Screen-only by default.** The bell curve is an on-screen dashboard. The existing Annual Review Report download is unchanged; Bell Curve Excel/PDF exports are separate, in-tab actions.
+8. **Advisory only.** Normalization recommendations never mutate a rating; they are guidance for the reviewer.
+
+**Guard.** `src/test/annualReview/bellCurve.test.ts` (14 cases).
+
+---
