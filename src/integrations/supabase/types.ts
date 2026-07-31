@@ -432,6 +432,62 @@ export type Database = {
           },
         ]
       }
+      annual_review_bell_curve_config: {
+        Row: {
+          amber_threshold: number
+          created_at: string
+          cycle_id: string | null
+          green_threshold: number
+          id: string
+          is_active: boolean
+          target_1: number
+          target_2: number
+          target_3: number
+          target_4: number
+          target_5: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          amber_threshold?: number
+          created_at?: string
+          cycle_id?: string | null
+          green_threshold?: number
+          id?: string
+          is_active?: boolean
+          target_1?: number
+          target_2?: number
+          target_3?: number
+          target_4?: number
+          target_5?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          amber_threshold?: number
+          created_at?: string
+          cycle_id?: string | null
+          green_threshold?: number
+          id?: string
+          is_active?: boolean
+          target_1?: number
+          target_2?: number
+          target_3?: number
+          target_4?: number
+          target_5?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_bell_curve_config_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_cycles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       annual_review_bu_draft_finalise_2026_07: {
         Row: {
           applied_at: string
