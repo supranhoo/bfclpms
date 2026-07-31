@@ -100,7 +100,7 @@ export default function AnnualReviewReport() {
 
       <Card>
         <CardHeader><CardTitle className="text-base">Filters</CardTitle></CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-4">
+        <CardContent className="grid gap-3 md:grid-cols-5">
           <div className="space-y-1">
             <Label>Cycle</Label>
             <Select value={cycleId ?? ''} onValueChange={(v) => { setCycleId(v); setPage(1); }}>
@@ -133,6 +133,16 @@ export default function AnnualReviewReport() {
               <SelectContent>
                 <SelectItem value="all">All ratings</SelectItem>
                 {ratingOptions.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label>PMS Grade</Label>
+            <Select value={pmsGrade} onValueChange={(v) => { setPmsGrade(v); setPage(1); }}>
+              <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All grades</SelectItem>
+                {gradeOptions.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
