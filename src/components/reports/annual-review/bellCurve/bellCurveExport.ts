@@ -71,8 +71,8 @@ export async function exportBellCurveExcel(
     XLSX.utils.json_to_sheet([...bands].reverse().map((b) => ({
       Rating: `${b.label} (${b.band})`,
       Count: b.count,
-      'Actual %': b.actualPct,
       'Target %': b.targetPct,
+      'Actual %': b.actualPct,
       'Target Count': b.targetCount,
       'Variance %': b.variancePct,
       Compliance: b.compliance,
