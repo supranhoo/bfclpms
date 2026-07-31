@@ -5439,3 +5439,17 @@ Rules:
 5. **Read-only.** Presentation only — no schema, no writes, no workflow effect. Absence of a date renders nothing (never a placeholder that implies "not submitted").
 
 **Guard.** `src/test/stageFirstActionDate.test.ts`, `src/test/reviewStageCardFirstActionDate.test.tsx`.
+
+---
+
+### §AR-RESET-ROLLBACK — Recovering an annual review from an erroneous force-reset (ADR-210, 2026-07-31)
+
+1. **Archive is authoritative.** `annual_review_reset_archive` is the only sanctioned source for undoing a force-reset. Responses are re-inserted **verbatim** — same `id`, `reviewer_id`, `submitted_at`, `created_at` and `is_locked`. Re-keying content by hand is forbidden.
+2. **Template travels with the answers.** `prior_template_id` MUST be restored alongside the responses. Answer keys are template-scoped; restoring under a swapped template orphans the content (same failure class as ADR-166).
+3. **Status must be re-anchored.** Leaving a restored instance at `pending_self` is a defect. The archived `prior_status` wins when its stage is still in the instance's *current* `enabled_stages`; otherwise resolve to the first enabled stage with no restored locked response, else `completed`. Resolution lives only in `src/lib/annualReview/resetRollback.ts`.
+4. **Reviewer mappings are never rolled back.** Remaps and `annual_review_assignment_overrides` created after the reset express newer intent and are preserved untouched.
+5. **Legacy archive shape.** Older rows stored an *instance snapshot* object in `wiped_responses` rather than an array. Only array payloads are treated as restorable responses.
+6. **Audit before write.** Each rollback snapshots the before/after state into a dated repair table (`annual_review_self_restore_repair_2026_07` for the first one) with `performed_by = NULL`. The original archive row is never deleted.
+7. **Reset is not exclusion.** If the intent was to remove an employee from the cycle, the correct action is `bulk_exclude_annual_review_instances`, never a force-reset.
+
+**Guard.** `src/test/annualReview/resetRollback.test.ts`.
