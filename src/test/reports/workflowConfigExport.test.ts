@@ -122,7 +122,7 @@ describe('Workflow Configuration export rows (ADR-214)', () => {
     const [row] = buildResolvedEmployeeRows({
       profiles: [employee], configs: [], templatesById, departmentsById, defaultTemplate: template, ctx,
     });
-    expect(row['Manager (L1)']).toMatch(/^N\/A/);
+    expect(row['L1 Manager']).toMatch(/^N\/A/);
     expect(row['Has N/A']).toBe('Yes');
   });
 
