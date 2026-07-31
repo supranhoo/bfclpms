@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useCycles, useAnnualReviewInstancesPaginated, useCycleStatusCounts } from '@/hooks/useAnnualReview';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,14 @@ import {
 } from '@/lib/annualReview/ratingSlab';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
 import { useAnnualReviewCalibrations } from '@/hooks/useAnnualReviewCalibrations';
+import { useBellCurveConfig } from '@/hooks/useBellCurveConfig';
+import {
+  useEligibilityExemptionPolicy, useEligibilityExemptions,
+} from '@/hooks/annualReview/useEligibilityExemptions';
+import { fetchTemplateEligibilityMaps } from '@/services/annualReview/eligibilityReportColumns';
+import {
+  effectiveSlabPercent, isSlabCapped, resolveEligibility, type SlabCapOptions,
+} from '@/lib/annualReview/effectiveEligibility';
 import { effectiveRating } from '@/lib/annualReview/effectiveRating';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
@@ -56,6 +65,9 @@ export default function AnnualReviewReport() {
   const { data: paged, isFetching } = useAnnualReviewInstancesPaginated(args);
   const { data: counts } = useCycleStatusCounts(cycleId);
   const { data: slabs } = useAnnualReviewRatingSlabs();
+  const { data: bellCurveConfig } = useBellCurveConfig(cycleId);
+  const { data: exemptionPolicy = [] } = useEligibilityExemptionPolicy();
+  const { data: exemptions = {} } = useEligibilityExemptions(cycleId);
   const { grades: gradeOptions } = useEmployeeFilterOptions({ enabledGrades: true });
   const rows = paged?.rows ?? [];
   const total = paged?.total ?? 0;
@@ -67,6 +79,41 @@ export default function AnnualReviewReport() {
   );
 
   const { data: calibrations = {} } = useAnnualReviewCalibrations(filtered.map((r) => r.id));
+
+  // ADR-222 — eligibility-aware slab %, identical to the Bell Curve drill-down.
+  const templateIds = useMemo(
+    () => Array.from(new Set(filtered.map((r) => r.template_override_id ?? r.template_id).filter(Boolean) as string[])),
+    [filtered],
+  );
+  const { data: eligMaps = {} } = useQuery({
+    queryKey: ['ar-report-template-eligibility', templateIds.slice().sort().join(',')],
+    enabled: templateIds.length > 0,
+    staleTime: 5 * 60_000,
+    queryFn: () => fetchTemplateEligibilityMaps(templateIds),
+  });
+  const capOptions: SlabCapOptions = {
+    slabs,
+    capEnabled: bellCurveConfig?.exempted_slab_cap_enabled !== false,
+    topTiersExcluded: bellCurveConfig?.exempted_top_tiers_excluded ?? 0,
+  };
+  const eligibilityStatusFor = (i: InstanceWithEmployee) => resolveEligibility({
+    criteria: eligMaps[(i.template_override_id ?? i.template_id) as string],
+    inputs: i.eligibility_inputs ?? undefined,
+    exemptions: exemptions[i.id] ?? [],
+    policy: exemptionPolicy,
+  }).status;
+  /** Slab % after the ineligible→0% rule and the ADR-222 exemption cap. */
+  const slabPercentFor = (i: InstanceWithEmployee) => effectiveSlabPercent(
+    resolveSlabPercent(ratingFor(i.id, i.total_score), slabs),
+    eligibilityStatusFor(i),
+    capOptions,
+  );
+  const slabCappedFor = (i: InstanceWithEmployee) => isSlabCapped(
+    resolveSlabPercent(ratingFor(i.id, i.total_score), slabs),
+    eligibilityStatusFor(i),
+    capOptions,
+  );
+
   /** Effective (calibrated when present) rating for a listed instance. */
   const ratingFor = (id: string, score: number | null) =>
     effectiveRating({ total_score: score, calibrated_rating: calibrations[id]?.calibrated_rating ?? null });
@@ -88,7 +135,8 @@ export default function AnnualReviewReport() {
         'Total Score': i.total_score ?? '',
         'Final Rating': i.final_rating ?? '',
         'Final Rating (out of 5)': ratingFor(i.id, i.total_score) ?? '',
-        'Slab %': resolveSlabPercent(ratingFor(i.id, i.total_score), slabs) ?? '',
+        'Slab %': slabPercentFor(i) ?? '',
+        'Exemption Cap Applied': slabCappedFor(i) ? 'Yes' : '',
         'Computed Rating': toRatingOutOf5(i.total_score) ?? '',
         'Calibrated Rating': calibrations[i.id]?.calibrated_rating ?? '',
         'Calibration Reason': calibrations[i.id]?.calibration_reason ?? '',
