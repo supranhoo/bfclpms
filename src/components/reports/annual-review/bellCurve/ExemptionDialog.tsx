@@ -48,8 +48,17 @@ export function ExemptionDialog({
         <DialogHeader>
           <DialogTitle>Eligibility exemption — {employeeName}</DialogTitle>
           <DialogDescription>
-            Absent days and LWP can be exempted with an approved reason. Disciplinary action and the
-            service / month-completion window can never be exempted.
+            Which criteria may be waived is configured in{' '}
+            <a
+              href="/annual-review/admin?tab=settings#exemption-rules"
+              target="_blank"
+              rel="noreferrer"
+              className="underline underline-offset-2"
+            >
+              Annual Review → Admin → Settings → Eligibility Exemption Rules
+            </a>
+            . Protected criteria (disciplinary action, service / month-completion window) stay locked
+            unless an admin explicitly unlocks them.
           </DialogDescription>
         </DialogHeader>
 
@@ -142,7 +151,8 @@ export function ExemptionDialog({
 
                   {!f.exemptable && (
                     <p className="text-xs text-muted-foreground">
-                      Policy blocks exemptions for this criterion.
+                      Policy blocks exemptions for this criterion. An Admin / HR PMS user can change
+                      this in Annual Review → Admin → Settings → Eligibility Exemption Rules.
                     </p>
                   )}
                 </div>

@@ -33,6 +33,40 @@ export interface ExemptionPolicyRow {
   question_key: string;
   label: string;
   is_exemptable: boolean;
+  /** ADR-223 — master-data management fields (optional for legacy callers). */
+  id?: string;
+  requires_reason?: boolean;
+  is_protected?: boolean;
+  sort_order?: number;
+  notes?: string | null;
+}
+
+/**
+ * ADR-223 — validation for the admin-managed exemption rule list.
+ * Keys are matched as normalised substrings of the criterion name, so they must
+ * be normalised themselves and unique.
+ */
+export function validateExemptionPolicy(
+  rows: ReadonlyArray<Pick<ExemptionPolicyRow, 'question_key' | 'label'>>,
+): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  const seen = new Set<string>();
+  rows.forEach((r, i) => {
+    const label = (r.label ?? '').trim();
+    const key = r.question_key ?? '';
+    if (!label) errors.push(`Row ${i + 1}: label is required`);
+    if (!key.trim()) {
+      errors.push(`Row ${i + 1}: match key is required`);
+      return;
+    }
+    if (key !== normaliseQuestion(key)) {
+      errors.push(`Row ${i + 1}: match key must be lower-case and single-spaced`);
+    }
+    const norm = normaliseQuestion(key);
+    if (seen.has(norm)) errors.push(`Row ${i + 1}: duplicate match key "${norm}"`);
+    seen.add(norm);
+  });
+  return { valid: errors.length === 0, errors };
 }
 
 export interface ExemptionRecord {

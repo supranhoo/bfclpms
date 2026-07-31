@@ -170,3 +170,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Change History Capture](mem://features/reports/change-history-capture) — One bound profile-audit trigger; Reporting & Org category; uncapped exports (ADR-215)
 - [Bell Curve Analysis](mem://features/reports/bell-curve-analysis) — Annual Review bell curve tab: banding, configurable targets, compliance, manager scoping (ADR-218)
 - [Annual Review Eligibility Exemptions](mem://features/annual-review/eligibility-exemptions) — ADR-221 effective eligibility, exemptable-question master policy, exemption approval workflow
+- [Exemption Criteria Admin Configuration](mem://features/annual-review/exemption-policy-admin) — ADR-223 admin-managed exemptable criteria, protected rows, policy audit trail

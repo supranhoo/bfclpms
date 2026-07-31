@@ -7820,3 +7820,11 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - UI: switch + tier input with live max-% hint in `BellCurveConfigDialog.tsx`; rule echoed in the `BellCurveTab` header; "Capped" badge + CSV flag in `BandEmployeeList.tsx`; `Exemption Cap Applied` column in `bellCurveExport.ts`; same capped %, badge and export column in the Annual Review Report grid (`AnnualReviewReport.tsx`).
 - Tests: `src/test/annualReview/effectiveEligibility.test.ts` (17 total, 8 new).
 - Docs: `docs/adr/ADR-222.md`; Policy: POLICY.md §AR-ELIGIBILITY-EXEMPTION item 6.
+
+### v2.66.220 — ADR-223 Admin-configurable exemption criteria (2026-07-31)
+- Feature: which failed eligibility criteria may be waived is now master data managed in the UI, instead of a fixed absent/LWP list.
+- Migration: `annual_review_eligibility_exemption_policy` + `is_protected`, `sort_order`, `updated_by`; new `annual_review_eligibility_policy_audit` table (RLS: Admin / HR PMS / Management read) written by `trg_ar_elig_policy_audit` on insert/update/delete.
+- Code: `validateExemptionPolicy()` in `src/lib/annualReview/effectiveEligibility.ts`; `useExemptionPolicyMutations()` in `src/hooks/annualReview/useEligibilityExemptions.ts`.
+- UI: new `EligibilityExemptionPolicyCard` mounted in Annual Review → Admin → Settings (protected-row unlock, destructive-delete confirmation); `ExemptionDialog` now links to the rules card.
+- Tests: `src/test/annualReview/exemptionPolicy.test.ts` (5 cases).
+- Docs: `docs/adr/ADR-223.md`; Policy: POLICY.md §AR-ELIGIBILITY-EXEMPTION item 7.

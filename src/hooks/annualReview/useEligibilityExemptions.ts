@@ -14,11 +14,64 @@ export function useEligibilityExemptionPolicy() {
     queryFn: async (): Promise<ExemptionPolicyRow[]> => {
       const { data, error } = await (supabase as any)
         .from('annual_review_eligibility_exemption_policy')
-        .select('question_key, label, is_exemptable');
+        .select('id, question_key, label, is_exemptable, requires_reason, is_protected, sort_order, notes')
+        .order('sort_order', { ascending: true })
+        .order('label', { ascending: true });
       if (error) throw error;
       return (data ?? []) as ExemptionPolicyRow[];
     },
   });
+}
+
+/**
+ * ADR-223 — admin/HR management of the exemption rule master list.
+ * Every write is audited server-side by `trg_ar_elig_policy_audit`.
+ */
+export function useExemptionPolicyMutations() {
+  const qc = useQueryClient();
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['ar-eligibility-exemption-policy'] });
+
+  const save = useMutation({
+    mutationFn: async (row: ExemptionPolicyRow) => {
+      const { data: auth } = await supabase.auth.getUser();
+      const payload = {
+        question_key: row.question_key,
+        label: row.label,
+        is_exemptable: row.is_exemptable,
+        requires_reason: row.requires_reason ?? true,
+        is_protected: row.is_protected ?? false,
+        sort_order: row.sort_order ?? 100,
+        notes: row.notes ?? null,
+        updated_by: auth.user?.id ?? null,
+      };
+      if (row.id) {
+        const { error } = await (supabase as any)
+          .from('annual_review_eligibility_exemption_policy')
+          .update(payload)
+          .eq('id', row.id);
+        if (error) throw error;
+        return;
+      }
+      const { error } = await (supabase as any)
+        .from('annual_review_eligibility_exemption_policy')
+        .insert(payload);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any)
+        .from('annual_review_eligibility_exemption_policy')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
+  return { save, remove };
 }
 
 /** All exemptions for a cycle, keyed by instance id. */

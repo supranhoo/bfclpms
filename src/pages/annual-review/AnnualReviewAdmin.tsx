@@ -78,6 +78,7 @@ import {
 } from '@/hooks/useAnnualReviewSettings';
 import { AssistedSubmissionSettings } from '@/components/admin/AssistedSubmissionSettings';
 import { RatingSlabSettingsCard } from '@/components/annual-review/RatingSlabSettingsCard';
+import { EligibilityExemptionPolicyCard } from '@/components/annual-review/EligibilityExemptionPolicyCard';
 import { PilotAccessCard } from '@/components/annual-review/PilotAccessCard';
 import { CycleBulkDataUploadDialog } from '@/components/annual-review/CycleBulkDataUploadDialog';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
@@ -320,6 +321,7 @@ function SettingsTab() {
     </Card>
     <AssistedSubmissionSettings />
     <RatingSlabSettingsCard />
+    <EligibilityExemptionPolicyCard />
     <ConfirmDestructiveDialog
       open={syncOpen}
       onCancel={() => setSyncOpen(false)}
