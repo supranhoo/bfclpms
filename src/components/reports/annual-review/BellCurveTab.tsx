@@ -65,6 +65,18 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
   const [manager, setManager] = useState(ALL);
   const [division, setDivision] = useState(ALL);
   const [configOpen, setConfigOpen] = useState(false);
+  // Multi-select drill-down on the heat map, per grouping view.
+  const [groupSel, setGroupSel] = useState<Record<GroupKey, string[]>>({
+    department: [], business_unit: [], division: [], manager: [],
+  });
+  const selectedIds = groupSel[view];
+
+  const groupIdOf = (r: BellCurveInput): string | null => (
+    view === 'department' ? r.department_id ?? null
+      : view === 'business_unit' ? r.business_unit_id ?? null
+        : view === 'division' ? r.division_id ?? null
+          : r.manager_id ?? null
+  );
 
   const options = useMemo(() => {
     const pick = (get: (r: ComprehensiveRow) => [string | null, string | null]) => {
@@ -83,7 +95,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
     };
   }, [rows]);
 
-  const scoped = useMemo<BellCurveInput[]>(() => {
+  const filtered = useMemo<BellCurveInput[]>(() => {
     let base = rows as BellCurveInput[];
     // Managers and skip-level reviewers only ever see their own team.
     if (isManagerScope && user?.id) {
@@ -96,10 +108,23 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
       && (division === ALL || r.division_id === division));
   }, [rows, isManagerScope, user?.id, bu, dept, manager, division]);
 
+  // Heat map always lists every group in the filtered set; the selection
+  // narrows the charts, KPIs and exports only.
+  const scoped = useMemo<BellCurveInput[]>(() => {
+    if (selectedIds.length === 0) return filtered;
+    const set = new Set(selectedIds);
+    return filtered.filter((r) => {
+      const id = view === 'department' ? r.department_id
+        : view === 'business_unit' ? r.business_unit_id
+          : view === 'division' ? r.division_id : r.manager_id;
+      return id ? set.has(id) : false;
+    });
+  }, [filtered, selectedIds, view]);
+
   const bands = useMemo(() => (config ? computeDistribution(scoped, config) : []), [scoped, config]);
   const summary = useMemo(() => (config ? computeSummary(scoped, config) : null), [scoped, config]);
   const groups = useMemo(() => (config ? groupDistribution(scoped, view, config) : []), [scoped, view, config]);
-  const heat = useMemo(() => (config ? heatmapMatrix(scoped, view, config) : []), [scoped, view, config]);
+  const heat = useMemo(() => (config ? heatmapMatrix(filtered, view, config) : []), [filtered, view, config]);
   const hints = useMemo(() => (config ? normalizationHints(bands, config) : []), [bands, config]);
 
   if (!cycleId) {
@@ -213,12 +238,17 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
         </CardContent>
       </Card>
 
-      <RatingHeatmap rows={heat} title={viewLabel} onSelect={(id) => {
-        if (view === 'department') setDept(id === dept ? ALL : id);
-        else if (view === 'business_unit') setBu(id === bu ? ALL : id);
-        else if (view === 'division') setDivision(id === division ? ALL : id);
-        else setManager(id === manager ? ALL : id);
-      }} selectedId={view === 'department' ? dept : view === 'business_unit' ? bu : view === 'division' ? division : manager} />
+      <RatingHeatmap
+        rows={heat}
+        title={viewLabel}
+        selectedIds={selectedIds}
+        onToggle={(id) => setGroupSel((s) => ({
+          ...s,
+          [view]: s[view].includes(id) ? s[view].filter((x) => x !== id) : [...s[view], id],
+        }))}
+        onSelectAll={(ids) => setGroupSel((s) => ({ ...s, [view]: ids }))}
+        onClearSelection={() => setGroupSel((s) => ({ ...s, [view]: [] }))}
+      />
 
       <Card>
         <CardHeader className="pb-2">
