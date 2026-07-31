@@ -485,7 +485,6 @@ export default function WorkflowConfig() {
                 templates={templates}
                 archivedTemplates={archivedTemplates}
                 configs={configs || []}
-                profiles={profiles || []}
                 departments={departments || []}
               />
               <ReconcileOrphanedKpisDialog
