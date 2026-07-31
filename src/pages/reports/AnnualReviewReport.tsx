@@ -15,6 +15,13 @@ import { DepartmentSubmissionTab } from '@/components/reports/annual-review/Depa
 import { ReviewerQueuesTab } from '@/components/reports/annual-review/ReviewerQueuesTab';
 import { PendingDrilldownTab } from '@/components/reports/annual-review/PendingDrilldownTab';
 import { ComprehensiveTab } from '@/components/reports/annual-review/ComprehensiveTab';
+import { useAnnualReviewRatingSlabs } from '@/hooks/useAnnualReviewRatingSlabs';
+import {
+  toRatingOutOf5,
+  resolveSlabPercent,
+  formatRating5,
+  formatSlabPercent,
+} from '@/lib/annualReview/ratingSlab';
 
 type StatusFilter = 'all' | 'not_started' | 'pending_self' | 'pending_manager' | 'pending_skip' | 'pending_bu' | 'pending_hr' | 'completed';
 
@@ -36,6 +43,7 @@ export default function AnnualReviewReport() {
   const args = cycleId ? { cycleId, page, pageSize, search, status } : undefined;
   const { data: paged, isFetching } = useAnnualReviewInstancesPaginated(args);
   const { data: counts } = useCycleStatusCounts(cycleId);
+  const { data: slabs } = useAnnualReviewRatingSlabs();
   const rows = paged?.rows ?? [];
   const total = paged?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -61,6 +69,8 @@ export default function AnnualReviewReport() {
         'Stage': i.overall_status,
         'Total Score': i.total_score ?? '',
         'Final Rating': i.final_rating ?? '',
+        'Final Rating (out of 5)': toRatingOutOf5(i.total_score) ?? '',
+        'Slab %': resolveSlabPercent(toRatingOutOf5(i.total_score), slabs) ?? '',
         'Finalized At': i.finalized_at ?? '',
       }));
       const ws = XLSX.utils.json_to_sheet(data);
@@ -179,6 +189,8 @@ export default function AnnualReviewReport() {
                 <TableHead>Stage</TableHead>
                 <TableHead className="text-right">Score</TableHead>
                 <TableHead className="text-right">Rating</TableHead>
+                <TableHead className="text-right" title="Final Score converted to a 5-point rating.">Final Rating (/5)</TableHead>
+                <TableHead className="text-right" title="Increment slab resolved from the /5 rating.">Slab %</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -192,10 +204,12 @@ export default function AnnualReviewReport() {
                   <TableCell><AnnualReviewStatusBadge status={i.overall_status} /></TableCell>
                   <TableCell className="text-right tabular-nums">{i.total_score?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-right">{i.final_rating ?? '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatRating5(toRatingOutOf5(i.total_score))}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatSlabPercent(resolveSlabPercent(toRatingOutOf5(i.total_score), slabs))}</TableCell>
                 </TableRow>
               ))}
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   {cycleId ? 'No matching reviews.' : 'Pick a cycle to begin.'}
                 </TableCell></TableRow>
               )}

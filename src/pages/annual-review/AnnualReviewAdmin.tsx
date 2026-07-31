@@ -77,6 +77,7 @@ import {
   useSetAutoReassignHrOnBuHeadChange,
 } from '@/hooks/useAnnualReviewSettings';
 import { AssistedSubmissionSettings } from '@/components/admin/AssistedSubmissionSettings';
+import { RatingSlabSettingsCard } from '@/components/annual-review/RatingSlabSettingsCard';
 import { PilotAccessCard } from '@/components/annual-review/PilotAccessCard';
 import { CycleBulkDataUploadDialog } from '@/components/annual-review/CycleBulkDataUploadDialog';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
@@ -318,6 +319,7 @@ function SettingsTab() {
       </CardContent>
     </Card>
     <AssistedSubmissionSettings />
+    <RatingSlabSettingsCard />
     <ConfirmDestructiveDialog
       open={syncOpen}
       onCancel={() => setSyncOpen(false)}

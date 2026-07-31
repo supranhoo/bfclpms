@@ -5465,3 +5465,16 @@ Rules:
 5. **Repairs are audited.** Manual status corrections of this class snapshot before/after into a dated repair table (`annual_review_status_repair_2026_07`) with `performed_by = NULL`.
 
 **Guard.** `src/test/annualReview/draftImpliesPendingSelf.test.ts`.
+
+---
+
+### §AR-RATING-SLAB — Final Rating (/5) and increment slab derivation (ADR-212, 2026-07-31)
+
+1. **Rating derivation.** The Annual Review 5-point rating is `total_score / 20`, rounded to 2 decimals. `total_score` is already guaranteed 0–100 by §AR-FINAL-SCORE-SCALE-INVARIANT; no other rescaling is permitted.
+2. **Null discipline.** A missing `total_score` yields a null rating and a null slab. A blank rating MUST never resolve to 0%.
+3. **Half-open bands.** Slab matching is `[rating_from, rating_to)`. An exact boundary value falls into the HIGHER slab (2.00 → 4%, 3.00 → 8%, 4.50 → 20%). The highest band is open-ended (`rating_to IS NULL`).
+4. **Master data, not code.** Bands live in `public.annual_review_rating_slabs` and are maintained by Admin / HR PMS in Annual Review → Settings → Rating Slabs. Percentages are never hardcoded in report components.
+5. **Band integrity.** Saved band sets must be contiguous, non-overlapping and terminate in exactly one open-ended band, enforced by `validateSlabBands`.
+6. **SSOT.** `src/lib/annualReview/ratingSlab.ts` is the only implementation of the conversion and matching logic; report tabs, exports and the admin editor all import it.
+
+**Guard.** `src/test/annualReview/ratingSlab.test.ts`.

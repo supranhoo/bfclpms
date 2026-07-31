@@ -13,6 +13,10 @@ import {
   buildMonthlyKraRows, fetchCycleFyStart, fetchMonthlyKraMatrix,
   monthsScored, type MonthlyKraMatrix,
 } from '@/services/annualReview/monthlyKraSheet';
+// ADR-212 — Final Rating (/5) + increment slab.
+import {
+  toRatingOutOf5, resolveSlabPercent, DEFAULT_RATING_SLABS, type RatingSlab,
+} from '@/lib/annualReview/ratingSlab';
 
 export interface ExportInput {
   cycleName: string;
@@ -26,6 +30,8 @@ export interface ExportInput {
   byGrade: GroupSummary[];
   byDesignation: GroupSummary[];
   byStage: GroupSummary[];
+  /** ADR-212 — admin-configured rating slab bands (falls back to defaults). */
+  ratingSlabs?: ReadonlyArray<RatingSlab>;
 }
 
 /** ADR-188 — one shared KRA context for both the Employees column and the sheet. */
@@ -41,6 +47,7 @@ function toEmployeeSheet(
   eligMaps: EligibilityMaps,
   eligColumns: EligibilityColumn[],
   kra: KraContext,
+  slabs: ReadonlyArray<RatingSlab>,
 ) {
   // ADR-181 — stable column set: every question, blank when not on the template.
   const blankElig: Record<string, string> = {};
@@ -93,6 +100,9 @@ function toEmployeeSheet(
     'HR Comment': r.hr_comment ?? '',
     'Final Score': r.total_score ?? '',
     'Rating': r.final_rating ?? '',
+    // ADR-212 — 5-point rating + configured increment slab.
+    'Final Rating (out of 5)': toRatingOutOf5(r.total_score) ?? '',
+    'Slab %': resolveSlabPercent(toRatingOutOf5(r.total_score), slabs) ?? '',
     // ADR-174 — how the rating was derived + the raw scoring parameters.
     'Rating Derived From': r.scoring_mode ?? '',
     // ADR-179 — whether the /5 stage ratings came from criteria or KRA.
@@ -222,7 +232,10 @@ export async function downloadComprehensiveWorkbook(input: ExportInput) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data as any), name);
   };
   append('Executive Summary', summaryToSheet(input.summary, input.cycleName));
-  append('Employees', toEmployeeSheet(input.rows, labelMaps, eligMaps, eligColumns, kra));
+  append('Employees', toEmployeeSheet(
+    input.rows, labelMaps, eligMaps, eligColumns, kra,
+    input.ratingSlabs ?? DEFAULT_RATING_SLABS,
+  ));
   // ADR-188 — month-by-month KRA detail for KRA-template employees only.
   append('Monthly KRA Scores', buildMonthlyKraSheet(kra));
   append('Rating Distribution', ratingDistribution(input.rows));

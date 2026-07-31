@@ -7749,3 +7749,12 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - **Call sites**: `PIPSuggestionsPanel.tsx` passes the evaluation window to `onInitiate`; `PIPManagement.tsx` and `MonthlyTrendView.tsx` navigate to the route instead of opening a dialog. `PIPCreateDialog.tsx` deleted.
 - **Published policy**: `app_settings.pms_policy_content` §12 replaced with the approved PIP standard §12.1–§12.12 (triggers, advisory-only, RM2 gate, mandatory support, duration/cadence, milestones, acknowledgement, outcomes, audit trail, relapse window).
 - **Policy**: §PIP-CREATE-FULL-PAGE. **Tests**: `src/test/pip/lowScoringKpis.test.ts` (9); PIP suites 54 passing.
+
+### v2.67 — Annual Review Report: Final Rating (/5) + Increment Slab (ADR-212, 2026-07-31)
+
+- New table `public.annual_review_rating_slabs` (rating_from, rating_to, increment_percent, sort_order, is_active) seeded with the seven default bands; read for authenticated, write for Admin / HR PMS.
+- New SSOT `src/lib/annualReview/ratingSlab.ts` (`toRatingOutOf5`, `resolveSlab`, `resolveSlabPercent`, `validateSlabBands`).
+- New hook `src/hooks/useAnnualReviewRatingSlabs.ts` (cached read + full-set save).
+- Annual Review Report: `Final Rating (/5)` and `Slab %` columns added to the Detail tab, the Comprehensive tab table and RCA outcome block, and both Excel exports.
+- Admin editor `RatingSlabSettingsCard` mounted on Annual Review → Settings.
+- Tests: `src/test/annualReview/ratingSlab.test.ts` (26 cases incl. all band boundaries).
