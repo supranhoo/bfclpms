@@ -1,0 +1,2 @@
+DROP POLICY IF EXISTS "Authenticated users can read daily entries" ON public.production_daily_entries;
+DROP POLICY IF EXISTS "Authenticated users can read vessel entries" ON public.vessel_monthly_entries;
