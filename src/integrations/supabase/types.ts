@@ -1078,31 +1078,40 @@ export type Database = {
           created_at: string
           id: string
           is_exemptable: boolean
+          is_protected: boolean
           label: string
           notes: string | null
           question_key: string
           requires_reason: boolean
+          sort_order: number
           updated_at: string
+          updated_by: string | null
         }
         Insert: {
           created_at?: string
           id?: string
           is_exemptable?: boolean
+          is_protected?: boolean
           label: string
           notes?: string | null
           question_key: string
           requires_reason?: boolean
+          sort_order?: number
           updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           created_at?: string
           id?: string
           is_exemptable?: boolean
+          is_protected?: boolean
           label?: string
           notes?: string | null
           question_key?: string
           requires_reason?: boolean
+          sort_order?: number
           updated_at?: string
+          updated_by?: string | null
         }
         Relationships: []
       }
@@ -1167,6 +1176,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      annual_review_eligibility_policy_audit: {
+        Row: {
+          action: string
+          after_state: Json | null
+          before_state: Json | null
+          changed_at: string
+          changed_by: string | null
+          id: string
+          question_key: string | null
+          rule_id: string | null
+        }
+        Insert: {
+          action: string
+          after_state?: Json | null
+          before_state?: Json | null
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          question_key?: string | null
+          rule_id?: string | null
+        }
+        Update: {
+          action?: string
+          after_state?: Json | null
+          before_state?: Json | null
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          question_key?: string | null
+          rule_id?: string | null
+        }
+        Relationships: []
       }
       annual_review_empty_stage_repair_2026_07: {
         Row: {
