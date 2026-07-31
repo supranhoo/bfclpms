@@ -1,30 +1,45 @@
-## Assumptions
+# Annual Review Report — Final Rating (out of 5) + Increment Slab
 
-"Make this pending self" = set Kumar Ambarish's annual review to **Self Review Pending** so he can open and submit his own form.
+## What you get
 
-## Verified current state (read-only queries, no writes)
+Two new columns in the Annual Review Report, driven by the existing Final Score:
 
-- Employee: Kumar Ambarish, `102014`, active, profile `ff680ae9…`.
-- Instance `b5428dbe…` in cycle `b82a935f…`: `overall_status = not_started`, `enabled_stages = [self, dept_head, bu_head]`, template `af2a2c7c…`.
-- One `annual_review_responses` row already exists: `reviewer_role = self`, `is_locked = false`, `submitted_at = NULL`, with 5 criteria scores at 4 and qualitative answers — i.e. an **unsubmitted self draft**.
-- Cycle distribution: 2078 completed, 492 excluded, 7 pending_bu, 1 pending_dept, 1 pending_self, and this single `not_started` row — so this is a one-off straggler, not a systemic bug.
+1. **Final Rating (/5)** — the normalised 0–100 final score converted to a 5-point rating, shown to 2 decimals (e.g. `4.25`). Blank (`—`) when the review has no final score yet.
+2. **Slab %** — the increment percentage resolved from that rating against an admin-maintained slab table.
 
-Note: because a self draft exists but the instance never left `not_started`, the likely cause is that the draft was saved without the status advancing. That diagnosis is unconfirmed; step 1 below checks it before anything else.
+Both appear in the **Detail** tab and the **Comprehensive** tab, and in both Excel exports.
 
-## Steps
+## Slab bands (seeded defaults, editable by Admin)
 
-1. **Pre-flight reads** — confirm no reset-archive row or exclusion record for this instance, confirm the `self` stage is enabled (already seen), and check whether any trigger sets `not_started → pending_self` on draft save (to see if this is a repeatable gap or a one-off).
-2. **Data change (single row, not a schema migration)** — set `overall_status = 'pending_self'` on instance `b5428dbe…`. Leave the existing draft response, template, reviewer mappings and `enabled_stages` untouched.
-3. **Trigger check** — `not_started → pending_self` is a forward move, so the downstream-rewind guard (ADR-184) and the stage-score guard (ADR-172, submission-time only) do not apply. No bypass flag needed.
-4. **Audit trail** — write a before/after snapshot row into the dated repair table `annual_review_status_repair_2026_07` (instance id, employee, prior/new status, reason, `performed_by = NULL` for a system-run repair), consistent with ADR-183/185 practice.
-5. **Verification** — re-read the instance; confirm status `pending_self`, the draft still present and unlocked, and that the employee's own annual review page renders as editable rather than "Not Started".
-6. **Docs/policy sync** — if step 1 shows the draft-save path can leave an instance at `not_started`, record it as a small ADR + POLICY note (`§AR-DRAFT-IMPLIES-PENDING-SELF`) and add a guard so saving a self draft always advances `not_started → pending_self`. If it turns out to be a one-off from a manual/bulk action, document it as a data repair only.
-7. **Regression test** — extend the annual-review status tests with the "self draft exists ⇒ status must not be `not_started`" invariant.
+| Rating range | Increment |
+|---|---|
+| below 2.00 | 0% |
+| 2.00 – under 2.50 | 4% |
+| 2.50 – under 3.00 | 6% |
+| 3.00 – under 3.50 | 8% |
+| 3.50 – under 4.00 | 12% |
+| 4.00 – under 4.50 | 16% |
+| 4.50 and above | 20% |
 
-## Risk & impact
+Exact boundary values go to the higher slab, as you confirmed (2.00 → 4%, 3.00 → 8%, 4.50 → 20%).
 
-- **Data impact**: one status field on one row, plus one audit row. Additive, no schema change.
-- **Workflow impact**: the review enters the employee's own queue; downstream Dept Head / BU Head stages unchanged.
-- **UI impact**: the grid chip for 102014 changes from grey "Not Started" to "Self Review Pending"; his review page becomes editable.
-- **Regression risk**: very low — scoped to a single instance id; no shared function or trigger changes unless step 6 finds a real gap.
-- **Rollback**: set `overall_status` back to `not_started`; the audit row holds the exact before-state.
+## Where it appears
+
+- **Detail tab table**: two new right-aligned columns after `Rating`.
+- **Comprehensive tab table**: same two columns, plus the two values added to the per-employee summary block that already lists Final Score / Final Rating.
+- **Exports**: `Final Rating (out of 5)` and `Slab %` added to both Excel sheets.
+- No change to filters, pagination, sorting, or row counts.
+
+## Admin configuration
+
+A new **Annual Review → Rating Slabs** settings card (alongside the existing annual review settings) lets an Admin add/edit/delete slab rows: rating from, rating to, increment percent, order, active flag. Validation blocks overlapping or gapped bands before save. Changes are audit-logged with the acting user.
+
+## Technical notes
+
+- **Conversion**: `rating5 = total_score / 20`, rounded to 2 dp. `total_score` is already guaranteed 0–100 by ADR-187 / `trg_ar_total_score_scale`. A null score yields a null rating and a null slab (never 0%).
+- **New table** `public.annual_review_rating_slabs` (`rating_from`, `rating_to`, `increment_percent`, `sort_order`, `is_active`, timestamps, `created_by`) with GRANTs and RLS: read for authenticated, write restricted to `admin` / `hr_pms` via `has_role`. Seeded with the seven bands above. Picked up automatically by backup coverage (no denylist entry).
+- **SSOT resolver** `src/lib/annualReview/ratingSlab.ts`: pure `toRatingOutOf5(totalScore)`, `resolveSlab(rating, slabs)`, `validateSlabBands(slabs)`. Half-open `[from, to)` matching with an open-ended top band. Both report tabs and the settings UI import this — no duplicated logic.
+- **Data hook** `useAnnualReviewRatingSlabs()` (React Query, cached) feeds both tabs; no per-row queries and no change to the existing paginated instance queries.
+- **Tests**: boundary values (1.99 / 2.00 / 2.49 / 2.50 / 3.00 / 4.49 / 4.50 / 5.00), null score, and band-validation failures (overlap, gap).
+- **Docs**: new `ADR-212`, `POLICY §AR-RATING-SLAB`, and a DOCUMENTATION.md version-history entry.
+- **Rollback**: additive only — dropping the table and reverting the two column additions restores current behaviour; no existing data is mutated.
