@@ -29,3 +29,12 @@ Access Profile menu rights only become real if RLS recognizes them. To avoid sil
 Adding a new delegated menu requires (a) a new permissive RLS policy using `has_menu_right`, (b) wiring the mutation through `assertRowsTouched`, (c) explicit user approval before widening blast radius.
 
 See ADR-079.
+
+## Write gating on menu-override tables (2026-07-31)
+
+`public.has_menu_access_override(user, menu_key)` is VIEW-ONLY — use it only in SELECT
+policies. Every INSERT/UPDATE/DELETE policy on incentive / production / vessel /
+business-unit-sub-unit tables must use
+`public.has_menu_write_access(user, menu_key, 'add'|'update'|'delete')`, which requires the
+matching `access_profile_menu_rights` flag (explicit `menu_access_user_overrides` rows stay
+full grants). Never write a `FOR ALL` policy gated on a view-level check.

@@ -511,6 +511,32 @@ export function heatmapMatrix(
   return heatmapBands(rows, key, makeBanding('rating', config), config);
 }
 
+/* ------------------------------------------------------------------ *
+ * ADR-218c — heat map cell drill-down.
+ * ------------------------------------------------------------------ */
+
+export interface BandEmployee extends BellCurveInput {
+  rating: number;
+  band: RatingBand;
+}
+
+/**
+ * Every rated employee that a single heat map cell counts. Reuses `ratedRows`
+ * and `banding.keyOf` so the list length always equals the cell count in both
+ * rating and slab modes.
+ */
+export function employeesInBand(
+  rows: BellCurveInput[],
+  key: GroupKey,
+  groupId: string,
+  banding: Banding,
+  bandKey: string,
+): BandEmployee[] {
+  return ratedRows(rows)
+    .filter((r) => groupIdentity(r, key).id === groupId && banding.keyOf(r.rating) === bandKey)
+    .sort((a, b) => b.rating - a.rating);
+}
+
 /**
  * Smooth normal curve sampled across the 1..5 axis, scaled so its peak matches
  * the tallest target bar. Used purely for the visual overlay.
