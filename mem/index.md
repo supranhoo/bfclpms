@@ -167,3 +167,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Reset Rollback](mem://features/annual-review/reset-rollback) — ADR-210: undoing an erroneous annual-review force-reset from the archive
 - [Annual Review Rating Slab](mem://features/annual-review/rating-slab) — Final Rating /5 (total_score/20) and admin-configurable increment slab bands (ADR-212)
 - [Export Self-Sufficiency](mem://features/reports/export-self-sufficiency) — Exports fetch their own data, abort on empty roster, flag unresolved rows (ADR-214)
+- [Change History Capture](mem://features/reports/change-history-capture) — One bound profile-audit trigger; Reporting & Org category; uncapped exports (ADR-215)
