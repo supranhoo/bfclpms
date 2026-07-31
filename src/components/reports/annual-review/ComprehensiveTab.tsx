@@ -24,6 +24,13 @@ import {
 import { RatingDistributionChart } from './RatingDistributionChart';
 import { HighlightsPanel } from './HighlightsPanel';
 import { downloadComprehensiveWorkbook } from './ComprehensiveExport';
+import { useAnnualReviewRatingSlabs } from '@/hooks/useAnnualReviewRatingSlabs';
+import {
+  toRatingOutOf5,
+  resolveSlabPercent,
+  formatRating5,
+  formatSlabPercent,
+} from '@/lib/annualReview/ratingSlab';
 
 function KpiCard({ label, value, tone }: { label: string; value: number | string; tone?: 'muted' | 'ok' | 'warn' | 'bad' }) {
   const toneCls = tone === 'ok' ? 'text-emerald-600'
@@ -82,6 +89,7 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
     staleTime: 30_000,
   });
   const rows = q.data ?? [];
+  const { data: slabs } = useAnnualReviewRatingSlabs();
   const [rcaSearch, setRcaSearch] = useState('101784');
 
   const rcaRow = useMemo<ComprehensiveRow | null>(() => {
@@ -126,6 +134,7 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
         byGrade,
         byDesignation: byDesig,
         byStage,
+        ratingSlabs: slabs,
       });
     } catch (e) {
       toast.error((e as Error).message);
@@ -235,6 +244,8 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
             const outcome: Cell[] = [
               { label: 'Final Score', value: fmt(r.total_score) },
               { label: 'Final Rating', value: r.final_rating ?? '—' },
+              { label: 'Final Rating (/5)', value: formatRating5(toRatingOutOf5(r.total_score)) },
+              { label: 'Slab %', value: formatSlabPercent(resolveSlabPercent(toRatingOutOf5(r.total_score), slabs)) },
               { label: 'Current Stage', value: pendingWith(r.overall_status) },
               { label: 'Pending With', value: pending },
               { label: 'Completion Status', value: completionStatus(r.overall_status) },
@@ -342,6 +353,8 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
               <TableHead className="text-right" title="HR rating on a 0–5 scale.">HR /5</TableHead>
               <TableHead className="text-right">Final</TableHead>
               <TableHead>Rating</TableHead>
+              <TableHead className="text-right" title="Final Score converted to a 5-point rating.">Final Rating (/5)</TableHead>
+              <TableHead className="text-right" title="Increment slab resolved from the /5 rating.">Slab %</TableHead>
               {/* ADR-174 — how the rating was derived (KRA vs criteria). */}
               <TableHead>Rating Derived</TableHead>
               <TableHead>Stage</TableHead>
@@ -366,6 +379,8 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
                   <TableCell className="text-right tabular-nums">{r.hr_rating_5?.toFixed(2) ?? r.hr_score?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">{r.total_score?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-sm">{r.final_rating ?? '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatRating5(toRatingOutOf5(r.total_score))}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatSlabPercent(resolveSlabPercent(toRatingOutOf5(r.total_score), slabs))}</TableCell>
                   <TableCell className="text-sm whitespace-nowrap">
                     {r.scoring_mode ?? '—'}
                     {(r.kra_weight ?? 0) > 0 && (
