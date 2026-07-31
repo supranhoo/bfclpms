@@ -38,6 +38,7 @@ export function RatingHeatmap({
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('total');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sortMode, setSortMode] = useState<SortMode>('count');
 
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
 
@@ -47,7 +48,8 @@ export function RatingHeatmap({
     const val = (r: HeatmapRow): string | number => {
       if (sortKey === 'name') return r.name.toLowerCase();
       if (sortKey === 'total') return r.total;
-      return r.cells.find((c) => c.band === sortKey)?.count ?? 0;
+      const cell = r.cells.find((c) => c.band === sortKey);
+      return sortMode === 'pct' ? (cell?.pct ?? 0) : (cell?.count ?? 0);
     };
     filtered.sort((a, b) => {
       const av = val(a); const bv = val(b);
@@ -55,7 +57,7 @@ export function RatingHeatmap({
       return sortDir === 'asc' ? cmp : -cmp;
     });
     return filtered;
-  }, [rows, search, sortKey, sortDir]);
+  }, [rows, search, sortKey, sortDir, sortMode]);
 
   const toggleSort = (key: SortKey) => {
     if (key === sortKey) { setSortDir((d) => (d === 'asc' ? 'desc' : 'asc')); return; }
