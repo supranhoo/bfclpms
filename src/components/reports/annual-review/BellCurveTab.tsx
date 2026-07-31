@@ -307,7 +307,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
               groupName={group.name}
               bandLabel={def.label}
               bandSub={def.sub}
-              slabs={slabs.length > 0 ? slabs : undefined as never}
+              slabs={slabs.length > 0 ? slabs : undefined}
               onClose={close}
             />
           );

@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Download, Search, X } from 'lucide-react';
-import { formatRating5, formatSlabPercent, resolveSlabPercent, type RatingSlab } from '@/lib/annualReview/ratingSlab';
+import {
+  DEFAULT_RATING_SLABS, formatRating5, formatSlabPercent, resolveSlabPercent, type RatingSlab,
+} from '@/lib/annualReview/ratingSlab';
 import type { BandEmployee } from '@/lib/annualReview/bellCurve';
 
 const PAGE_SIZE = 25;
@@ -17,13 +19,13 @@ function csvCell(v: string | number | null): string {
  * rows already loaded by the tab; no network calls.
  */
 export function BandEmployeeList({
-  employees, groupName, bandLabel, bandSub, slabs, onClose,
+  employees, groupName, bandLabel, bandSub, slabs = DEFAULT_RATING_SLABS, onClose,
 }: {
   employees: BandEmployee[];
   groupName: string;
   bandLabel: string;
   bandSub: string;
-  slabs: ReadonlyArray<RatingSlab>;
+  slabs?: ReadonlyArray<RatingSlab>;
   onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
