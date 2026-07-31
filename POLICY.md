@@ -5520,3 +5520,14 @@ Rules:
 7. **Exports are complete by default.** Report exports page until the server returns a short page. Any remaining ceiling is a runaway guard set far above realistic volume, is disclosed in the file header and in a toast when it fires, and is never a silent business cap.
 
 **Guard.** `src/test/reports/changeHistory.test.ts`.
+
+### §AR-STAGE-UPDATE-EFFECTIVE-CHAIN — Stage transitions are authorised against the effective chain (ADR-216, 2026-07-31)
+
+1. **One source of truth for "what comes next".** Any rule that authorises an annual review status transition MUST resolve the next status through `annual_review_effective_chain(instance_id)` — the same resolver `advance_annual_review_status` uses. Raw `enabled_stages` is NOT authoritative because duplicate or absent reviewers are auto-skipped.
+2. **Policy shape.** `instances_stage_update` WITH CHECK accepts, per reviewer slot, the current pending status, the `enabled_stages`-derived next status (legacy compatibility) or `annual_review_allowed_next_status(id, <current>)`.
+3. **No widening.** The USING clause (who may act) is unchanged by this rule; only the permitted destination status set is corrected.
+4. **Recursion guard.** Helpers called from policies on `annual_review_instances` MUST be `SECURITY DEFINER` with a pinned `search_path`; SECURITY INVOKER helpers that read the same table are forbidden inside its policies.
+
+**Guard.** `src/test/annualReview/stageUpdatePolicyEffectiveChain.test.ts`.
+
+---
