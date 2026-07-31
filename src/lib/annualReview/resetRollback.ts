@@ -9,7 +9,8 @@
  * Pure functions only — the caller performs the writes.
  */
 
-import { CANONICAL_STAGE_ORDER, type StageKey } from './stageChain';
+import { ALL_STAGES } from './stageChain';
+import type { AnnualReviewerRole } from '@/types/annualReview';
 
 export interface ArchivedResponse {
   id: string;
@@ -78,9 +79,7 @@ export function resolveRollbackStatus(
   enabledStages: readonly string[],
   restoredResponses: readonly ArchivedResponse[],
 ): string {
-  const enabled = CANONICAL_STAGE_ORDER.filter(s =>
-    enabledStages.includes(s),
-  ) as StageKey[];
+  const enabled = ALL_STAGES.filter(s => enabledStages.includes(s)) as AnnualReviewerRole[];
   const lockedRoles = new Set(
     restoredResponses.filter(r => r.is_locked !== false).map(r => r.reviewer_role),
   );
