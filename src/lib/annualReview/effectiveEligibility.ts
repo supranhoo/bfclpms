@@ -1,5 +1,6 @@
 import type { EligibilityCriterion } from '@/types/annualReview';
 import { evaluate } from './eligibility';
+import { DEFAULT_RATING_SLABS, slabCapPercent, type RatingSlab } from './ratingSlab';
 
 /**
  * ADR-221 / POLICY §AR-ELIGIBILITY-EXEMPTION — single source of truth for the
@@ -152,10 +153,37 @@ export function eligibilitySummary(r: EffectiveEligibility): string {
 /**
  * POLICY §AR-ELIGIBILITY-EXEMPTION (decision A) — an ineligible employee's
  * increment slab is displayed as 0%, regardless of the computed rating.
+ *
+ * ADR-222 / decision B — an employee made eligible through an approved
+ * exemption may not receive the top `topTiersExcluded` increment tiers; their
+ * percentage is clamped down to the highest remaining band (never raised).
  */
+export interface SlabCapOptions {
+  slabs?: ReadonlyArray<RatingSlab>;
+  capEnabled?: boolean;
+  topTiersExcluded?: number;
+}
+
 export function effectiveSlabPercent(
   computedPercent: number | null,
   status: EligibilityStatus,
+  options?: SlabCapOptions,
 ): number | null {
-  return status === 'ineligible' ? 0 : computedPercent;
+  if (status === 'ineligible') return 0;
+  if (status !== 'exempted') return computedPercent;
+  if (!options?.capEnabled) return computedPercent;
+  if (computedPercent === null || computedPercent === undefined) return computedPercent;
+  const cap = slabCapPercent(options.slabs ?? DEFAULT_RATING_SLABS, options.topTiersExcluded ?? 0);
+  return Math.min(computedPercent, cap);
+}
+
+/** True when the exemption cap actually reduced the computed percentage. */
+export function isSlabCapped(
+  computedPercent: number | null,
+  status: EligibilityStatus,
+  options?: SlabCapOptions,
+): boolean {
+  if (computedPercent === null || computedPercent === undefined) return false;
+  const eff = effectiveSlabPercent(computedPercent, status, options);
+  return status === 'exempted' && eff !== null && eff < computedPercent;
 }
