@@ -17,7 +17,7 @@ import {
   validateExemptionPolicy,
   type ExemptionPolicyRow,
 } from '@/lib/annualReview/effectiveEligibility';
-import { ConfirmDestructiveDialog } from '@/components/common/ConfirmDestructiveDialog';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 type Row = ExemptionPolicyRow & { _dirty?: boolean; _unlocked?: boolean };
 
