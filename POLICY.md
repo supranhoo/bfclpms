@@ -5453,3 +5453,15 @@ Rules:
 7. **Reset is not exclusion.** If the intent was to remove an employee from the cycle, the correct action is `bulk_exclude_annual_review_instances`, never a force-reset.
 
 **Guard.** `src/test/annualReview/resetRollback.test.ts`.
+
+---
+
+### §AR-DRAFT-IMPLIES-PENDING-SELF — A saved self draft may never sit at "Not Started" (ADR-211, 2026-07-31)
+
+1. **A self response means self review has begun.** If a row exists in `annual_review_responses` with `reviewer_role = 'self'`, the instance MUST NOT carry `overall_status = 'not_started'` — locked or not, submitted or not.
+2. **Server-enforced.** `trg_ar_draft_implies_pending_self` on `annual_review_responses` bumps `not_started → pending_self` on every self write. It is the only sanctioned mechanism; no client is permitted to patch `overall_status` for this purpose.
+3. **Forward only.** The trigger touches nothing but `not_started`. Any later status is left as-is, preserving the no-downstream-rewind invariant (§AR-REPAIR-NO-DOWNSTREAM-REWIND).
+4. **Mirror in lockstep.** `src/lib/annualReview/draftImpliesPendingSelf.ts` mirrors the rule for UI/diagnostics and must be updated with any change to the trigger.
+5. **Repairs are audited.** Manual status corrections of this class snapshot before/after into a dated repair table (`annual_review_status_repair_2026_07`) with `performed_by = NULL`.
+
+**Guard.** `src/test/annualReview/draftImpliesPendingSelf.test.ts`.
