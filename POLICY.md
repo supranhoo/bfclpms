@@ -5580,7 +5580,8 @@ Rules:
 3. **Approval workflow.** Exemptions are stored per `(instance_id, criterion_id)` in `annual_review_eligibility_exemptions` with a mandatory reason. Requesting is open to approvers and to users with assistance scope over the instance; approving, rejecting and revoking are restricted to Admin, HR PMS and Management. Self-approval is blocked for non-admins. `ar_elig_exemption_guard()` enforces both rules server-side, so a client bug can never waive a non-exemptable criterion.
 4. **Slab effect.** An `Ineligible` employee's increment slab is shown as 0% (`effectiveSlabPercent`). Ratings, bands and the bell-curve distribution are never altered by eligibility — it is a display and governance overlay only.
 5. **Surfaces.** Bell Curve Analysis carries an Eligibility filter and an Ineligible KPI card; the heat map drill-down carries the eligibility badge, the CSV eligibility column and the exemption action.
+6. **Exemption increment cap (ADR-222).** An employee made eligible by an approved exemption may not receive the top increment tiers. `annual_review_bell_curve_config.exempted_slab_cap_enabled` (default on) and `exempted_top_tiers_excluded` (0-6, default 2) are cycle master data — never hardcode the cap. The ceiling is `slabCapPercent(slabs, n)`: the highest increment remaining after removing the top `n` active slab tiers; excluding every tier yields 0%. `effectiveSlabPercent` clamps `Exempted` rows to that ceiling, `isSlabCapped` drives the "Capped" badge. `Eligible` and `Not assessed` rows are never capped; `Ineligible` stays 0%. The cap applies identically in the Bell Curve tab, the heat map drill-down, the Annual Review Report grid and every Excel/CSV/PDF export.
 
-**Guard.** `src/test/annualReview/effectiveEligibility.test.ts` (9 cases).
+**Guard.** `src/test/annualReview/effectiveEligibility.test.ts` (17 cases).
 
 ---
