@@ -165,3 +165,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Blank Stage Classification](mem://features/annual-review/blank-stage-classification) — narrative_only vs unscored empty criteria_scores, diagnostic RPC, Unscored Stages tab (ADR-197)
 - [Import Error Transparency](mem://architecture/import/error-transparency) — Edge-function non-2xx bodies must reach the UI; company-scoped employee categories (ADR-202)
 - [Reset Rollback](mem://features/annual-review/reset-rollback) — ADR-210: undoing an erroneous annual-review force-reset from the archive
+- [Annual Review Rating Slab](mem://features/annual-review/rating-slab) — Final Rating /5 (total_score/20) and admin-configurable increment slab bands (ADR-212)
