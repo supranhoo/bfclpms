@@ -5478,3 +5478,17 @@ Rules:
 6. **SSOT.** `src/lib/annualReview/ratingSlab.ts` is the only implementation of the conversion and matching logic; report tabs, exports and the admin editor all import it.
 
 **Guard.** `src/test/annualReview/ratingSlab.test.ts`.
+
+---
+
+## §CHG-HISTORY-SSOT — Master Change History (ADR-213)
+
+1. **Capture is mandatory and automatic.** Business-relevant changes are recorded by database triggers, never by application code: `log_profile_identity_change` (21 employee-detail fields including department, reporting manager, functional manager, grade, level, location, portal access and `is_active`) and `trg_workflow_config_audit` (`log_workflow_config_change`) for workflow-mapping edits. Adding a new business column to `profiles` requires adding it to the trigger's tracked-field list in the same migration.
+2. **One read path.** `public.get_change_history(...)` is the only query surface. It unions `system_audit_logs` (employee-detail + workflow-mapping), `employment_status_history` (active/inactive) and `annual_review_assignment_overrides` (reviewer reassignment), resolving every UUID to a human name via `resolve_change_value`.
+3. **Server-side pagination is compulsory.** The RPC is always called with `p_limit` / `p_offset`; the UI page size is 50 and the Excel export is capped at 5,000 rows fetched in 500-row pages. The report never loads the full audit table.
+4. **Immutability.** Change rows are append-only. No UI, RPC or maintenance job may update or delete them; corrections are recorded as new events.
+5. **Attribution honesty.** A row with `performed_by IS NULL` displays as "System" (automated rule), a resolvable actor as their name, and an unresolvable actor as "System user". Never invent an actor.
+6. **Access.** View: Admin, HR PMS. Download: Admin. Governed through Report Access (`change-history`), not hardcoded role checks in the page.
+7. **Retrospective honesty.** Workflow-mapping history begins at the ADR-213 migration date; the report states this in-page rather than implying complete history.
+
+**Guard.** `src/test/reports/changeHistory.test.ts`.

@@ -15877,6 +15877,33 @@ export type Database = {
           stages: string[]
         }[]
       }
+      get_change_history: {
+        Args: {
+          p_categories?: string[]
+          p_changed_by?: string
+          p_department?: string
+          p_from?: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_to?: string
+        }
+        Returns: {
+          category: string
+          changed_by: string
+          changed_by_name: string
+          context: string
+          employee_code: string
+          employee_id: string
+          employee_name: string
+          event_id: string
+          field_label: string
+          new_value: string
+          occurred_at: string
+          old_value: string
+          total_count: number
+        }[]
+      }
       get_cycle_months: {
         Args: {
           p_cycle_start?: string
@@ -17147,6 +17174,10 @@ export type Database = {
           kpi_name: string
           kra_name: string
         }[]
+      }
+      resolve_change_value: {
+        Args: { p_field: string; p_value: string }
+        Returns: string
       }
       resolve_cycle_anchor:
         | {

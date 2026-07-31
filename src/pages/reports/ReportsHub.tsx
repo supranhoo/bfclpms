@@ -23,6 +23,7 @@ import {
   Table2,
   Grid3X3,
   Workflow,
+  History,
   Pencil
 } from 'lucide-react';
 
@@ -179,6 +180,14 @@ const reports: ReportCard[] = [
     path: '/reports/variance',
     color: 'text-orange-600',
     reportKey: 'variance',
+  },
+  {
+    title: 'Master Change History',
+    description: 'Audit trail of workflow mapping updates, active/inactive changes and employee detail edits — with time and who made the change.',
+    icon: History,
+    path: '/reports/change-history',
+    color: 'text-rose-600',
+    reportKey: 'change-history',
   },
   {
     title: 'Same KPI — Manager vs Team',

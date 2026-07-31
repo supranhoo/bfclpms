@@ -131,6 +131,7 @@ const BottleneckReport = lazy(() => import("./pages/reports/BottleneckReport"));
 const KpiStatusTracker = lazy(() => import("./pages/reports/KpiStatusTracker"));
 const KpiJourneyReport = lazy(() => import("./pages/reports/KpiJourneyReport"));
 const WorkflowResolutionReport = lazy(() => import("./pages/reports/WorkflowResolutionReport"));
+const ChangeHistoryReport = lazy(() => import("./pages/reports/ChangeHistoryReport"));
 const IncentiveReport = lazy(() => import("./pages/reports/IncentiveReport"));
 const VarianceReport = lazy(() => import("./pages/reports/VarianceReport"));
 const ManagerTeamKpiReport = lazy(() => import("./pages/reports/ManagerTeamKpiReport"));
@@ -466,6 +467,11 @@ const App = () => (
                 <Route path="/reports/workflow-resolution" element={
                   <ReportRoute reportKey="workflow-resolution">
                     <Suspense fallback={<PageFallback />}><WorkflowResolutionReport /></Suspense>
+                  </ReportRoute>
+                } />
+                <Route path="/reports/change-history" element={
+                  <ReportRoute reportKey="change-history">
+                    <Suspense fallback={<PageFallback />}><ChangeHistoryReport /></Suspense>
                   </ReportRoute>
                 } />
                 <Route path="/reports/dev-report" element={

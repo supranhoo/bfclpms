@@ -7758,3 +7758,12 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Annual Review Report: `Final Rating (/5)` and `Slab %` columns added to the Detail tab, the Comprehensive tab table and RCA outcome block, and both Excel exports.
 - Admin editor `RatingSlabSettingsCard` mounted on Annual Review → Settings.
 - Tests: `src/test/annualReview/ratingSlab.test.ts` (26 cases incl. all band boundaries).
+
+### v2.68 — ADR-213 Master Change History Report
+
+- Capture: `log_profile_identity_change` broadened to 21 business fields (action `profile.field_changed`, metadata `{field, before, after}`); new `log_workflow_config_change` + `trg_workflow_config_audit` on `workflow_config` (action `workflow.mapping_changed`); new `resolve_change_value` helper resolves department / manager / template / grade UUIDs to display names.
+- Data: new `public.get_change_history(p_from, p_to, p_categories, p_search, p_changed_by, p_department, p_limit, p_offset)` RPC returning a unified, server-paginated feed (`total_count` window column) across employee details, active/inactive status, workflow mapping and annual-review reviewer overrides.
+- Frontend: `src/lib/reports/changeHistory.ts` (label + export SSOT), `src/hooks/useChangeHistory.ts` (paginated query + capped export fetcher), `src/pages/reports/ChangeHistoryReport.tsx` (`/reports/change-history`) with date-range, category, department and name/code filters, 50-row server pagination and Excel export.
+- Wiring: route in `src/App.tsx` (via `ReportRoute`), tile in `ReportsHub.tsx`, catalog entry `RPT-CHG-001`, access defaults Admin + HR PMS (download Admin).
+- Tests: `src/test/reports/changeHistory.test.ts` (7 cases: field labelling, unknown-key fallback, empty-value rendering, category mapping, export column parity, system attribution).
+- Policy: POLICY.md §CHG-HISTORY-SSOT.

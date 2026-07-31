@@ -401,6 +401,20 @@ REPORT_CATALOG.push(
 
 // Annual Review Report — registered so it is mappable in Report Access.
 REPORT_CATALOG.push(
+  r('RPT-CHG-001', 'change-history', 'CHG', 'Master Change History',
+    '/reports/change-history', null, [
+    f('occurred_at',  'Date & Time',   10, { is_required: true, data_type: 'string' }),
+    f('category',     'Category',      20, { data_type: 'string' }),
+    f('employee',     'Employee',      30, { data_type: 'string' }),
+    f('field',        'What Changed',  40, { is_required: true, data_type: 'string' }),
+    f('old_value',    'Old Value',     50, { data_type: 'string' }),
+    f('new_value',    'New Value',     60, { data_type: 'string' }),
+    f('changed_by',   'Changed By',    70, { data_type: 'string' }),
+    f('context',      'Context',       80, { data_type: 'string' }),
+  ], 215),
+);
+
+REPORT_CATALOG.push(
   r('RPT-ANR-001', 'annual-review', 'ANR', 'Annual Review Report',
     '/reports/annual-review', null, [
     f('employee_code', 'Employee Code', 10, { is_required: true, data_type: 'string' }),
