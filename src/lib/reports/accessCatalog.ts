@@ -39,6 +39,8 @@ export const DEFAULT_REPORT_ACCESS: Record<string, ReportAccessDefault> = {
   'kpi-scorecard-detail': { view_roles: ['admin', 'management', 'hr_pms', 'auditor'], download_roles: ['admin'] },
   'kpi-employee-matrix': { view_roles: ['admin', 'manager', 'management', 'hr_pms', 'auditor'], download_roles: ['admin'] },
   'workflow-resolution': { view_roles: ['admin', 'hr_pms', 'management', 'auditor'], download_roles: ['admin', 'hr_pms'] },
+  // ADR-213 — audit surface: admins and HR PMS only.
+  'change-history': { view_roles: ['admin', 'hr_pms'], download_roles: ['admin'] },
   'dev-report': { view_roles: ['admin', 'management', 'auditor'], download_roles: ['admin', 'management'] },
   'annual-review': { view_roles: ['admin', 'manager', 'management', 'hr_pms', 'auditor'], download_roles: ['admin', 'hr_pms', 'management'] },
 };
