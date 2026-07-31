@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LucideIcon, FileText, ExternalLink } from 'lucide-react';
+import { format } from 'date-fns';
 import { openStorageFileGroup, buildEvidenceFileName } from '@/lib/storageDownload';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
