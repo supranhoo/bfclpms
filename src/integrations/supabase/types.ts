@@ -2464,6 +2464,74 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_system_score_edits: {
+        Row: {
+          created_at: string
+          edited_by: string | null
+          employee_id: string | null
+          id: string
+          instance_id: string
+          new_final_rating: string | null
+          new_points: number | null
+          new_raw: number | null
+          new_total_score: number | null
+          old_final_rating: string | null
+          old_points: number | null
+          old_raw: number | null
+          old_total_score: number | null
+          overall_status: string | null
+          reason: string
+          slot_id: string
+          slot_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          edited_by?: string | null
+          employee_id?: string | null
+          id?: string
+          instance_id: string
+          new_final_rating?: string | null
+          new_points?: number | null
+          new_raw?: number | null
+          new_total_score?: number | null
+          old_final_rating?: string | null
+          old_points?: number | null
+          old_raw?: number | null
+          old_total_score?: number | null
+          overall_status?: string | null
+          reason: string
+          slot_id: string
+          slot_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          edited_by?: string | null
+          employee_id?: string | null
+          id?: string
+          instance_id?: string
+          new_final_rating?: string | null
+          new_points?: number | null
+          new_raw?: number | null
+          new_total_score?: number | null
+          old_final_rating?: string | null
+          old_points?: number | null
+          old_raw?: number | null
+          old_total_score?: number | null
+          overall_status?: string | null
+          reason?: string
+          slot_id?: string
+          slot_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_system_score_edits_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       annual_review_template_archetypes: {
         Row: {
           applies_to_grade_buckets: Json
@@ -14851,6 +14919,16 @@ export type Database = {
           old_self_value: number
           submission_id: string
         }[]
+      }
+      admin_update_system_scores_raw: {
+        Args: {
+          p_instance_id: string
+          p_reason?: string
+          p_slot_names?: Json
+          p_system_scores: Json
+          p_system_scores_raw: Json
+        }
+        Returns: Json
       }
       advance_annual_review_status: {
         Args: {
