@@ -3,8 +3,12 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } 
 import type { ComprehensiveRow } from '@/services/annualReview/comprehensiveReport';
 import { ratingDistribution } from '@/services/annualReview/comprehensiveReport';
 
-export function RatingDistributionChart({ rows }: { rows: ComprehensiveRow[] }) {
-  const data = ratingDistribution(rows);
+export function RatingDistributionChart({ rows, ratingLabelOf }: {
+  rows: ComprehensiveRow[];
+  /** ADR-230 — bucket on the effective (calibrated) rating band. */
+  ratingLabelOf?: (row: ComprehensiveRow) => string | null | undefined;
+}) {
+  const data = ratingDistribution(rows, ratingLabelOf);
   return (
     <Card>
       <CardHeader className="pb-2"><CardTitle className="text-base">Rating distribution</CardTitle></CardHeader>
