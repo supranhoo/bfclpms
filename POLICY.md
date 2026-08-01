@@ -5207,6 +5207,29 @@ detectable and repairable without a developer.
    a dated audit table with `performed_by = NULL`, and recompute aggregates
    with `annual_review_compute_final_summary` — never by hand.
 
+## §AR-SYSTEM-SCORE-ADMIN-CORRECTION — Downgrades on locked rows are an explicit, justified admin act (ADR-225, 2026-08-01)
+
+1. The default bulk-upload path stays **upgrade-only**. A value that lowers a
+   stored System-KPI score on a `completed` or mid-workflow row is skipped with
+   the ADR-171 reason unless the admin explicitly enables
+   **"Allow downgrades (corrections)"**, which is itself only available when the
+   ADR-171 or ADR-186 opt-in is already on.
+2. Correction mode REQUIRES a free-text reason of at least 10 characters,
+   enforced in the dialog and again server-side (`correction_reason_required`).
+3. Downward cells MUST be routed through
+   `public.admin_apply_system_scores_correction` (admin / hr_pms only,
+   SECURITY DEFINER, row-locked). It merges cells in either direction, writes a
+   `system_scores.admin_correction` row to `annual_review_access_audit` holding
+   the complete before/after `system_scores`, `system_scores_raw`,
+   `total_score` and `final_rating`, and MUST NOT change `overall_status`.
+   `admin_apply_system_scores_upgrade` remains monotonic and unchanged.
+4. The dry-run MUST make the impact visible before commit: each downward cell is
+   flagged `direction: 'down'` with its previous points, and the report exposes
+   `downgradeCount`, rendered as a destructive `N downgrades` badge.
+5. Rollback is by replaying the audit row's `before` payload. A correction run
+   shifts bell-curve, slab and calibration outputs — reviewing those after a
+   downward run is mandatory.
+
 ## §AR-FINAL-SCORE-SCALE-INVARIANT — Annual review final score is always 0–100 with a rating band (ADR-187, 2026-07-27)
 
 1. `annual_review_instances.total_score` MUST be a normalised value in the

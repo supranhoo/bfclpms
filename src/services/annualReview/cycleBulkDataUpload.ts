@@ -402,6 +402,8 @@ export interface DryRunRow {
     rating?: number;
     weight?: number;
     matched?: boolean;
+    /** ADR-225: 'down' when the new points are lower than the stored points. */
+    direction?: 'up' | 'down';
   }>;
 }
 
@@ -413,6 +415,8 @@ export interface DryRunReport {
   totalChanges: number;
   /** ADR-186: skip counts grouped by instance status, biggest first. */
   skipsByStatus: Array<{ status: string; count: number }>;
+  /** ADR-225: number of cells whose score will be LOWERED by this run. */
+  downgradeCount: number;
 }
 
 const MAX_ROWS = 5000;
@@ -453,10 +457,16 @@ function coercePercentRaw(
 export async function parseAndDryRun(
   file: File,
   plan: CycleBulkPlan,
-  opts: { allowCompletedUpgrades?: boolean; allowMidWorkflowUpgrades?: boolean } = {},
+  opts: {
+    allowCompletedUpgrades?: boolean;
+    allowMidWorkflowUpgrades?: boolean;
+    /** ADR-225 — admin opt-in: permit lowering stored scores (corrections). */
+    allowDowngrades?: boolean;
+  } = {},
 ): Promise<DryRunReport> {
   const allowCompletedUpgrades = !!opts.allowCompletedUpgrades;
   const allowMidWorkflowUpgrades = !!opts.allowMidWorkflowUpgrades;
+  const allowDowngrades = !!opts.allowDowngrades;
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf);
   const ws = wb.Sheets[wb.SheetNames[0]];
@@ -467,7 +477,7 @@ export async function parseAndDryRun(
   const instByCode = new Map(plan.instances.map((i) => [i.employeeCode.trim(), i]));
 
   const rows: DryRunRow[] = [];
-  let apply = 0, skip = 0, err = 0, changes = 0;
+  let apply = 0, skip = 0, err = 0, changes = 0, downgrades = 0;
 
   for (const rec of records) {
     const code = String(rec['Employee Code'] ?? '').trim();
@@ -531,14 +541,16 @@ export async function parseAndDryRun(
         const result = scoreFromRaw(afterRaw, rules, weight);
         const beforePoints = inst.systemScores[slot.id];
         if (beforeRaw === afterRaw && Number(beforePoints ?? NaN) === result.points) continue;
-        // ADR-171 monotonic guard: for completed rows, block cell-level downgrades.
-        if (rowMode === 'admin_upgrade' && typeof beforePoints === 'number'
-            && result.points < beforePoints) {
+        const isDowngrade = typeof beforePoints === 'number' && result.points < beforePoints;
+        // ADR-171 monotonic guard: for completed rows, block cell-level
+        // downgrades — unless the admin opted into ADR-225 corrections.
+        if (rowMode === 'admin_upgrade' && isDowngrade && !allowDowngrades) {
           rowWarnings.push(
             `"${col.name}" skipped — new score (${result.points.toFixed(2)}) is lower than stored (${beforePoints.toFixed(2)}); downgrades are blocked on completed reviews`,
           );
           continue;
         }
+        if (isDowngrade) downgrades++;
         rowChanges.push({
           column: col.name,
           kind: 'system_scores',
@@ -549,6 +561,7 @@ export async function parseAndDryRun(
           rating: result.rating,
           weight,
           matched: result.matched,
+          direction: isDowngrade ? 'down' : 'up',
         });
       } else {
         const before = inst.eligibilityInputs[slot.id];
@@ -601,17 +614,25 @@ export async function parseAndDryRun(
     errorCount: err,
     totalChanges: changes,
     skipsByStatus: summariseSkipsByStatus(rows),
+    downgradeCount: downgrades,
   };
 }
 
-export interface CommitResult { updated: number; failed: number; errors: string[]; upgradedCompleted: number }
+export interface CommitResult {
+  updated: number;
+  failed: number;
+  errors: string[];
+  upgradedCompleted: number;
+  /** ADR-225: rows committed through the bi-directional correction RPC. */
+  correctedRows: number;
+}
 
 export async function commitDryRun(
   report: DryRunReport,
   plan: CycleBulkPlan,
   opts: { reason?: string } = {},
 ): Promise<CommitResult> {
-  const out: CommitResult = { updated: 0, failed: 0, errors: [], upgradedCompleted: 0 };
+  const out: CommitResult = { updated: 0, failed: 0, errors: [], upgradedCompleted: 0, correctedRows: 0 };
   const instByCode = new Map(plan.instances.map((i) => [i.employeeCode.trim(), i]));
   for (const row of report.rows) {
     if (row.verdict !== 'apply') continue;
@@ -637,7 +658,22 @@ export async function commitDryRun(
       }
     }
     try {
-      if (row.mode === 'admin_upgrade') {
+      const hasDowngrade = row.changes.some((c) => c.direction === 'down');
+      if (row.mode === 'admin_upgrade' && hasDowngrade) {
+        // ADR-225: bi-directional admin correction. Requires a reason (>=10
+        // chars, enforced server-side) and is fully audit-logged.
+        const { error } = await supabase.rpc('admin_apply_system_scores_correction' as never, {
+          p_instance_id: inst.instanceId,
+          p_system_scores: patchSys as never,
+          p_system_scores_raw: patchSysRaw as never,
+          p_reason: (opts.reason ?? '') as never,
+          p_total_score: null as never,
+          p_final_rating: null as never,
+        } as never);
+        if (error) throw error;
+        out.updated++;
+        out.correctedRows++;
+      } else if (row.mode === 'admin_upgrade') {
         // ADR-171: route through the SECURITY DEFINER RPC which enforces
         // per-cell monotonic upgrades and writes an audit trail. Only
         // system_score cells are supplied (eligibility is filtered upstream).

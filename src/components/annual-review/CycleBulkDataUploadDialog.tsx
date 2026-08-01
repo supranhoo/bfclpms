@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, Upload, Loader2, FileSpreadsheet, AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Download, Upload, Loader2, FileSpreadsheet, AlertTriangle, CheckCircle2, ShieldAlert, TrendingDown } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -34,6 +35,12 @@ export function CycleBulkDataUploadDialog({
   const [allowCompletedUpgrades, setAllowCompletedUpgrades] = useState(false);
   // ADR-186: opt-in admin override for mid-workflow (pending_dept/bu/hr/management) rows.
   const [allowMidWorkflowUpgrades, setAllowMidWorkflowUpgrades] = useState(false);
+  // ADR-225: opt-in admin correction mode — allows LOWERING stored scores.
+  const [allowDowngrades, setAllowDowngrades] = useState(false);
+  const [correctionReason, setCorrectionReason] = useState('');
+  const lockedModeOn = allowCompletedUpgrades || allowMidWorkflowUpgrades;
+  const downgradesActive = lockedModeOn && allowDowngrades;
+  const reasonValid = correctionReason.trim().length >= 10;
 
   const { data: plan, isLoading, refetch } = useQuery<CycleBulkPlan>({
     queryKey: ['annual-review', 'bulk-data-plan', cycle?.id],
@@ -53,7 +60,9 @@ export function CycleBulkDataUploadDialog({
     if (!plan) return;
     setBusy(true);
     try {
-      const r = await parseAndDryRun(f, plan, { allowCompletedUpgrades, allowMidWorkflowUpgrades });
+      const r = await parseAndDryRun(f, plan, {
+        allowCompletedUpgrades, allowMidWorkflowUpgrades, allowDowngrades: downgradesActive,
+      });
       setReport(r);
       setFile(f);
     } catch (e) {
@@ -68,15 +77,20 @@ export function CycleBulkDataUploadDialog({
     setBusy(true);
     try {
       const res = await commitDryRun(report, plan, {
-        reason: allowCompletedUpgrades || allowMidWorkflowUpgrades
-          ? 'Bulk system-score upgrade (admin override)'
-          : undefined,
+        reason: downgradesActive
+          ? correctionReason.trim()
+          : lockedModeOn
+            ? 'Bulk system-score upgrade (admin override)'
+            : undefined,
       });
       const upgradeNote = res.upgradedCompleted
         ? ` (${res.upgradedCompleted} completed review${res.upgradedCompleted === 1 ? '' : 's'} upgraded)`
         : '';
-      if (res.failed) toast.error(`Committed ${res.updated}, ${res.failed} failed${upgradeNote}.`);
-      else toast.success(`Committed ${res.updated} instance${res.updated === 1 ? '' : 's'}${upgradeNote}.`);
+      const correctionNote = res.correctedRows
+        ? ` (${res.correctedRows} row${res.correctedRows === 1 ? '' : 's'} corrected downward)`
+        : '';
+      if (res.failed) toast.error(`Committed ${res.updated}, ${res.failed} failed${upgradeNote}${correctionNote}.`);
+      else toast.success(`Committed ${res.updated} instance${res.updated === 1 ? '' : 's'}${upgradeNote}${correctionNote}.`);
       setReport(null); setFile(null);
       onDone?.();
       await refetch();
@@ -163,6 +177,44 @@ export function CycleBulkDataUploadDialog({
                 <div className="text-xs text-muted-foreground">
                   Covers reviews sitting at Skip-level, Dept Head, BU Head, HR or Management. Without this, those rows are skipped and their weighted System KPI slots stay empty — which scores as <b>0 of the slot weight</b>, not as excluded. Same monotonic, audit-logged upgrade path as Completed rows.
                 </div>
+              </label>
+            </div>
+
+            {/* ADR-225 — downgrade (correction) opt-in */}
+            <div className={`flex items-start gap-3 rounded-md border px-3 py-2 ${lockedModeOn ? 'border-destructive/50 bg-destructive/5' : 'border-muted bg-muted/30 opacity-60'}`}>
+              <Checkbox
+                id="allow-downgrades"
+                disabled={!lockedModeOn}
+                checked={downgradesActive}
+                onCheckedChange={(v) => {
+                  setAllowDowngrades(!!v);
+                  setReport(null);
+                  setFile(null);
+                }}
+                className="mt-0.5"
+              />
+              <label htmlFor="allow-downgrades" className="text-sm cursor-pointer space-y-1 w-full">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <TrendingDown className="h-4 w-4 text-destructive" />
+                  Allow downgrades (corrections)
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {lockedModeOn
+                    ? <>Lets corrected values <b>lower</b> a stored System KPI score on locked rows instead of skipping them. The review stage is never changed. Downstream rating, slab and bell-curve distributions will shift. Every correction is audit-logged with the full before/after values and your reason.</>
+                    : <>Enable “Apply to Completed reviews” or “Apply to mid-workflow reviews” first.</>}
+                </div>
+                {downgradesActive && (
+                  <Textarea
+                    value={correctionReason}
+                    onChange={(e) => setCorrectionReason(e.target.value)}
+                    placeholder="Correction reason (required, min 10 characters) — e.g. Revised FY26 production actuals issued by Ops on 01-Aug-2026"
+                    className="mt-1 text-xs"
+                    rows={2}
+                  />
+                )}
+                {downgradesActive && !reasonValid && (
+                  <div className="text-xs text-destructive">A correction reason of at least 10 characters is required before committing.</div>
+                )}
               </label>
             </div>
 
@@ -255,6 +307,11 @@ export function CycleBulkDataUploadDialog({
                     <Badge>{report.applyCount} apply</Badge>
                     <Badge variant="secondary">{report.skipCount} skip</Badge>
                     <Badge variant="destructive">{report.errorCount} error</Badge>
+                    {report.downgradeCount > 0 && (
+                      <Badge variant="destructive" className="gap-1">
+                        <TrendingDown className="h-3 w-3" /> {report.downgradeCount} downgrade{report.downgradeCount === 1 ? '' : 's'}
+                      </Badge>
+                    )}
                     <span className="text-muted-foreground">
                       {report.totalChanges} cell change{report.totalChanges === 1 ? '' : 's'}
                     </span>
@@ -305,11 +362,13 @@ export function CycleBulkDataUploadDialog({
                               ) : (
                                 <>
                                   {r.changes.map((c, j) => (
-                                  <div key={j} className="leading-snug">
+                                  <div key={j} className={`leading-snug ${c.direction === 'down' ? 'text-destructive' : ''}`}>
                                     <b>{c.column}</b>: {String(c.before ?? '—')} → {String(c.after)}
+                                    {c.direction === 'down' && <span className="ml-1">↓</span>}
                                     {c.kind === 'system_scores' && c.rating !== undefined && (
-                                      <span className="ml-2 text-muted-foreground">
+                                      <span className={`ml-2 ${c.direction === 'down' ? 'text-destructive/80' : 'text-muted-foreground'}`}>
                                         · rating {c.rating}/5 → {(c.afterPoints ?? 0).toFixed(2)} pts
+                                        {c.direction === 'down' && typeof c.beforePoints === 'number' ? ` (was ${c.beforePoints.toFixed(2)})` : ''}
                                         {typeof c.weight === 'number' ? ` of ${c.weight}` : ''}
                                         {c.matched === false ? ' · no band matched' : ''}
                                       </span>
@@ -340,7 +399,11 @@ export function CycleBulkDataUploadDialog({
                     <Button variant="ghost" onClick={() => { setReport(null); setFile(null); }} disabled={busy}>
                       Discard
                     </Button>
-                    <Button onClick={handleCommit} disabled={busy || report.applyCount === 0}>
+                    <Button
+                      onClick={handleCommit}
+                      variant={report.downgradeCount > 0 ? 'destructive' : 'default'}
+                      disabled={busy || report.applyCount === 0 || (downgradesActive && !reasonValid)}
+                    >
                       {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                       Commit {report.applyCount} row{report.applyCount === 1 ? '' : 's'}
                     </Button>

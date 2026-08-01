@@ -7843,3 +7843,11 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - `src/components/annual-review/ReviewFormViewerDialog.tsx`: dialog widened to `w-[96vw] max-w-[1400px]`; matrix on `md+`, stacked per-stage cards retained below `md`.
 - Tests: `src/test/annualReview/reviewFormView.test.ts` (+3 cases — pivot, missing stage columns, unknown criterion naming).
 - Docs: `docs/adr/ADR-218f.md`; Policy: POLICY.md §AR-BELL-CURVE item 12. No schema, RPC, RLS or scoring change.
+
+### v2.66.223 (2026-08-01 — ADR-225: admin score corrections (downgrades) in bulk data upload)
+- Migration: new SECURITY DEFINER RPC `admin_apply_system_scores_correction(p_instance_id, p_system_scores, p_system_scores_raw, p_reason, p_total_score, p_final_rating)` — admin/hr_pms only, reason >= 10 chars, bi-directional cell merge, audits `system_scores.admin_correction` with full before/after; `annual_review_access_audit_action_check` extended. `admin_apply_system_scores_upgrade` unchanged.
+- `src/services/annualReview/cycleBulkDataUpload.ts`: `parseAndDryRun({ allowDowngrades })` no longer skips lower scores on locked rows; change cells carry `direction: 'up' | 'down'`; report exposes `downgradeCount`; `commitDryRun` routes rows containing a downward cell to the correction RPC and reports `correctedRows`.
+- `src/components/annual-review/CycleBulkDataUploadDialog.tsx`: "Allow downgrades (corrections)" opt-in (gated on the Completed / mid-workflow opt-ins) with a mandatory reason textarea, destructive `N downgrades` badge, red down-arrow change rows, destructive Commit button disabled until the reason is valid.
+- `src/lib/annualReview/bulkStageCoverage.ts`: `allowDowngrades` added to `StageCoverageOptions` (coverage classification unchanged).
+- Tests: `src/test/annualReview/cycleBulkDowngrade.test.ts` (8 cases — coverage parity, cell guard on/off, unscored cell, safe-stage rows).
+- Docs: `docs/adr/ADR-225.md`; Policy: POLICY.md §AR-SYSTEM-SCORE-ADMIN-CORRECTION.
