@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MultiSelectId } from '@/components/ui/multi-select-id';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Download, FileText, Loader2, Settings2, Lightbulb, Users, SlidersHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
@@ -27,10 +27,13 @@ import {
 } from '@/lib/annualReview/bellCurve';
 import {
   allAxisOptions,
+  axisSummary,
+  emptyFilters,
   matchesFilters,
-  staleAxes,
+  reconcileFilters,
   type BellCurveFilters,
   type FilterAxis,
+  type FilterOption,
 } from '@/lib/annualReview/bellCurveFilters';
 import { useBellCurveConfig } from '@/hooks/useBellCurveConfig';
 import { useAnnualReviewRatingSlabs } from '@/hooks/useAnnualReviewRatingSlabs';
@@ -104,13 +107,8 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
 
   const [view, setView] = useState<GroupKey>('department');
   const [bandMode, setBandMode] = useState<BandMode>('rating');
-  const [bu, setBu] = useState(ALL);
-  const [dept, setDept] = useState(ALL);
-  const [manager, setManager] = useState(ALL);
-  const [division, setDivision] = useState(ALL);
-  const [pmsGrade, setPmsGrade] = useState(ALL);
-  const [scoringSource, setScoringSource] = useState<string>(ALL);
-  const [eligibility, setEligibility] = useState<string>(ALL);
+  // ADR-229 — every axis is multi-select; an empty array means "All".
+  const [filters, setFilters] = useState<BellCurveFilters>(() => emptyFilters());
   const [configOpen, setConfigOpen] = useState(false);
   const [penaltyOpen, setPenaltyOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -146,23 +144,17 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
     return base;
   }, [rows, eligMaps, exemptions, exemptionPolicy, cycleId, isManagerScope, user?.id]);
 
-  const filters = useMemo<BellCurveFilters>(() => ({
-    bu, dept, manager, division, grade: pmsGrade, scoringSource, eligibility,
-  }), [bu, dept, manager, division, pmsGrade, scoringSource, eligibility]);
-
   /** ADR-218i — each axis lists only values available under the other filters. */
   const options = useMemo(() => allAxisOptions(baseRows, filters), [baseRows, filters]);
 
-  const setByAxis: Record<FilterAxis, (v: string) => void> = {
-    bu: setBu, dept: setDept, manager: setManager, division: setDivision,
-    grade: setPmsGrade, scoringSource: setScoringSource, eligibility: setEligibility,
-  };
+  const setAxis = (axis: FilterAxis, values: string[]) =>
+    setFilters((f) => ({ ...f, [axis]: values }));
 
-  // Reconcile selections that became impossible after another filter changed.
+  // Prune (never blanket-reset) selections that became impossible (ADR-229).
   useEffect(() => {
-    const stale = staleAxes(filters, options);
-    if (stale.length === 0) return;
-    for (const axis of stale) setByAxis[axis](ALL);
+    const { filters: next, changed } = reconcileFilters(filters, options);
+    if (changed.length === 0) return;
+    setFilters(next);
     setGroupSel({ department: [], business_unit: [], division: [], manager: [] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters, options]);
