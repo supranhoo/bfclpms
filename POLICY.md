@@ -5526,6 +5526,7 @@ Rules:
 
 ## §CHG-HISTORY-SSOT — Master Change History (ADR-213)
 
+
 1. **Capture is mandatory and automatic.** Business-relevant changes are recorded by database triggers, never by application code: `log_profile_identity_change` (21 employee-detail fields including department, reporting manager, functional manager, grade, level, location, portal access and `is_active`) and `trg_workflow_config_audit` (`log_workflow_config_change`) for workflow-mapping edits. Adding a new business column to `profiles` requires adding it to the trigger's tracked-field list in the same migration.
 2. **One read path.** `public.get_change_history(...)` is the only query surface. It unions `system_audit_logs` (employee-detail + workflow-mapping), `employment_status_history` (active/inactive) and `annual_review_assignment_overrides` (reviewer reassignment), resolving every UUID to a human name via `resolve_change_value`.
 3. **Server-side pagination is compulsory.** The RPC is always called with `p_limit` / `p_offset`; the UI page size is 50 and the Excel export is capped at 5,000 rows fetched in 500-row pages. The report never loads the full audit table.
