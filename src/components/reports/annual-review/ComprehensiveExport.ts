@@ -14,9 +14,7 @@ import {
   monthsScored, type MonthlyKraMatrix,
 } from '@/services/annualReview/monthlyKraSheet';
 // ADR-212 — Final Rating (/5) + increment slab.
-import {
-  toRatingOutOf5, resolveSlabPercent, DEFAULT_RATING_SLABS, type RatingSlab,
-} from '@/lib/annualReview/ratingSlab';
+import { DEFAULT_RATING_SLABS, type RatingSlab } from '@/lib/annualReview/ratingSlab';
 // ADR-230 — calibration + eligibility/exemption aware outcome columns.
 import {
   reportEligibilityLabel, resolveReportRating,
@@ -172,8 +170,11 @@ function toEmployeeSheet(
   });
 }
 
-function summaryToSheet(s: KpiSummary, cycleName: string) {
-  return summaryRows(s, cycleName);
+function summaryToSheet(s: KpiSummary, cycleName: string, penaltyNote?: string) {
+  const rows = summaryRows(s, cycleName);
+  // ADR-230 — state the penalty rule the Slab % column reflects.
+  if (penaltyNote) rows.push({ Metric: 'Exemption rule', Value: penaltyNote });
+  return rows;
 }
 
 /**
@@ -262,7 +263,7 @@ export async function downloadComprehensiveWorkbook(input: ExportInput) {
     if (!data || data.length === 0) return;
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data as any), name);
   };
-  append('Executive Summary', summaryToSheet(input.summary, input.cycleName));
+  append('Executive Summary', summaryToSheet(input.summary, input.cycleName, input.penaltyNote));
   append('Employees', toEmployeeSheet(
     input.rows, labelMaps, eligMaps, eligColumns, kra,
     input.ratingSlabs ?? DEFAULT_RATING_SLABS,
