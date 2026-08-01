@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,24 +16,27 @@ import {
   groupBands,
   heatmapBands,
   makeBanding,
-  matchesEligibility,
-  matchesScoringSource,
   normalizationHints,
   summarize,
   SCORING_SOURCE_LABELS,
-  SCORING_SOURCE_ORDER,
-  scoringSourceOf,
   type BandMode,
   type BandRow,
   type BellCurveInput,
   type GroupKey,
   type ScoringSource,
 } from '@/lib/annualReview/bellCurve';
+import {
+  allAxisOptions,
+  matchesFilters,
+  staleAxes,
+  type BellCurveFilters,
+  type FilterAxis,
+} from '@/lib/annualReview/bellCurveFilters';
 import { useBellCurveConfig } from '@/hooks/useBellCurveConfig';
 import { useAnnualReviewRatingSlabs } from '@/hooks/useAnnualReviewRatingSlabs';
 import { fetchTemplateEligibilityMaps } from '@/services/annualReview/eligibilityReportColumns';
 import {
-  ELIGIBILITY_STATUS_LABELS, ELIGIBILITY_STATUS_ORDER, resolveEligibility,
+  resolveEligibility,
   type EffectiveEligibility, type EligibilityStatus,
 } from '@/lib/annualReview/effectiveEligibility';
 import {
