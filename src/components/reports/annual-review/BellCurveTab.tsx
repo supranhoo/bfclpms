@@ -184,9 +184,14 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
     return c;
   }, [filtered]);
 
-  const filterNote = scoringSource === ALL
-    ? 'Scoring source: All'
-    : `Scoring source: ${SCORING_SOURCE_LABELS[scoringSource as ScoringSource]}`;
+  /** ADR-229 — export header lists the selected values of every axis. */
+  const filterNote = useMemo(() => {
+    const parts: string[] = [];
+    for (const [label, axis] of FILTER_FIELDS) {
+      parts.push(`${label}: ${axisSummary(filters[axis] ?? [], options[axis])}`);
+    }
+    return parts.join(' · ');
+  }, [filters, options]);
 
   // Heat map always lists every group in the filtered set; the selection
   // narrows the charts, KPIs and exports only.
@@ -320,24 +325,18 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
             </TabsList>
           </Tabs>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-            {([
-              ['Business Unit', bu, setBu, options.bu],
-              ['Department', dept, setDept, options.dept],
-              ['Manager', manager, setManager, options.manager],
-              ['Division / Location', division, setDivision, options.division],
-              ['PMS Grade', pmsGrade, setPmsGrade, options.grade],
-              ['Scoring Source (KRA)', scoringSource, setScoringSource, options.scoringSource],
-              ['Eligibility', eligibility, setEligibility, options.eligibility],
-            ] as const).map(([label, value, setter, opts]) => (
-              <div key={label} className="space-y-1">
+            {FILTER_FIELDS.map(([label, axis]) => (
+              <div key={axis} className="space-y-1">
                 <Label className="text-xs">{label}</Label>
-                <Select value={value} onValueChange={(v) => setter(v)}>
-                  <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={ALL}>All</SelectItem>
-                    {opts.map(([id, name]) => <SelectItem key={id} value={id}>{name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <MultiSelectId
+                  options={(options[axis] as FilterOption[]).map(([id, name]) => ({ id, label: name }))}
+                  value={filters[axis] ?? []}
+                  onChange={(v) => setAxis(axis, v)}
+                  placeholder="All"
+                  ariaLabel={label}
+                  searchPlaceholder={`Search ${label.toLowerCase()}…`}
+                  className="h-10 w-full"
+                />
               </div>
             ))}
           </div>
@@ -397,7 +396,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
         defs={banding.defs}
         hasTargets={hasTargets}
         selectedIds={selectedIds}
-          drilldownResetKey={`${view}|${bandMode}|${bu}|${dept}|${manager}|${division}|${pmsGrade}|${scoringSource}|${eligibility}`}
+          drilldownResetKey={`${view}|${bandMode}|${FILTER_AXES_ORDER.map((a) => (filters[a] ?? []).join(',')).join('|')}`}
         renderDrilldown={(rowId, bandKey, close) => {
           const def = banding.defs.find((d) => d.key === bandKey);
           const group = heat.find((h) => h.id === rowId);
