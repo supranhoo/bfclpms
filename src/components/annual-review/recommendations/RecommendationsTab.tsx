@@ -22,7 +22,10 @@ import {
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { Download, Loader2 } from 'lucide-react';
+import { Download, Loader2, Settings2, Upload, Wand2 } from 'lucide-react';
+import { LegacyImportDialog } from './LegacyImportDialog';
+import { ReclassifyDialog } from './ReclassifyDialog';
+import { RecommendationKeywordRulesCard } from './RecommendationKeywordRulesCard';
 import { useActiveCycle } from '@/hooks/useAnnualReview';
 import {
   useBulkDecideRecommendations,
@@ -39,6 +42,8 @@ import {
 
 const PAGE_SIZE = 25;
 const ALL = '__all__';
+
+type SourceFilter = typeof ALL | 'stage_form' | 'legacy_import';
 
 const DECISIONS: RecommendationStatus[] = [
   'approved', 'approved_modified', 'rejected', 'deferred', 'implemented',
@@ -62,6 +67,10 @@ export function RecommendationsTab() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [decideRow, setDecideRow] = useState<RecommendationQueueRow | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [source, setSource] = useState<SourceFilter>(ALL);
+  const [importOpen, setImportOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [reclassifyRow, setReclassifyRow] = useState<RecommendationQueueRow | null>(null);
 
   const filters = useMemo(
     () => ({
@@ -70,10 +79,11 @@ export function RecommendationsTab() {
       typeKey: typeKey === ALL ? null : typeKey,
       monetaryOnly,
       search: search.trim() || null,
+      source: source === ALL ? null : source,
       page,
       pageSize: PAGE_SIZE,
     }),
-    [cycle?.id, status, typeKey, monetaryOnly, search, page],
+    [cycle?.id, status, typeKey, monetaryOnly, search, source, page],
   );
 
   const { data, isLoading, isFetching } = useRecommendationQueue(filters, !!cycle?.id);
@@ -86,7 +96,7 @@ export function RecommendationsTab() {
       'Employee code', 'Employee', 'Department', 'Business unit', 'Designation',
       'Recommended by', 'Stage', 'Types', 'Amount asked', 'Amount approved',
       'Proposed designation', 'Proposed grade', 'Effective from', 'Rating',
-      'Status', 'Decision reason', 'Narrative',
+      'Status', 'Source', 'Decision reason', 'Narrative',
     ];
     const body = rows.map((r) => [
       r.employee_code ?? '', r.employee_name ?? '', r.department_name ?? '',
@@ -96,6 +106,7 @@ export function RecommendationsTab() {
       formatRecommendationAmount(r.approved_amount_kind, r.approved_amount_value),
       r.proposed_designation ?? '', r.proposed_grade ?? '', r.effective_from ?? '',
       r.final_rating ?? '', RECOMMENDATION_STATUS_LABEL[r.status] ?? r.status,
+      r.source === 'legacy_import' ? 'Legacy import' : 'Review form',
       r.decision_reason ?? '', (r.narrative ?? '').replace(/\s+/g, ' '),
     ]);
     const csv = [head, ...body]
