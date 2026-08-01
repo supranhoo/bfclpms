@@ -1193,7 +1193,12 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                           This will <strong>clear propagated values across all {data.scopedRows?.length || 'all'} department scopes</strong> of <strong>"{data.kpiName}"</strong> and reset them for fresh data entry.
                         </p>
                         <p className="text-destructive font-medium">
-                          All employee self-review scores linked to this KPI will be removed. This cannot be undone.
+                          All employee self-review scores linked to this KPI will be removed. Scorecards a
+                          reviewer has already scored (manager and later stages, except approved) are
+                          force-reset to KRA-set and those reviewer scores are cleared too. This cannot be undone.
+                        </p>
+                        <p>
+                          Approved scorecards are never touched — they are skipped and reported after the rollback.
                         </p>
                         <Textarea
                           placeholder="Reason for bulk rollback (required)"
