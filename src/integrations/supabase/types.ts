@@ -2166,6 +2166,68 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_recommendation_import_runs: {
+        Row: {
+          created_at: string
+          created_count: number
+          cycle_id: string
+          dry_run: boolean
+          id: string
+          needs_classification_count: number
+          performed_by: string | null
+          rolled_back_at: string | null
+          rolled_back_by: string | null
+          rolled_back_count: number | null
+          sample: Json
+          scanned_count: number
+          skipped_count: number
+          type_breakdown: Json
+          updated_count: number
+        }
+        Insert: {
+          created_at?: string
+          created_count?: number
+          cycle_id: string
+          dry_run?: boolean
+          id?: string
+          needs_classification_count?: number
+          performed_by?: string | null
+          rolled_back_at?: string | null
+          rolled_back_by?: string | null
+          rolled_back_count?: number | null
+          sample?: Json
+          scanned_count?: number
+          skipped_count?: number
+          type_breakdown?: Json
+          updated_count?: number
+        }
+        Update: {
+          created_at?: string
+          created_count?: number
+          cycle_id?: string
+          dry_run?: boolean
+          id?: string
+          needs_classification_count?: number
+          performed_by?: string | null
+          rolled_back_at?: string | null
+          rolled_back_by?: string | null
+          rolled_back_count?: number | null
+          sample?: Json
+          scanned_count?: number
+          skipped_count?: number
+          type_breakdown?: Json
+          updated_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_recommendation_import_runs_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_cycles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       annual_review_recommendation_items: {
         Row: {
           created_at: string
@@ -2199,6 +2261,47 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "annual_review_recommendation_types"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      annual_review_recommendation_keywords: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          notes: string | null
+          pattern: string
+          type_key: string
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          pattern: string
+          type_key: string
+          updated_at?: string
+          weight?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          pattern?: string
+          type_key?: string
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_recommendation_keywords_type_key_fkey"
+            columns: ["type_key"]
+            isOneToOne: false
+            referencedRelation: "annual_review_recommendation_types"
+            referencedColumns: ["key"]
           },
         ]
       }
@@ -2255,6 +2358,7 @@ export type Database = {
           effective_from: string | null
           employee_id: string
           id: string
+          import_run_id: string | null
           instance_id: string
           narrative: string | null
           proposed_designation_id: string | null
@@ -2278,6 +2382,7 @@ export type Database = {
           effective_from?: string | null
           employee_id: string
           id?: string
+          import_run_id?: string | null
           instance_id: string
           narrative?: string | null
           proposed_designation_id?: string | null
@@ -2301,6 +2406,7 @@ export type Database = {
           effective_from?: string | null
           employee_id?: string
           id?: string
+          import_run_id?: string | null
           instance_id?: string
           narrative?: string | null
           proposed_designation_id?: string | null
@@ -2317,6 +2423,13 @@ export type Database = {
             columns: ["cycle_id"]
             isOneToOne: false
             referencedRelation: "annual_review_cycles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_recommendations_import_run_id_fkey"
+            columns: ["import_run_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_recommendation_import_runs"
             referencedColumns: ["id"]
           },
           {
@@ -15758,6 +15871,10 @@ export type Database = {
           run_id: string
         }[]
       }
+      ar_backfill_legacy_recommendations: {
+        Args: { p_cycle_id: string; p_dry_run?: boolean; p_limit?: number }
+        Returns: Json
+      }
       ar_bulk_decide_recommendations: {
         Args: {
           p_reason: string
@@ -15774,6 +15891,13 @@ export type Database = {
       ar_can_view_recommendation: {
         Args: { p_instance_id: string }
         Returns: boolean
+      }
+      ar_classify_recommendation_text: {
+        Args: { p_text: string }
+        Returns: {
+          score: number
+          type_key: string
+        }[]
       }
       ar_decide_recommendation: {
         Args: {
@@ -15806,6 +15930,22 @@ export type Database = {
         }[]
       }
       ar_normalise_question: { Args: { _name: string }; Returns: string }
+      ar_parse_recommendation_amount: {
+        Args: { p_text: string }
+        Returns: {
+          amount_kind: string
+          amount_value: number
+        }[]
+      }
+      ar_reclassify_recommendation: {
+        Args: {
+          p_amount_kind?: string
+          p_amount_value?: number
+          p_recommendation_id: string
+          p_type_keys: string[]
+        }
+        Returns: string
+      }
       ar_recommendation_queue: {
         Args: {
           p_cycle_id: string
@@ -15813,6 +15953,7 @@ export type Database = {
           p_monetary_only?: boolean
           p_offset?: number
           p_search?: string
+          p_source?: string
           p_status?: string
           p_type_key?: string
         }
@@ -15840,12 +15981,17 @@ export type Database = {
           proposed_grade: string
           reviewer_name: string
           reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+          source: string
           status: string
           total_count: number
           total_score: number
           type_keys: string[]
           type_labels: string[]
         }[]
+      }
+      ar_rollback_recommendation_import: {
+        Args: { p_run_id: string }
+        Returns: Json
       }
       ar_save_recommendation: {
         Args: {
