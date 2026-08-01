@@ -77,6 +77,7 @@ export function RecommendationsTab() {
   const [page, setPage] = useState(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [decideRow, setDecideRow] = useState<RecommendationQueueRow | null>(null);
+  const [viewInstanceId, setViewInstanceId] = useState<string | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [source, setSource] = useState<SourceFilter>(ALL);
   const [importOpen, setImportOpen] = useState(false);
@@ -395,6 +396,10 @@ export function RecommendationsTab() {
       </Card>
 
       <DecideDialog row={decideRow} onClose={() => setDecideRow(null)} />
+      <ReviewFormViewerDialog
+        instanceId={viewInstanceId}
+        onClose={() => setViewInstanceId(null)}
+      />
       <ReclassifyDialog row={reclassifyRow} onClose={() => setReclassifyRow(null)} />
       <LegacyImportDialog
         open={importOpen}
