@@ -42,6 +42,12 @@ export interface BellCurveConfig {
   /** ADR-222 — cap exempted employees out of the top increment tiers. */
   exempted_slab_cap_enabled?: boolean;
   exempted_top_tiers_excluded?: number;
+  /** ADR-224 — configurable exemption penalty rule. */
+  exempted_penalty_mode?: 'none' | 'top_tiers_excluded' | 'step_down';
+  exempted_step_down_slabs?: number;
+  exempted_penalty_scope?: 'all_slabs' | 'top_slabs_only';
+  exempted_penalty_top_slabs?: number;
+  exempted_penalty_floor_percent?: number;
 }
 
 export const DEFAULT_BELL_CURVE_CONFIG: BellCurveConfig = {
@@ -55,6 +61,11 @@ export const DEFAULT_BELL_CURVE_CONFIG: BellCurveConfig = {
   amber_threshold: 10,
   exempted_slab_cap_enabled: true,
   exempted_top_tiers_excluded: 2,
+  exempted_penalty_mode: 'top_tiers_excluded',
+  exempted_step_down_slabs: 1,
+  exempted_penalty_scope: 'all_slabs',
+  exempted_penalty_top_slabs: 2,
+  exempted_penalty_floor_percent: 0,
 };
 
 export function targetFor(config: BellCurveConfig, band: RatingBand): number {
@@ -84,6 +95,18 @@ export function validateConfig(config: BellCurveConfig): string | null {
   const tiers = Number(config.exempted_top_tiers_excluded ?? 0);
   if (!Number.isInteger(tiers) || tiers < 0 || tiers > 6) {
     return 'Top tiers excluded for exempted employees must be a whole number between 0 and 6.';
+  }
+  const steps = Number(config.exempted_step_down_slabs ?? 1);
+  if (!Number.isInteger(steps) || steps < 1 || steps > 6) {
+    return 'Slabs to step down must be a whole number between 1 and 6.';
+  }
+  const topSlabs = Number(config.exempted_penalty_top_slabs ?? 2);
+  if (!Number.isInteger(topSlabs) || topSlabs < 1 || topSlabs > 6) {
+    return 'Top slabs for the penalty scope must be a whole number between 1 and 6.';
+  }
+  const floor = Number(config.exempted_penalty_floor_percent ?? 0);
+  if (!Number.isFinite(floor) || floor < 0 || floor > 100) {
+    return 'The penalty floor must be between 0 and 100%.';
   }
   return null;
 }
