@@ -332,8 +332,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
               ['Division / Location', division, setDivision, options.division],
               ['PMS Grade', pmsGrade, setPmsGrade, options.grade],
               ['Scoring Source (KRA)', scoringSource, setScoringSource, options.scoringSource],
-              ['Eligibility', eligibility, setEligibility,
-                ELIGIBILITY_STATUS_ORDER.map((s) => [s, ELIGIBILITY_STATUS_LABELS[s]] as [string, string])],
+              ['Eligibility', eligibility, setEligibility, options.eligibility],
             ] as const).map(([label, value, setter, opts]) => (
               <div key={label} className="space-y-1">
                 <Label className="text-xs">{label}</Label>
