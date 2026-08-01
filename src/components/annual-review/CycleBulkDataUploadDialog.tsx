@@ -180,6 +180,44 @@ export function CycleBulkDataUploadDialog({
               </label>
             </div>
 
+            {/* ADR-225 — downgrade (correction) opt-in */}
+            <div className={`flex items-start gap-3 rounded-md border px-3 py-2 ${lockedModeOn ? 'border-destructive/50 bg-destructive/5' : 'border-muted bg-muted/30 opacity-60'}`}>
+              <Checkbox
+                id="allow-downgrades"
+                disabled={!lockedModeOn}
+                checked={downgradesActive}
+                onCheckedChange={(v) => {
+                  setAllowDowngrades(!!v);
+                  setReport(null);
+                  setFile(null);
+                }}
+                className="mt-0.5"
+              />
+              <label htmlFor="allow-downgrades" className="text-sm cursor-pointer space-y-1 w-full">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <TrendingDown className="h-4 w-4 text-destructive" />
+                  Allow downgrades (corrections)
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {lockedModeOn
+                    ? <>Lets corrected values <b>lower</b> a stored System KPI score on locked rows instead of skipping them. The review stage is never changed. Downstream rating, slab and bell-curve distributions will shift. Every correction is audit-logged with the full before/after values and your reason.</>
+                    : <>Enable “Apply to Completed reviews” or “Apply to mid-workflow reviews” first.</>}
+                </div>
+                {downgradesActive && (
+                  <Textarea
+                    value={correctionReason}
+                    onChange={(e) => setCorrectionReason(e.target.value)}
+                    placeholder="Correction reason (required, min 10 characters) — e.g. Revised FY26 production actuals issued by Ops on 01-Aug-2026"
+                    className="mt-1 text-xs"
+                    rows={2}
+                  />
+                )}
+                {downgradesActive && !reasonValid && (
+                  <div className="text-xs text-destructive">A correction reason of at least 10 characters is required before committing.</div>
+                )}
+              </label>
+            </div>
+
             {/* Scoring health strip — v2.66.91, POLICY §AR-SYSTEM-KPI-LIBRARY-LINK */}
             {(() => {
               const totalSystem = plan.columns.filter((c) => c.kind === 'system_scores').length;
@@ -269,6 +307,11 @@ export function CycleBulkDataUploadDialog({
                     <Badge>{report.applyCount} apply</Badge>
                     <Badge variant="secondary">{report.skipCount} skip</Badge>
                     <Badge variant="destructive">{report.errorCount} error</Badge>
+                    {report.downgradeCount > 0 && (
+                      <Badge variant="destructive" className="gap-1">
+                        <TrendingDown className="h-3 w-3" /> {report.downgradeCount} downgrade{report.downgradeCount === 1 ? '' : 's'}
+                      </Badge>
+                    )}
                     <span className="text-muted-foreground">
                       {report.totalChanges} cell change{report.totalChanges === 1 ? '' : 's'}
                     </span>
@@ -319,11 +362,13 @@ export function CycleBulkDataUploadDialog({
                               ) : (
                                 <>
                                   {r.changes.map((c, j) => (
-                                  <div key={j} className="leading-snug">
+                                  <div key={j} className={`leading-snug ${c.direction === 'down' ? 'text-destructive' : ''}`}>
                                     <b>{c.column}</b>: {String(c.before ?? '—')} → {String(c.after)}
+                                    {c.direction === 'down' && <span className="ml-1">↓</span>}
                                     {c.kind === 'system_scores' && c.rating !== undefined && (
-                                      <span className="ml-2 text-muted-foreground">
+                                      <span className={`ml-2 ${c.direction === 'down' ? 'text-destructive/80' : 'text-muted-foreground'}`}>
                                         · rating {c.rating}/5 → {(c.afterPoints ?? 0).toFixed(2)} pts
+                                        {c.direction === 'down' && typeof c.beforePoints === 'number' ? ` (was ${c.beforePoints.toFixed(2)})` : ''}
                                         {typeof c.weight === 'number' ? ` of ${c.weight}` : ''}
                                         {c.matched === false ? ' · no band matched' : ''}
                                       </span>
@@ -354,7 +399,11 @@ export function CycleBulkDataUploadDialog({
                     <Button variant="ghost" onClick={() => { setReport(null); setFile(null); }} disabled={busy}>
                       Discard
                     </Button>
-                    <Button onClick={handleCommit} disabled={busy || report.applyCount === 0}>
+                    <Button
+                      onClick={handleCommit}
+                      variant={report.downgradeCount > 0 ? 'destructive' : 'default'}
+                      disabled={busy || report.applyCount === 0 || (downgradesActive && !reasonValid)}
+                    >
                       {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                       Commit {report.applyCount} row{report.applyCount === 1 ? '' : 's'}
                     </Button>
