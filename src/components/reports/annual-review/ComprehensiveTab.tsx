@@ -31,6 +31,22 @@ import {
   formatRating5,
   formatSlabPercent,
 } from '@/lib/annualReview/ratingSlab';
+// ADR-230 — calibration + eligibility/exemption aware rating & slab.
+import {
+  buildSlabCapOptions,
+  reportEligibilityLabel,
+  resolveReportRating,
+  type ReportRating,
+  type ReportRatingContext,
+} from '@/lib/annualReview/reportRating';
+import { resolveFinalRating } from '@/lib/annualReview/finalScoreScale';
+import { useAnnualReviewCalibrations } from '@/hooks/useAnnualReviewCalibrations';
+import {
+  useEligibilityExemptionPolicy, useEligibilityExemptions,
+} from '@/hooks/annualReview/useEligibilityExemptions';
+import { useBellCurveConfig } from '@/hooks/useBellCurveConfig';
+import { fetchTemplateEligibilityMaps } from '@/services/annualReview/eligibilityReportColumns';
+import { describeExemptionPenalty, exemptionPenaltyFor } from '@/lib/annualReview/effectiveEligibility';
 
 function KpiCard({ label, value, tone }: { label: string; value: number | string; tone?: 'muted' | 'ok' | 'warn' | 'bad' }) {
   const toneCls = tone === 'ok' ? 'text-emerald-600'
