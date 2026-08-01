@@ -15262,6 +15262,17 @@ export type Database = {
         Returns: undefined
       }
       activate_permit: { Args: { p_permit_id: string }; Returns: Json }
+      admin_apply_system_scores_correction: {
+        Args: {
+          p_final_rating?: number
+          p_instance_id: string
+          p_reason: string
+          p_system_scores: Json
+          p_system_scores_raw: Json
+          p_total_score?: number
+        }
+        Returns: Json
+      }
       admin_apply_system_scores_upgrade: {
         Args: {
           p_final_rating?: string
