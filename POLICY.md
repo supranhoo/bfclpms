@@ -5229,6 +5229,17 @@ detectable and repairable without a developer.
 5. Rollback is by replaying the audit row's `before` payload. A correction run
    shifts bell-curve, slab and calibration outputs — reviewing those after a
    downward run is mandatory.
+6. (ADR-225a, 2026-08-01) A correction MUST recompute the headline score. When
+   the caller supplies no explicit total, the RPC recomputes `total_score` and
+   `final_rating` from the corrected stored state via
+   `annual_review_compute_final_summary` and writes them back; a corrected cell
+   may never leave a stale final score. A raw-value-only change (same points,
+   different raw) is persisted too.
+7. (ADR-225a) Admin RPC parameters MUST match their column types —
+   `p_final_rating` is TEXT, matching `annual_review_instances.final_rating`.
+   A failed commit MUST be surfaced to the admin with the per-employee error
+   text; reporting only a count let a 100% server-side failure look like
+   "nothing to change".
 
 ## §AR-FINAL-SCORE-SCALE-INVARIANT — Annual review final score is always 0–100 with a rating band (ADR-187, 2026-07-27)
 
