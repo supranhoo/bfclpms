@@ -5610,7 +5610,9 @@ Rules:
 
 14. **Two configuration surfaces (ADR-222a, 2026-08-01).** Bell curve configuration is split into two admin/HR-only dialogs opened from the Bell Curve header: **Configure targets** (band targets, total-100% validation, green/amber thresholds) and **Exemption penalty** (enable switch, penalty type, type-specific fields, floor %, per-slab effect preview). Both persist to the same `annual_review_bell_curve_config` row and must always save a **full** config copy seeded from the current record, so neither surface can blank the other's fields. Cycle-scope (organisation default vs cycle override) is offered identically in both.
 
-**Guard.** `src/test/annualReview/bellCurve.test.ts` (24 cases), `src/test/annualReview/bellCurveDrilldown.test.ts` (6 cases).
+15. **Interdependent filters (ADR-218i, 2026-08-01).** The filter row is a cascade: every axis (Business Unit, Department, Manager, Division/Location, PMS Grade, Scoring Source, Eligibility) lists only the values that still exist once all **other** active filters are applied, so a combination can never silently yield an empty analysis. A selection that becomes impossible after another axis changes resets to **All** (and clears the heat-map group selection) rather than filtering everything out; clearing a filter re-expands the others. The rule lives in `src/lib/annualReview/bellCurveFilters.ts` (`matchesFilters` / `axisOptions` / `allAxisOptions` / `staleAxes`) and is shared with the row filter, so options and results can never disagree. Reconciliation runs in a `useEffect`, never a `useMemo`. Presentation only — no schema, RPC, RLS or scoring change, and it applies to both mount points (item 9).
+
+**Guard.** `src/test/annualReview/bellCurve.test.ts` (24 cases), `src/test/annualReview/bellCurveDrilldown.test.ts` (6 cases), `src/test/annualReview/bellCurveFilters.test.ts` (6 cases).
 
 ---
 
