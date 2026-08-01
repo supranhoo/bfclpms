@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, Upload, Loader2, FileSpreadsheet, AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Download, Upload, Loader2, FileSpreadsheet, AlertTriangle, CheckCircle2, ShieldAlert, TrendingDown } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -34,6 +35,12 @@ export function CycleBulkDataUploadDialog({
   const [allowCompletedUpgrades, setAllowCompletedUpgrades] = useState(false);
   // ADR-186: opt-in admin override for mid-workflow (pending_dept/bu/hr/management) rows.
   const [allowMidWorkflowUpgrades, setAllowMidWorkflowUpgrades] = useState(false);
+  // ADR-225: opt-in admin correction mode — allows LOWERING stored scores.
+  const [allowDowngrades, setAllowDowngrades] = useState(false);
+  const [correctionReason, setCorrectionReason] = useState('');
+  const lockedModeOn = allowCompletedUpgrades || allowMidWorkflowUpgrades;
+  const downgradesActive = lockedModeOn && allowDowngrades;
+  const reasonValid = correctionReason.trim().length >= 10;
 
   const { data: plan, isLoading, refetch } = useQuery<CycleBulkPlan>({
     queryKey: ['annual-review', 'bulk-data-plan', cycle?.id],
@@ -53,7 +60,9 @@ export function CycleBulkDataUploadDialog({
     if (!plan) return;
     setBusy(true);
     try {
-      const r = await parseAndDryRun(f, plan, { allowCompletedUpgrades, allowMidWorkflowUpgrades });
+      const r = await parseAndDryRun(f, plan, {
+        allowCompletedUpgrades, allowMidWorkflowUpgrades, allowDowngrades: downgradesActive,
+      });
       setReport(r);
       setFile(f);
     } catch (e) {
@@ -68,15 +77,20 @@ export function CycleBulkDataUploadDialog({
     setBusy(true);
     try {
       const res = await commitDryRun(report, plan, {
-        reason: allowCompletedUpgrades || allowMidWorkflowUpgrades
-          ? 'Bulk system-score upgrade (admin override)'
-          : undefined,
+        reason: downgradesActive
+          ? correctionReason.trim()
+          : lockedModeOn
+            ? 'Bulk system-score upgrade (admin override)'
+            : undefined,
       });
       const upgradeNote = res.upgradedCompleted
         ? ` (${res.upgradedCompleted} completed review${res.upgradedCompleted === 1 ? '' : 's'} upgraded)`
         : '';
-      if (res.failed) toast.error(`Committed ${res.updated}, ${res.failed} failed${upgradeNote}.`);
-      else toast.success(`Committed ${res.updated} instance${res.updated === 1 ? '' : 's'}${upgradeNote}.`);
+      const correctionNote = res.correctedRows
+        ? ` (${res.correctedRows} row${res.correctedRows === 1 ? '' : 's'} corrected downward)`
+        : '';
+      if (res.failed) toast.error(`Committed ${res.updated}, ${res.failed} failed${upgradeNote}${correctionNote}.`);
+      else toast.success(`Committed ${res.updated} instance${res.updated === 1 ? '' : 's'}${upgradeNote}${correctionNote}.`);
       setReport(null); setFile(null);
       onDone?.();
       await refetch();
