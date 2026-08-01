@@ -377,7 +377,10 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
 
       {/* Executive Summary */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-muted-foreground">Executive Summary — {cycleName}</h3>
+        <h3 className="text-sm font-semibold text-muted-foreground">
+          Executive Summary — {cycleName}
+          <span className="ml-2 font-normal">· {penaltyNote}</span>
+        </h3>
         <Button variant="outline" size="sm" className="gap-2" onClick={onExport}>
           <Download className="h-4 w-4" /> Export full workbook
         </Button>
