@@ -108,6 +108,55 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
   const { data: slabs } = useAnnualReviewRatingSlabs();
   const [rcaSearch, setRcaSearch] = useState('101784');
 
+  // ADR-230 — the same calibration + exemption context the Bell Curve and the
+  // Detail tab use, so all three report one number per employee.
+  const { data: bellCurveConfig } = useBellCurveConfig(cycleId);
+  const { data: calibrations = {} } = useAnnualReviewCalibrations(rows.map((r) => r.instance_id));
+  const { data: exemptions = {} } = useEligibilityExemptions(cycleId);
+  const { data: exemptionPolicy = [] } = useEligibilityExemptionPolicy();
+  const templateIds = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.template_id).filter(Boolean) as string[])),
+    [rows],
+  );
+  const { data: criteriaMaps = {} } = useQuery({
+    queryKey: ['ar-comprehensive-template-eligibility', templateIds.slice().sort().join(',')],
+    enabled: templateIds.length > 0,
+    staleTime: 5 * 60_000,
+    queryFn: () => fetchTemplateEligibilityMaps(templateIds),
+  });
+
+  const ratingCtx = useMemo<ReportRatingContext>(() => ({
+    slabs,
+    capOptions: buildSlabCapOptions(bellCurveConfig, slabs),
+    calibrations,
+    exemptions,
+    policy: exemptionPolicy,
+    criteriaMaps,
+  }), [slabs, bellCurveConfig, calibrations, exemptions, exemptionPolicy, criteriaMaps]);
+
+  /** instance_id → resolved effective rating / slab %. */
+  const ratings = useMemo(() => {
+    const out = new Map<string, ReportRating>();
+    for (const r of rows) out.set(r.instance_id, resolveReportRating(r, ratingCtx));
+    return out;
+  }, [rows, ratingCtx]);
+  const ratingOf = (r: ComprehensiveRow): ReportRating =>
+    ratings.get(r.instance_id) ?? resolveReportRating(r, ratingCtx);
+
+  /** Effective rating band label — calibrated rows re-band (ADR-220). */
+  const effectiveBandLabel = (r: ComprehensiveRow): string | null => {
+    const rr = ratingOf(r);
+    if (!rr.isCalibrated || rr.effectiveRating == null) return r.final_rating;
+    return resolveFinalRating(rr.effectiveRating * 20);
+  };
+
+  const penaltyNote = useMemo(() => {
+    const opts = ratingCtx.capOptions;
+    if (!opts || opts.capEnabled === false) return 'Exemption penalty: disabled';
+    const sample = exemptionPenaltyFor(20, 'exempted', opts);
+    return `Exemption penalty: ${describeExemptionPenalty(sample)}`;
+  }, [ratingCtx]);
+
   const rcaRow = useMemo<ComprehensiveRow | null>(() => {
     const q = rcaSearch.trim().toLowerCase();
     if (!q) return null;
@@ -151,6 +200,9 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
         byDesignation: byDesig,
         byStage,
         ratingSlabs: slabs,
+        // ADR-230 — effective (calibrated + exemption-penalised) outcome.
+        ratingContext: ratingCtx,
+        penaltyNote,
       });
     } catch (e) {
       toast.error((e as Error).message);
