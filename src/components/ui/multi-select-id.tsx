@@ -31,10 +31,12 @@ interface Props {
   placeholder?: string;
   className?: string;
   searchPlaceholder?: string;
+  /** Accessible name for the trigger when the visible <Label> is not bound. */
+  ariaLabel?: string;
 }
 
 export function MultiSelectId({
-  options, value, onChange, placeholder = 'All', className, searchPlaceholder = 'Search...',
+  options, value, onChange, placeholder = 'All', className, searchPlaceholder = 'Search...', ariaLabel,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -69,7 +71,7 @@ export function MultiSelectId({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" className={cn('justify-between font-normal', className)}>
+        <Button variant="outline" role="combobox" aria-label={ariaLabel} className={cn('justify-between font-normal', className)}>
           <span className="truncate text-left flex-1">{display}</span>
           <div className="flex items-center gap-1 shrink-0">
             {value.length > 0 && (
