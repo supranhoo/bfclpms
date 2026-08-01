@@ -1,6 +1,13 @@
 import type { EligibilityCriterion } from '@/types/annualReview';
 import { evaluate } from './eligibility';
-import { DEFAULT_RATING_SLABS, slabCapPercent, type RatingSlab } from './ratingSlab';
+import {
+  DEFAULT_RATING_SLABS,
+  applyExemptionPenalty,
+  describeExemptionPenalty,
+  type ExemptionPenaltyResult,
+  type ExemptionPenaltyRule,
+  type RatingSlab,
+} from './ratingSlab';
 
 /**
  * ADR-221 / POLICY §AR-ELIGIBILITY-EXEMPTION — single source of truth for the
@@ -196,7 +203,42 @@ export interface SlabCapOptions {
   slabs?: ReadonlyArray<RatingSlab>;
   capEnabled?: boolean;
   topTiersExcluded?: number;
+  /** ADR-224 — configurable penalty rule. Overrides the legacy cap fields. */
+  penalty?: ExemptionPenaltyRule;
 }
+
+/** ADR-224 — resolve the effective rule from the legacy + new options. */
+export function resolvePenaltyRule(options?: SlabCapOptions): ExemptionPenaltyRule {
+  if (options?.capEnabled === false) return { mode: 'none' };
+  const p = options?.penalty;
+  return {
+    mode: p?.mode ?? 'top_tiers_excluded',
+    stepDownSlabs: p?.stepDownSlabs ?? 1,
+    topTiersExcluded: p?.topTiersExcluded ?? options?.topTiersExcluded ?? 0,
+    scope: p?.scope ?? 'all_slabs',
+    topSlabs: p?.topSlabs ?? 2,
+    floorPercent: p?.floorPercent ?? 0,
+  };
+}
+
+/** Full penalty outcome for an instance — used by the transparency popover. */
+export function exemptionPenaltyFor(
+  computedPercent: number | null,
+  status: EligibilityStatus,
+  options?: SlabCapOptions,
+): ExemptionPenaltyResult {
+  const slabs = options?.slabs ?? DEFAULT_RATING_SLABS;
+  const rule = resolvePenaltyRule(options);
+  if (status !== 'exempted') {
+    return {
+      percent: computedPercent, applied: false,
+      mode: rule.mode ?? 'none', from: computedPercent, to: computedPercent, slabsMoved: 0,
+    };
+  }
+  return applyExemptionPenalty(computedPercent, slabs, rule);
+}
+
+export { describeExemptionPenalty };
 
 export function effectiveSlabPercent(
   computedPercent: number | null,
@@ -205,10 +247,9 @@ export function effectiveSlabPercent(
 ): number | null {
   if (status === 'ineligible') return 0;
   if (status !== 'exempted') return computedPercent;
-  if (!options?.capEnabled) return computedPercent;
   if (computedPercent === null || computedPercent === undefined) return computedPercent;
-  const cap = slabCapPercent(options.slabs ?? DEFAULT_RATING_SLABS, options.topTiersExcluded ?? 0);
-  return Math.min(computedPercent, cap);
+  if (options?.capEnabled === false) return computedPercent;
+  return exemptionPenaltyFor(computedPercent, status, options).percent;
 }
 
 /** True when the exemption cap actually reduced the computed percentage. */
