@@ -58,6 +58,18 @@ import { exportBellCurveExcel, exportBellCurvePdf } from './bellCurve/bellCurveE
 
 const ALL = '__all__';
 
+/** ADR-229 — label + axis for each cascading multi-select filter, in render order. */
+const FILTER_FIELDS: ReadonlyArray<readonly [string, FilterAxis]> = [
+  ['Business Unit', 'bu'],
+  ['Department', 'dept'],
+  ['Manager', 'manager'],
+  ['Division / Location', 'division'],
+  ['PMS Grade', 'grade'],
+  ['Scoring Source (KRA)', 'scoringSource'],
+  ['Eligibility', 'eligibility'],
+];
+const FILTER_AXES_ORDER = FILTER_FIELDS.map(([, axis]) => axis);
+
 function KpiCard({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
   return (
     <Card>
