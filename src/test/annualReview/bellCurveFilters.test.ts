@@ -45,9 +45,10 @@ describe('bellCurveFilters (ADR-218i)', () => {
     expect(axisOptions(rows, f, 'eligibility').map(([id]) => id)).toEqual(['eligible']);
   });
 
-  it('flags a selection that is no longer available', () => {
+  it('flags every selection in a contradictory combination', () => {
+    // bu2 has no d1 department, so neither axis survives the other's filter.
     const f = { ...ALL, bu: 'bu2', dept: 'd1' };
-    expect(staleAxes(f, allAxisOptions(rows, f))).toEqual(['dept']);
+    expect(staleAxes(f, allAxisOptions(rows, f)).sort()).toEqual(['bu', 'dept']);
   });
 
   it('reports no stale axis for a valid combination', () => {
