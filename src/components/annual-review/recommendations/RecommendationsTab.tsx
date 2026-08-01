@@ -22,7 +22,7 @@ import {
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { Download, Loader2, Settings2, Upload, Wand2 } from 'lucide-react';
+import { Download, FileText, Loader2, Settings2, Upload, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -34,6 +34,7 @@ import {
   MAX_RECOMMENDATION_EXPORT_ROWS,
 } from '@/lib/annualReview/recommendationExport';
 import { LegacyImportDialog } from './LegacyImportDialog';
+import { ReviewFormViewerDialog } from '@/components/annual-review/ReviewFormViewerDialog';
 import { ReclassifyDialog } from './ReclassifyDialog';
 import { RecommendationKeywordRulesCard } from './RecommendationKeywordRulesCard';
 import { useActiveCycle } from '@/hooks/useAnnualReview';
@@ -354,6 +355,16 @@ export function RecommendationsTab() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="View submitted review form"
+                          aria-label={`View submitted review form for ${r.employee_name ?? 'employee'}`}
+                          disabled={!r.instance_id}
+                          onClick={() => setViewInstanceId(r.instance_id)}
+                        >
+                          <FileText className="h-4 w-4 mr-1" />View form
+                        </Button>
                         {r.status === 'needs_classification' && (
                           <Button size="sm" variant="ghost" onClick={() => setReclassifyRow(r)}>
                             <Wand2 className="h-4 w-4 mr-1" />Classify
