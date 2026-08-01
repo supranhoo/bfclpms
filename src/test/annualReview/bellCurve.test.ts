@@ -234,3 +234,58 @@ describe('ADR-218b — slab band mode', () => {
     expect(legacy.every((b) => b.compliance !== null)).toBe(true);
   });
 });
+
+/* ADR-228 — exemption-aware band placement. */
+describe('bellCurve — exemption-aware placement (ADR-228)', () => {
+  const cap = {
+    capEnabled: true,
+    topTiersExcluded: 0,
+    penalty: { mode: 'step_down' as const, stepDownSlabs: 1, scope: 'all_slabs' as const, floorPercent: 0 },
+  };
+  // 92 -> 4.60 -> 20% slab; one step down -> 16% (4.00 – under 4.50) -> rating band 4.
+  const exempted = row(1, 92, { eligibility_status: 'exempted' });
+  const eligible = row(2, 92, { eligibility_status: 'eligible' });
+  const ineligible = row(3, 92, { eligibility_status: 'ineligible' });
+
+  it('moves an exempted employee to the penalised slab band', () => {
+    const banding = makeBanding('slab', cfg, undefined, cap);
+    const bands = computeBands([exempted, eligible], banding, cfg);
+    const byLabel = Object.fromEntries(bands.map((b) => [b.label, b.count]));
+    expect(byLabel['20%']).toBe(1);
+    expect(byLabel['16%']).toBe(1);
+  });
+
+  it('re-bands the same employee in rating mode', () => {
+    const banding = makeBanding('rating', cfg, undefined, cap);
+    const bands = computeBands([exempted, eligible], banding, cfg);
+    expect(bands.find((b) => b.key === '5')?.count).toBe(1);
+    expect(bands.find((b) => b.key === '4')?.count).toBe(1);
+  });
+
+  it('places an ineligible employee in the 0% slab', () => {
+    const banding = makeBanding('slab', cfg, undefined, cap);
+    const bands = computeBands([ineligible], banding, cfg);
+    expect(bands.find((b) => b.label === '0%')?.count).toBe(1);
+    expect(bands.find((b) => b.label === '20%')?.count).toBe(0);
+  });
+
+  it('keeps the rated denominator intact', () => {
+    const rows = [exempted, eligible, ineligible];
+    for (const mode of ['rating', 'slab'] as const) {
+      const banding = makeBanding(mode, cfg, undefined, cap);
+      const total = computeBands(rows, banding, cfg).reduce((a, b) => a + b.count, 0);
+      expect(total).toBe(3);
+      expect(summarize(rows, banding, cfg).averageRating).toBe(4.6);
+    }
+  });
+
+  it('reproduces legacy behaviour when the penalty is disabled or absent', () => {
+    const rows = [exempted, eligible, ineligible];
+    const off = makeBanding('slab', cfg, undefined, { capEnabled: false, penalty: { mode: 'none' } });
+    const legacy = makeBanding('slab', cfg);
+    const a = computeBands(rows, off, cfg).map((b) => b.count);
+    const b = computeBands(rows, legacy, cfg).map((c) => c.count);
+    expect(a).toEqual(b);
+    expect(computeBands(rows, legacy, cfg).find((x) => x.label === '20%')?.count).toBe(3);
+  });
+});
