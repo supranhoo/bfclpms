@@ -100,6 +100,7 @@ export function CycleBulkDataUploadDialog({
         );
         // eslint-disable-next-line no-console
         console.error('[bulk-upload] commit errors', res.errors);
+        onDone?.();
         await refetch();
         return;
       }
