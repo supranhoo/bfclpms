@@ -7851,3 +7851,10 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - `src/lib/annualReview/bulkStageCoverage.ts`: `allowDowngrades` added to `StageCoverageOptions` (coverage classification unchanged).
 - Tests: `src/test/annualReview/cycleBulkDowngrade.test.ts` (8 cases — coverage parity, cell guard on/off, unscored cell, safe-stage rows).
 - Docs: `docs/adr/ADR-225.md`; Policy: POLICY.md §AR-SYSTEM-SCORE-ADMIN-CORRECTION.
+
+### v2.66.224 (2026-08-01 — ADR-225a: correction RPC signature parity + score recompute)
+- RCA (employee 101772): the 1-Aug downgrade run wrote nothing. `admin_apply_system_scores_correction` declared `p_final_rating numeric` while `annual_review_instances.final_rating` is TEXT, so `COALESCE(numeric, text)` raised on every call; the client counted the row as `failed` and the toast showed only a count. Verified: raw stayed 97.007 / 20 pts (85 scores 10 pts under the `annual_production` bands) and no `annual_review_access_audit` rows existed after 30 Jul.
+- Migration: `admin_apply_system_scores_correction` recreated with `p_final_rating text`; recomputes `total_score` / `final_rating` via `annual_review_compute_final_summary` when the caller passes no explicit total; persists raw-only changes; audit `after` now carries the recomputed total, rating and a `recomputed` flag.
+- `src/components/annual-review/CycleBulkDataUploadDialog.tsx`: commit failures raise a destructive 20s toast listing the first per-employee errors, log the full list, and keep the dry-run preview open.
+- Tests: `src/test/annualReview/cycleBulkCorrectionRouting.test.ts` (3 cases — downward routing + text-compatible `p_final_rating`, upward routing to the monotonic RPC, RPC exception reported as `failed` with error text).
+- Docs: `docs/adr/ADR-225a.md`; Policy: POLICY.md §AR-SYSTEM-SCORE-ADMIN-CORRECTION items 6–7.
