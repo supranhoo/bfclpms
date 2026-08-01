@@ -303,6 +303,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
               variant="outline" size="sm" className="gap-2"
               disabled={scoped.length === 0}
               onClick={() => exportBellCurvePdf(scoped, config, cycleName, `${filterNote} · ${modeNote}`, banding).catch((e) => toast.error((e as Error).message))}
+              title="Download the bell curve as PDF"
             >
               <FileText className="h-4 w-4" /> PDF
             </Button>
