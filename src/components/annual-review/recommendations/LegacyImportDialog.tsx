@@ -15,7 +15,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Loader2, PlayCircle, Undo2 } from 'lucide-react';
-import { ConfirmDestructiveDialog } from '@/components/common/ConfirmDestructiveDialog';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import {
   useImportRuns, useRollbackImport, useRunLegacyImport,
 } from '@/hooks/useRecommendationImport';
@@ -196,10 +196,11 @@ export function LegacyImportDialog({
 
       <ConfirmDestructiveDialog
         open={!!rollbackId}
-        onOpenChange={(o) => { if (!o) setRollbackId(null); }}
+        onCancel={() => setRollbackId(null)}
         title="Roll back this import run?"
         description="Only imported recommendations that HR has not yet decided will be removed. Decided records and anything captured directly in a review form are kept."
         confirmLabel="Roll back"
+        isLoading={rollback.isPending}
         onConfirm={() => {
           if (rollbackId) rollback.mutate(rollbackId);
           setRollbackId(null);
