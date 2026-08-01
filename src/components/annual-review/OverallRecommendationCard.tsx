@@ -9,6 +9,7 @@ import {
   displayStageForResponse,
   type StageDisplayInstanceLike,
 } from '@/lib/annualReview/displayStageForResponse';
+import { StructuredRecommendationFields } from '@/components/annual-review/recommendations/StructuredRecommendationFields';
 
 /**
  * Reserved key inside `annual_review_responses.qualitative_responses` for the
@@ -103,6 +104,7 @@ export function OverallRecommendationCard({
   onChangeDraft,
   responses,
   reviewerNames,
+  instanceId,
 }: {
   role: AnnualReviewerRole | null;
   locked: boolean;
@@ -110,6 +112,11 @@ export function OverallRecommendationCard({
   onChangeDraft: (v: string) => void;
   responses: Pick<AnnualReviewResponse, 'reviewer_role' | 'qualitative_responses'>[];
   reviewerNames?: Partial<Record<AnnualReviewerRole, string | null>>;
+  /**
+   * ADR-226 — when provided, the structured recommendation block (type, amount,
+   * proposed designation/grade) is mounted for the editing reviewer.
+   */
+  instanceId?: string;
 }) {
   const canEdit =
     !!role && !locked && RECOMMENDATION_ROLES.includes(role);
@@ -164,6 +171,13 @@ export function OverallRecommendationCard({
                 ? 'A recommendation is required before this review can be submitted. Shared with HR and the employee at acknowledgment.'
                 : 'Shared with the next reviewer, HR, and the employee at acknowledgment. Do not include confidential HR-only notes.'}
             </p>
+            {instanceId && role && (
+              <StructuredRecommendationFields
+                instanceId={instanceId}
+                role={role}
+                narrative={draftValue}
+              />
+            )}
           </div>
         )}
       </CardContent>
