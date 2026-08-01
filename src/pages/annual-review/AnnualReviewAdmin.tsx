@@ -95,6 +95,7 @@ import { SystemKpiWeightMatrix } from '@/components/annual-review/SystemKpiWeigh
 import { TemplateArchetypesPanel } from '@/components/annual-review/TemplateArchetypesPanel';
 import { CriteriaLibraryPanel } from '@/components/annual-review/CriteriaLibraryPanel';
 import { CriteriaMatrixPanel } from '@/components/annual-review/CriteriaMatrixPanel';
+import { BellCurveTab } from '@/components/reports/annual-review/BellCurveTab';
 import type {
   AnnualReviewCycle, AnnualReviewTemplate, AssignmentFilters, AnnualReviewerRole,
 } from '@/types/annualReview';
@@ -128,7 +129,7 @@ export default function AnnualReviewAdmin() {
       <Tabs defaultValue="progress" className="w-full">
         <TabsList className="flex flex-wrap md:flex-nowrap w-full h-auto gap-1 p-1 overflow-x-auto justify-start">
           <TabsTrigger value="progress" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><ListChecks className="h-4 w-4" />Progress</TabsTrigger>
-          <TabsTrigger value="analytics" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><BarChart3 className="h-4 w-4" />Analytics</TabsTrigger>
+          <TabsTrigger value="bell-curve" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><BarChart3 className="h-4 w-4" />Bell Curve</TabsTrigger>
           <TabsTrigger value="calibration" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><Scale className="h-4 w-4" />Calibration</TabsTrigger>
           <TabsTrigger value="cycles" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><Calendar className="h-4 w-4" />Cycles</TabsTrigger>
           <TabsTrigger value="templates" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><Settings2 className="h-4 w-4" />Templates</TabsTrigger>
@@ -142,7 +143,7 @@ export default function AnnualReviewAdmin() {
           <TabsTrigger value="assisted" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><ShieldCheck className="h-4 w-4" />Assisted Submissions</TabsTrigger>
         </TabsList>
         <TabsContent value="progress" className="mt-4"><ProgressTab /></TabsContent>
-        <TabsContent value="analytics" className="mt-4"><AnalyticsTab /></TabsContent>
+        <TabsContent value="bell-curve" className="mt-4"><AdminBellCurveTab /></TabsContent>
         <TabsContent value="calibration" className="mt-4"><CalibrationTab /></TabsContent>
         <TabsContent value="cycles" className="mt-4"><CyclesTab /></TabsContent>
         <TabsContent value="templates" className="mt-4"><TemplatesTab /></TabsContent>
@@ -1552,181 +1553,15 @@ const STAGE_LABEL: Record<string, string> = {
   pending_skip: 'Skip', pending_dept: 'Dept', pending_bu: 'BU', pending_hr: 'HR', completed: 'Completed',
 };
 
-function AnalyticsTab() {
+/**
+ * ADR-218g — Bell Curve replaces the legacy hand-rolled Analytics tab.
+ * Mounts the exact same BellCurveTab used by the Annual Review Report, scoped
+ * to the active cycle, so both surfaces stay in sync (single component SSOT).
+ */
+function AdminBellCurveTab() {
   const { data: activeCycle } = useActiveCycle();
-  const { data: instances = [] } = useCycleInstances(activeCycle?.id);
-  const instanceIds = useMemo(() => instances.map((i) => i.id), [instances]);
-  const { data: stageScoresMap = {} } = useInstanceStageScores(instanceIds);
-  const { data: allTemplates = [] } = useTemplates();
-  const templatesById = useMemo(() => {
-    const m: Record<string, AnnualReviewTemplate> = {};
-    for (const t of allTemplates) m[t.id] = t;
-    return m;
-  }, [allTemplates]);
-
-  const blendedData = useMemo(() => {
-    const buckets = [
-      { label: '< 2.0', min: 0, max: 2, count: 0 },
-      { label: '2.0–3.0', min: 2, max: 3, count: 0 },
-      { label: '3.0–4.0', min: 3, max: 4, count: 0 },
-      { label: '4.0–4.5', min: 4, max: 4.5, count: 0 },
-      { label: '4.5–5.0', min: 4.5, max: 5.0001, count: 0 },
-    ];
-    let scored = 0;
-    for (const i of instances) {
-      const tpl = templatesById[svc.resolveTemplateId(i) ?? ''] ?? null;
-      const weights = resolveStageWeights(i, tpl);
-      const s = stageScoresMap[i.id] ?? {};
-      const sysTotal = Object.values(i.system_scores ?? {})
-        .reduce<number>((acc, v) => acc + (typeof v === 'number' ? v : 0), 0) || null;
-      const blend = computeFinalScore({
-        stageWeights: weights,
-        responsesByRole: {
-          self: s.self ?? null, manager: s.manager ?? null,
-          skip_manager: s.skip_manager ?? null, bu_head: s.bu_head ?? null, hr: s.hr ?? null,
-        },
-        systemScoreTotal: sysTotal,
-        criteriaWeightedScore: i.criteria_weighted_score ?? null,
-      });
-      if (blend.scaled_0_5 == null) continue;
-      scored++;
-      const v = blend.scaled_0_5;
-      const b = buckets.find((bk) => v >= bk.min && v < bk.max);
-      if (b) b.count++;
-    }
-    return { buckets, scored };
-  }, [instances, templatesById, stageScoresMap]);
-
-  const ratingData = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const i of instances) {
-      const r = (i.final_rating ?? '').trim();
-      if (!r) continue;
-      map.set(r, (map.get(r) ?? 0) + 1);
-    }
-    return Array.from(map.entries()).map(([rating, count]) => ({ rating, count }))
-      .sort((a, b) => b.count - a.count);
-  }, [instances]);
-
-  const stageData = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const i of instances) map.set(i.overall_status, (map.get(i.overall_status) ?? 0) + 1);
-    return STAGE_ORDER.map((s) => ({ stage: STAGE_LABEL[s], count: map.get(s) ?? 0 }));
-  }, [instances]);
-
-  const onTimeData = useMemo(() => {
-    if (!activeCycle?.hr_finalization_deadline) return null;
-    const dl = new Date(activeCycle.hr_finalization_deadline).getTime();
-    const now = Date.now();
-    let onTime = 0, overdue = 0, completed = 0;
-    for (const i of instances) {
-      if (i.overall_status === 'completed') {
-        completed++;
-        if (i.finalized_at && new Date(i.finalized_at).getTime() <= dl) onTime++;
-      } else if (now > dl) overdue++;
-    }
-    return [
-      { label: 'Completed on time', value: onTime },
-      { label: 'Completed late', value: completed - onTime },
-      { label: 'Pending (overdue)', value: overdue },
-      { label: 'Pending (in window)', value: instances.length - completed - overdue },
-    ];
-  }, [instances, activeCycle]);
-
-  if (!activeCycle) return <Card><CardContent className="p-6">Activate a cycle to see analytics.</CardContent></Card>;
-
-  const COLORS = ['hsl(var(--primary))', 'hsl(var(--chart-2, 142 76% 36%))', 'hsl(var(--chart-3, 38 92% 50%))', 'hsl(var(--muted-foreground))'];
-
-  return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <Card>
-        <CardHeader><CardTitle className="text-base">Stage funnel</CardTitle></CardHeader>
-        <CardContent style={{ height: 280 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={stageData} layout="vertical" margin={{ left: 24, right: 16 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-              <XAxis type="number" allowDecimals={false} />
-              <YAxis type="category" dataKey="stage" width={90} />
-              <Tooltip />
-              <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0,4,4,0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle className="text-base">Rating distribution</CardTitle></CardHeader>
-        <CardContent style={{ height: 280 }}>
-          {ratingData.length === 0 ? (
-            <p className="text-sm text-muted-foreground p-4">No reviews finalized yet.</p>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={ratingData} margin={{ left: 8, right: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="rating" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="count" radius={[4,4,0,0]}>
-                  {ratingData.map((_, idx) => <Cell key={idx} fill={COLORS[idx % COLORS.length]} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="md:col-span-2">
-        <CardHeader>
-          <CardTitle className="text-base">Blended final-score distribution</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Live blend of the configured weights (self/manager/skip/BU/HR/system/criteria) across {blendedData.scored} scored employee{blendedData.scored === 1 ? '' : 's'}. Recomputes as reviewers submit — independent of HR's manual final rating.
-          </p>
-        </CardHeader>
-        <CardContent style={{ height: 260 }}>
-          {blendedData.scored === 0 ? (
-            <p className="text-sm text-muted-foreground p-4">No stage scores available yet.</p>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={blendedData.buckets} margin={{ left: 8, right: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="label" />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="count" radius={[4,4,0,0]}>
-                  {blendedData.buckets.map((_, idx) => <Cell key={idx} fill={COLORS[idx % COLORS.length]} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="md:col-span-2">
-        <CardHeader>
-          <CardTitle className="text-base">On-time vs overdue</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            {activeCycle.hr_finalization_deadline
-              ? `Measured against HR deadline ${new Date(activeCycle.hr_finalization_deadline).toLocaleDateString()}.`
-              : 'Set an HR finalization deadline on the active cycle to enable this view.'}
-          </p>
-        </CardHeader>
-        <CardContent>
-          {!onTimeData ? (
-            <p className="text-sm text-muted-foreground">—</p>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-4">
-              {onTimeData.map((d, idx) => (
-                <div key={d.label} className="rounded-md border p-3">
-                  <p className="text-xs text-muted-foreground">{d.label}</p>
-                  <p className="text-2xl font-semibold tabular-nums" style={{ color: COLORS[idx] }}>{d.value}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
+  if (!activeCycle) return <Card><CardContent className="p-6">Activate a cycle to see the bell curve.</CardContent></Card>;
+  return <BellCurveTab cycleId={activeCycle.id} cycleName={activeCycle.name} />;
 }
 
 // ------------------------------------------------------------------
