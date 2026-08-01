@@ -448,8 +448,8 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
               <TableHead className="text-right" title="HR rating on a 0–5 scale.">HR /5</TableHead>
               <TableHead className="text-right">Final</TableHead>
               <TableHead>Rating</TableHead>
-              <TableHead className="text-right" title="Final Score converted to a 5-point rating.">Final Rating (/5)</TableHead>
-              <TableHead className="text-right" title="Increment slab resolved from the /5 rating.">Slab %</TableHead>
+              <TableHead className="text-right" title="Effective 5-point rating — the admin-calibrated value when one exists (ADR-220).">Final Rating (/5)</TableHead>
+              <TableHead className="text-right" title="Effective increment slab — after the ineligible→0% rule and the exemption penalty (ADR-221/222/224).">Slab %</TableHead>
               {/* ADR-174 — how the rating was derived (KRA vs criteria). */}
               <TableHead>Rating Derived</TableHead>
               <TableHead>Stage</TableHead>
