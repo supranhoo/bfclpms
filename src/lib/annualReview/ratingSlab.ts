@@ -103,6 +103,113 @@ export function describeSlab(slab: RatingSlab): string {
     : `${slab.rating_from.toFixed(2)} – under ${Number(slab.rating_to).toFixed(2)}`;
 }
 
+/**
+ * ADR-224 / POLICY §AR-ELIGIBILITY-EXEMPTION (decision C) — the exemption
+ * penalty is master data, not a hardcoded clamp.
+ *
+ * - `none`               — an exempted employee keeps the computed percentage.
+ * - `top_tiers_excluded` — legacy ADR-222 behaviour: clamp down to the highest
+ *                          band left once the top N bands are removed.
+ * - `step_down`          — move the employee N slabs DOWN from whatever slab
+ *                          they landed in (default scope: every slab).
+ *
+ * The penalty can only ever reduce a percentage, never raise it.
+ */
+export type ExemptionPenaltyMode = 'none' | 'top_tiers_excluded' | 'step_down';
+export type ExemptionPenaltyScope = 'all_slabs' | 'top_slabs_only';
+
+export interface ExemptionPenaltyRule {
+  mode?: ExemptionPenaltyMode;
+  /** `step_down` — number of slabs to drop. */
+  stepDownSlabs?: number;
+  /** `top_tiers_excluded` — number of top bands removed from the scale. */
+  topTiersExcluded?: number;
+  /** Which employees the penalty applies to. Default: every slab. */
+  scope?: ExemptionPenaltyScope;
+  /** `top_slabs_only` — how many slabs count as "top". */
+  topSlabs?: number;
+  /** Lowest percentage the penalty may reach. */
+  floorPercent?: number;
+}
+
+export interface ExemptionPenaltyResult {
+  percent: number | null;
+  applied: boolean;
+  mode: ExemptionPenaltyMode;
+  from: number | null;
+  to: number | null;
+  slabsMoved: number;
+}
+
+function activeSorted(slabs: ReadonlyArray<RatingSlab>): RatingSlab[] {
+  return slabs
+    .filter((s) => s.is_active !== false)
+    .slice()
+    .sort((a, b) => a.rating_from - b.rating_from);
+}
+
+/** Resolve the index of the band that owns `percent` (highest match). */
+function indexForPercent(active: RatingSlab[], percent: number): number {
+  let idx = -1;
+  active.forEach((s, i) => {
+    if (Number(s.increment_percent) === percent) idx = i;
+  });
+  if (idx >= 0) return idx;
+  // Not an exact band value — fall back to the highest band at or below it.
+  for (let i = active.length - 1; i >= 0; i -= 1) {
+    if (Number(active[i].increment_percent) <= percent) return i;
+  }
+  return 0;
+}
+
+export function applyExemptionPenalty(
+  computedPercent: number | null | undefined,
+  slabs: ReadonlyArray<RatingSlab> = DEFAULT_RATING_SLABS,
+  rule: ExemptionPenaltyRule = {},
+): ExemptionPenaltyResult {
+  const mode: ExemptionPenaltyMode = rule.mode ?? 'top_tiers_excluded';
+  const from = computedPercent === null || computedPercent === undefined || !Number.isFinite(computedPercent)
+    ? null
+    : Number(computedPercent);
+  const none: ExemptionPenaltyResult = {
+    percent: from, applied: false, mode, from, to: from, slabsMoved: 0,
+  };
+  if (from === null || mode === 'none') return none;
+
+  const active = activeSorted(slabs);
+  if (active.length === 0) return none;
+
+  const floor = Number.isFinite(rule.floorPercent) ? Number(rule.floorPercent) : 0;
+
+  if (mode === 'top_tiers_excluded') {
+    const cap = slabCapPercent(active, rule.topTiersExcluded ?? 0);
+    const to = Math.max(floor, Math.min(from, cap));
+    return { percent: to, applied: to < from, mode, from, to, slabsMoved: 0 };
+  }
+
+  // step_down
+  const idx = indexForPercent(active, from);
+  if (rule.scope === 'top_slabs_only') {
+    const topN = Math.max(0, Math.trunc(rule.topSlabs ?? 2));
+    if (idx < active.length - topN) return none;
+  }
+  const steps = Math.max(0, Math.trunc(rule.stepDownSlabs ?? 1));
+  if (steps === 0) return none;
+  const targetIdx = Math.max(0, idx - steps);
+  const raw = Number(active[targetIdx].increment_percent) || 0;
+  const to = Math.max(floor, Math.min(from, raw));
+  return { percent: to, applied: to < from, mode, from, to, slabsMoved: idx - targetIdx };
+}
+
+/** Human sentence for the transparency popover / exports. */
+export function describeExemptionPenalty(r: ExemptionPenaltyResult): string {
+  if (!r.applied || r.from === null || r.to === null) return 'No exemption penalty applied';
+  if (r.mode === 'step_down') {
+    return `Exemption penalty: ${r.slabsMoved} slab${r.slabsMoved === 1 ? '' : 's'} down — ${r.from}% → ${r.to}%`;
+  }
+  return `Exemption penalty: top increment tiers excluded — ${r.from}% → ${r.to}%`;
+}
+
 export interface SlabValidationResult {
   valid: boolean;
   errors: string[];
