@@ -3,7 +3,7 @@
 ## Goal
 Two additions on top of ADR-221/222/223:
 1. **Bulk exempt** every employee who failed eligibility *only* because of one chosen criterion, with an admin-set threshold (e.g. "absent days up to 10").
-2. Make the **exemption penalty** a configurable master rule — instead of only "clamp to the highest non-top-N tier", support "**step the employee down N slabs**", and only apply it when the employee lands in the top slabs.
+2. Make the **exemption penalty** a configurable master rule — instead of only "clamp to the highest non-top-N tier", support "**step the employee down N slabs**", applied to an exempted employee **whichever slab they land in** (not only the top slabs).
 
 Plus a **transparent record** so the employee (and reviewers) can see which criterion was exempted and exactly how it changed their slab.
 
@@ -26,13 +26,16 @@ Extend the existing cycle-scoped master data (`annual_review_bell_curve_config`,
 | --- | --- |
 | `exempted_penalty_mode` | `none` / `top_tiers_excluded` (current behaviour, default) / `step_down` |
 | `exempted_step_down_slabs` | how many slabs to drop (1 or 2, default 1) — used by `step_down` |
-| `exempted_penalty_min_slab_rank` | apply the penalty **only** when the employee's slab is within the top N slabs (default 2); below that, no penalty |
+| `exempted_penalty_scope` | `all_slabs` (default) — every exempted employee is stepped down regardless of their slab / `top_slabs_only` with `exempted_penalty_top_slabs` (optional opt-in for HR later) |
+| `exempted_penalty_floor_percent` | lowest percentage the step-down may reach (default 0%) — an employee already in the bottom slab simply stays there |
 
-`step_down` example with the seeded bands: 20% → 16% (1 down) or 12% (2 down); an employee already at 8% with `min_slab_rank = 2` keeps 8%.
+`step_down` examples with the seeded bands and `all_slabs` scope, 1 slab down: 20% → 16%, 16% → 12%, 12% → 8%, 8% → 6%, 6% → 4%, 4% → 0%, 0% stays 0% (floor). With 2 slabs down: 20% → 12%, 8% → 4%. The penalty never increases a percentage.
 
-Implementation: replace the `slabCapPercent` call inside `effectiveSlabPercent()` with a new `applyExemptionPenalty(computedPercent, slabs, rule)` in `src/lib/annualReview/ratingSlab.ts` returning `{ percent, applied, mode, from, to }`. `slabCapPercent` stays exported for the legacy mode. Everything downstream (report grid, drill-down, exports) already goes through `effectiveSlabPercent`, so no call-site logic changes — only the extra explanation object where we surface it.
+Rationale for the default: the exemption is a waiver of a failed criterion, so the reduction is owed by every exempted employee — a mid-slab employee should feel the same rule as a top-slab one. `top_slabs_only` remains available in the master data if HR later wants to restrict it.
 
-UI: the rule editor goes into the existing **Bell Curve settings dialog** (`BellCurveConfigDialog.tsx`) as an "Exemption penalty rule" block with a live preview line: *"20% → 16% (1 slab down)"*.
+Implementation: replace the `slabCapPercent` call inside `effectiveSlabPercent()` with a new `applyExemptionPenalty(computedPercent, slabs, rule)` in `src/lib/annualReview/ratingSlab.ts` returning `{ percent, applied, mode, from, to, slabsMoved }`. Step-down resolves the employee's current slab index in the active, sorted band list and moves down `N` positions, clamped at the bottom band / floor percent. `slabCapPercent` stays exported for the legacy `top_tiers_excluded` mode. Everything downstream (report grid, drill-down, exports) already goes through `effectiveSlabPercent`, so no call-site logic changes — only the extra explanation object where we surface it.
+
+UI: the rule editor goes into the existing **Bell Curve settings dialog** (`BellCurveConfigDialog.tsx`) as an "Exemption penalty rule" block — mode selector, slabs-to-drop stepper, scope selector, floor — with a live preview table showing the resulting mapping for every configured slab (e.g. `20% → 16%`, `16% → 12%`, … `4% → 0%`) so HR can see the whole effect before saving.
 
 ## 2. Bulk exemption by criterion
 New **`BulkExemptionDialog.tsx`**, launched from a "Bulk exempt" button in the Bell Curve Analysis toolbar (admin / HR PMS / management only):
@@ -60,5 +63,5 @@ Reason      [ FY26 attendance relaxation approved by ... ]
 ## Technical notes
 - Migration (one call): add the 3 config columns and the 6 exemption columns; create `public.annual_review_bulk_exemption_runs` with GRANTs + RLS (read: admin/hr_pms/management; writes via RPC only); create `bulk_exempt_eligibility_criterion()` and `revoke_bulk_exemption_run()` as SECURITY DEFINER with `set search_path = public`; extend `ar_elig_exemption_guard()` to accept the bulk source while still rejecting non-exemptable criteria.
 - Files touched: `ratingSlab.ts`, `effectiveEligibility.ts`, `useBellCurveConfig.ts`, `useEligibilityExemptions.ts`, `BellCurveConfigDialog.tsx`, `BellCurveTab.tsx`, `BandEmployeeList.tsx`, `AnnualReviewReport.tsx`, `TeamReviewDetailContent.tsx`; new `BulkExemptionDialog.tsx`, `ExemptionImpactPopover.tsx`, `src/services/annualReview/bulkExemption.ts`.
-- Tests: extend `src/test/annualReview/effectiveEligibility.test.ts`, add `bulkExemption.test.ts` — step-down maths, min-slab-rank guard, sole-failure matching, non-exemptable rejection, penalty explanation text, undo restores prior status.
+- Tests: extend `src/test/annualReview/effectiveEligibility.test.ts`, add `bulkExemption.test.ts` — step-down maths for every slab (top, middle, bottom), floor clamp, 2-slab drop, `top_slabs_only` scope, legacy `top_tiers_excluded` parity, sole-failure matching, non-exemptable rejection, penalty explanation text, undo restores prior status.
 - Docs: ADR-224, POLICY §AR-ELIGIBILITY-EXEMPTION items 8–10, DOCUMENTATION.md version history, memory update.
