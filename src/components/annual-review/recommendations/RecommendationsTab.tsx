@@ -23,6 +23,16 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Download, Loader2, Settings2, Upload, Wand2 } from 'lucide-react';
+import { toast } from 'sonner';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  describeRecommendationFilters,
+  downloadRecommendationExcel,
+  fetchAllRecommendationRows,
+  MAX_RECOMMENDATION_EXPORT_ROWS,
+} from '@/lib/annualReview/recommendationExport';
 import { LegacyImportDialog } from './LegacyImportDialog';
 import { ReclassifyDialog } from './ReclassifyDialog';
 import { RecommendationKeywordRulesCard } from './RecommendationKeywordRulesCard';
@@ -71,6 +81,7 @@ export function RecommendationsTab() {
   const [importOpen, setImportOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [reclassifyRow, setReclassifyRow] = useState<RecommendationQueueRow | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const filters = useMemo(
     () => ({
@@ -118,6 +129,39 @@ export function RecommendationsTab() {
     a.download = `annual-review-recommendations-page-${page + 1}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const filterNote = describeRecommendationFilters(filters);
+  const baseName = `annual-review-recommendations-${new Date().toISOString().slice(0, 10)}`;
+
+  const exportPageExcel = () => {
+    downloadRecommendationExcel(rows, filterNote, `${baseName}-page-${page + 1}.xlsx`);
+  };
+
+  const exportAllExcel = async () => {
+    setIsExporting(true);
+    const toastId = toast.loading('Preparing Excel export…');
+    try {
+      const { rows: allRows, capped } = await fetchAllRecommendationRows(
+        filters,
+        (fetched, t) => toast.loading(`Fetched ${fetched} of ${t}…`, { id: toastId }),
+      );
+      if (!allRows.length) {
+        toast.error('No rows match these filters.', { id: toastId });
+        return;
+      }
+      downloadRecommendationExcel(allRows, filterNote, `${baseName}-all.xlsx`);
+      toast.success(
+        capped
+          ? `Export capped at ${MAX_RECOMMENDATION_EXPORT_ROWS.toLocaleString()} rows — narrow the filters for the rest.`
+          : `Exported ${allRows.length.toLocaleString()} recommendation(s).`,
+        { id: toastId },
+      );
+    } catch (e) {
+      toast.error(`Export failed: ${(e as Error)?.message ?? 'unknown error'}`, { id: toastId });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   if (!cycle?.id) {
@@ -189,9 +233,21 @@ export function RecommendationsTab() {
                 </SelectContent>
               </Select>
             </div>
-            <Button variant="outline" size="sm" onClick={exportCsv} disabled={!rows.length}>
-              <Download className="h-4 w-4 mr-2" />Export page
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={!rows.length || isExporting}>
+                  {isExporting
+                    ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    : <Download className="h-4 w-4 mr-2" />}
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={exportPageExcel}>Current page (Excel)</DropdownMenuItem>
+                <DropdownMenuItem onClick={exportAllExcel}>All filtered rows (Excel)</DropdownMenuItem>
+                <DropdownMenuItem onClick={exportCsv}>Current page (CSV)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
               <Upload className="h-4 w-4 mr-2" />Import legacy
             </Button>
