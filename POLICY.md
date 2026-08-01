@@ -5660,3 +5660,15 @@ Rules:
 17. **Narrative rendering.** In the read-only review-form viewer the overall recommendation is rendered as its own labelled row ("Overall recommendation"), never as a pseudo-criterion and never hidden behind a hover-only tooltip. The reserved key `__overall_recommendation` must not appear in the criterion matrix (ADR-218j).
 
 **Guard.** `src/test/annualReview/recommendationClassifier.test.ts` (14 cases); `src/services/annualReview/__tests__/recommendations.test.ts` (queue success and failure transparency); `src/test/annualReview/recommendationExcelExport.test.ts` (locked export columns and formatting); `src/test/annualReview/recommendationFormLink.test.ts` (source-form link contract); `src/lib/annualReview/reviewFormView.test.ts` (reserved key excluded from criteria).
+
+### §ORG-KPI-ROLLBACK-CHILD-TRUTH (ADR-227)
+
+1. **Child truth drives the rollback.** Bulk rollback of an Org KPI propagation derives its work list from the child `kpis` rows (`is_org_level = true` + KRA / KPI / review period / review year), never from `org_kpi_values.status`. Master rows can be cleared independently of the scorecards, and a rollback that reads only the master silently leaves the wrong value on every employee card.
+2. **One transaction.** The whole operation — clearing submissions, stepping cells back to KRA-set, resetting the master rows, audit and notification — runs inside `rollback_org_kpi_propagation_by_children`. Multi-step client orchestration is not permitted for this action.
+3. **Authorisation.** Admin or a data owner of that KRA + KPI. A reason of at least 3 characters is mandatory and is recorded.
+4. **Admin-forced reviewer reset.** Cells already at `manager_check` or a later non-terminal stage are reset to `kra_set` and their reviewer scores cleared. The confirmation dialog must state this before the action is taken, and the resulting count is reported back.
+5. **Frozen cells are immutable.** `approved` and `management_review` cells are never modified; they are returned as `skipped_approved` and shown to the admin (consistent with POLICY §88).
+6. **Audit.** Every run writes an `org_kpi_data_entry_logs` row with `action = 'bulk_rollback_children'`, the reason and the counters, and notifies the KPI's data owners.
+7. **Reconciliation.** `org_kpi_master_child_drift(period, year)` lists Org KPIs whose master and child states disagree; the result is surfaced as an admin-only banner on `/admin/org-kpi-data`.
+
+**Guard.** `src/test/orgKpiChildRollbackRpc.contract.test.ts`; `src/test/bulkRollbackOrgKpiPropagation.test.ts` (ADR-227 block).
