@@ -68,7 +68,15 @@ export function StageComparisonTable({ matrix }: { matrix: StageMatrix }) {
                               <span className="sr-only">{`Remark from ${stages[i].label}: ${c.comment}`}</span>
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent className="max-w-xs whitespace-pre-wrap">{c.comment}</TooltipContent>
+                          <TooltipContent
+                            side="left"
+                            align="center"
+                            collisionPadding={16}
+                            avoidCollisions
+                            className="max-w-xs whitespace-pre-wrap text-left"
+                          >
+                            {c.comment}
+                          </TooltipContent>
                         </Tooltip>
                       )}
                     </span>
@@ -89,6 +97,19 @@ export function StageComparisonTable({ matrix }: { matrix: StageMatrix }) {
               {stages.map((s) => (
                 <td key={s.role} className="p-2 text-left align-top whitespace-pre-wrap text-muted-foreground">
                   {s.notes ?? '—'}
+                </td>
+              ))}
+            </tr>
+            <tr className="border-t">
+              <td className="sticky left-0 z-10 bg-muted/30 p-2 font-medium align-top">
+                Overall recommendation
+              </td>
+              {stages.map((s) => (
+                <td
+                  key={s.role}
+                  className="min-w-[240px] p-2 text-left align-top whitespace-pre-wrap break-words text-muted-foreground"
+                >
+                  {s.recommendation ?? '—'}
                 </td>
               ))}
             </tr>

@@ -26,8 +26,18 @@ export interface StageBlock {
   submitted: boolean;
   weightedScore: number | null;
   notes: string | null;
+  /** ADR-218j — reviewer's overall recommendation narrative (reserved key). */
+  recommendation: string | null;
   criteria: CriterionAnswer[];
 }
+
+/**
+ * ADR-218j — reserved `qualitative_responses` key holding the overall
+ * recommendation prose. Mirrors `RECOMMENDATION_KEY` in
+ * `OverallRecommendationCard.tsx`; duplicated here so this pure module stays
+ * free of React imports.
+ */
+export const OVERALL_RECOMMENDATION_KEY = '__overall_recommendation';
 
 export interface ReviewFormResponseRow
   extends Pick<AnnualReviewResponse,
@@ -73,7 +83,7 @@ export function buildStageBlocks(args: {
         ...criteriaIds,
         ...Object.keys(scores),
         ...Object.keys(comments),
-      ])).filter((id) => !fieldIds.has(id));
+      ])).filter((id) => !fieldIds.has(id) && id !== OVERALL_RECOMMENDATION_KEY);
       const criteria: CriterionAnswer[] = ids.map((id) => {
         const raw = scores[id];
         const text = comments[id];
@@ -84,6 +94,7 @@ export function buildStageBlocks(args: {
           comment: typeof text === 'string' && text.trim() ? text.trim() : null,
         };
       });
+      const recRaw = comments[OVERALL_RECOMMENDATION_KEY];
       return {
         role,
         label: STAGE_LABEL[role],
@@ -92,6 +103,7 @@ export function buildStageBlocks(args: {
         submitted: !!r?.submitted_at,
         weightedScore: r?.weighted_score ?? null,
         notes: r?.notes && r.notes.trim() ? r.notes.trim() : null,
+        recommendation: typeof recRaw === 'string' && recRaw.trim() ? recRaw.trim() : null,
         criteria,
       };
     });
