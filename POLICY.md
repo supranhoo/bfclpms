@@ -5676,3 +5676,16 @@ Rules:
 7. **Reconciliation.** `org_kpi_master_child_drift(period, year)` lists Org KPIs whose master and child states disagree; the result is surfaced as an admin-only banner on `/admin/org-kpi-data`.
 
 **Guard.** `src/test/orgKpiChildRollbackRpc.contract.test.ts`; `src/test/bulkRollbackOrgKpiPropagation.test.ts` (ADR-227 block).
+
+
+## §UI-FILTER-STANDARD — Filters are multi-select, searchable and cascading (ADR-229, 2026-08-01)
+
+1. **Multi-select by default.** Every filter control in the app accepts multiple values. Single-select is only acceptable when the target is genuinely mutually exclusive (e.g. a display mode toggle).
+2. **Search.** Every filter dropdown exposes a search box, plus select-all-filtered and clear.
+3. **Cascading.** When a screen has more than one filter, all filters are interdependent: each axis lists only values that still exist under the other active selections.
+4. **Empty = All.** No selection on an axis means no restriction. Values OR within an axis and AND across axes.
+5. **Prune, never reset.** Selections invalidated by another axis change are removed individually; the remaining valid selections are kept.
+6. **Shared component.** `src/components/ui/multi-select-id.tsx` (id-valued) or `multi-select-filter.tsx` (string-valued). No per-screen dropdown forks.
+7. **Exports.** Exports from a filtered view must state the active selection per axis in the header.
+
+**Guard.** `src/test/annualReview/bellCurveFilters.test.ts`.
