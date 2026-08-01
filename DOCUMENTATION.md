@@ -7920,6 +7920,13 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Docs: `docs/adr/ADR-227.md`; Policy: POLICY.md §ORG-KPI-ROLLBACK-CHILD-TRUTH.
 - Rollback: drop both functions and revert `useRollbackOrgKpiPropagation.ts`; no schema change.
 
+### v2.66.233 (2026-08-01 — ADR-229: multi-select, searchable, cascading filter standard)
+
+- All seven Bell Curve Analysis filters (Business Unit, Department, Manager, Division / Location, PMS Grade, Scoring Source, Eligibility) are now multi-select with an in-dropdown search, select-all and clear.
+- `BellCurveFilters` is `Record<FilterAxis, string[]>`; empty array = All, OR within an axis, AND across axes. Cascading option lists (ADR-218i) unchanged; invalid selections are now pruned individually via `reconcileFilters` instead of reset to All.
+- Excel/PDF export headers list the active selection per axis (`axisSummary`).
+- POLICY §UI-FILTER-STANDARD makes this the standard for every future filter.
+
 ### v2.66.232 (2026-08-01 — ADR-228: exemption-aware Bell Curve band placement)
 - Problem: after an exemption was processed, the employee stayed in the heat map / bell curve band of their raw rating even though their effective increment slab had been penalised (or was 0% for ineligible employees).
 - Fix: new placement layer `placementRatingOf()` + `Banding.keyOfRow()` in `src/lib/annualReview/bellCurve.ts`, wired through `computeBands`, `groupBands`, `heatmapBands`, `summarize` and `employeesInBand`. Applies in both Rating bands (1–5) and Slab % modes; placement can only move down.
