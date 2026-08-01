@@ -2001,6 +2001,29 @@ export default function OrgKpiDataEntry() {
             </Card>
           )}
 
+          {isAdmin && driftRows && driftRows.length > 0 && (
+            <Card className="border-amber-500/40 bg-amber-500/5">
+              <CardContent className="p-4 space-y-1.5">
+                <p className="text-sm font-medium text-foreground">
+                  Master / scorecard reconciliation — {driftRows.length} KPI{driftRows.length === 1 ? '' : 's'} out of sync for {selectedPeriod} {selectedYear}
+                </p>
+                <ul className="text-xs text-muted-foreground space-y-1">
+                  {driftRows.slice(0, 10).map((d) => (
+                    <li key={`${d.kra_name}||${d.kpi_name}`}>
+                      <span className="font-medium text-foreground">{d.kpi_name}</span> — master propagated: {d.master_propagated}/{d.master_rows} · scorecards past KRA-set: {d.children_past_kra_set}/{d.children_total}
+                    </li>
+                  ))}
+                </ul>
+                {driftRows.length > 10 && (
+                  <p className="text-xs text-muted-foreground/70">+{driftRows.length - 10} more</p>
+                )}
+                <p className="text-xs text-muted-foreground/70">
+                  Use “Rollback All Scopes” to reset both sides together (ADR-227).
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {groupedKpis.map(([catId, group]) => {
             const catPending = group.kpis.filter(kpi => getKpiStatus(kpi) === 'pending').length;
             const catEntered = group.kpis.filter(kpi => getKpiStatus(kpi) === 'entered').length;
