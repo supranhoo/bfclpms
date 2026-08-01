@@ -164,6 +164,8 @@ export default function OrgKpiDataEntry() {
   const insertAuditLogs = useBatchInsertAuditLogs();
   const rollbackMutation = useRollbackOrgKpiPropagation();
   const bulkRollbackMutation = useBulkRollbackOrgKpiPropagation();
+  // ADR-227 — admin-only reconciliation diagnostic (master vs child truth).
+  const { data: driftRows } = useOrgKpiMasterChildDrift(selectedPeriod, selectedYear, isAdmin);
   const unmarkMutation = useUnmarkAsOrgLevel();
 
   // Per-employee target map and KPI IDs map from the hook (no separate query needed)
