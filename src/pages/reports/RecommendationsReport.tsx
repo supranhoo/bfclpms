@@ -26,7 +26,7 @@ import {
   formatRecommendationAmount,
   type RecommendationStatus,
 } from '@/services/annualReview/recommendations';
-import { canDownload } from '@/lib/reports/accessCatalog';
+import { useReportAccess } from '@/hooks/useReportAccess';
 
 const PAGE_SIZE = 50;
 const ALL = '__all__';
@@ -38,6 +38,7 @@ export default function RecommendationsReport() {
   const [typeKey, setTypeKey] = useState<string>(ALL);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const { canDownload } = useReportAccess();
 
   const filters = useMemo(
     () => ({
