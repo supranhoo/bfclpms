@@ -7892,3 +7892,11 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Tests: `src/test/annualReview/recommendationExcelExport.test.ts` (5 cases — locked columns, amount/status/type formatting, narrative whitespace collapse, legacy vs form provenance, empty set, filter-note stamping).
 - Rollback: delete the module and restore the single CSV button; additive change only.
 - Policy: POLICY.md §AR-RECOMMENDATION-TRACKING item 15.
+
+### v2.66.229 (2026-08-01 — ADR-226: View the source review form from a recommendation)
+- UI: every row in the Recommendations governance queue gains a **View form** action that opens the existing read-only `ReviewFormViewerDialog` (ADR-218e/218f) for the row's `instance_id` — Self / Dept Head / BU Head / Management ratings side by side, per-criterion remarks, the reviewer's overall recommendation narrative, system scores and the score breakdown. Works identically for legacy-imported rows.
+- Logic: presentation-only. `RecommendationsTab.tsx` adds a `viewInstanceId` state and mounts the shared dialog; data is fetched by the existing `useInstanceReviewForm` hook under existing RLS, with the dialog's own error state when access is denied.
+- Scale / data: read-only; no schema, RLS, RPC or migration change. The form loads per instance on demand (30s staleTime); the queue's 25-row paginated fetch is unchanged.
+- Tests: `src/test/annualReview/recommendationFormLink.test.ts` (3 cases — stage_form and legacy_import rows link to a form, missing `instance_id` is flagged).
+- Rollback: remove the state, the dialog mount and the icon button.
+- Policy: POLICY.md §AR-RECOMMENDATION-TRACKING item 16.
