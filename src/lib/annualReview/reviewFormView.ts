@@ -106,6 +106,60 @@ export interface SystemScoreRow {
   weight: number;
 }
 
+export interface StageMatrixCell {
+  score: number | null;
+  comment: string | null;
+}
+
+export interface StageMatrixRow {
+  id: string;
+  name: string;
+  cells: StageMatrixCell[];
+}
+
+export interface StageMatrix {
+  stages: StageBlock[];
+  rows: StageMatrixRow[];
+}
+
+/**
+ * ADR-218f — pivot the stage blocks into a single side-by-side matrix:
+ * one column per reviewer stage, one row per criterion.
+ */
+export function buildStageMatrix(args: {
+  template: Pick<AnnualReviewTemplate, 'sections'> | null | undefined;
+  responses: ReviewFormResponseRow[];
+  enabledStages?: AnnualReviewerRole[] | null;
+}): StageMatrix {
+  const stages = buildStageBlocks(args);
+  const names = criterionNameMap(args.template);
+  const order: string[] = (args.template?.sections?.criteria ?? []).map((c) => c.id);
+  const seen = new Set(order);
+  for (const s of stages) {
+    for (const c of s.criteria) {
+      if (!seen.has(c.id)) { seen.add(c.id); order.push(c.id); }
+    }
+  }
+  const rows: StageMatrixRow[] = order.map((id) => ({
+    id,
+    name: names[id] ?? id,
+    cells: stages.map((s) => {
+      const c = s.criteria.find((x) => x.id === id);
+      return { score: c?.score ?? null, comment: c?.comment ?? null };
+    }),
+  }));
+  return { stages, rows };
+}
+
+interface _SystemScoreRowLegacy {
+  id: string;
+  name: string;
+  source?: string;
+  raw: number | null;
+  points: number | null;
+  weight: number;
+}
+
 /** System slots with their raw keyed-in value and resolved points. */
 export function buildSystemScoreRows(
   template: Pick<AnnualReviewTemplate, 'sections'> | null | undefined,
