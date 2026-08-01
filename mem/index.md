@@ -173,3 +173,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Annual Review Eligibility Exemptions](mem://features/annual-review/eligibility-exemptions) — ADR-221 effective eligibility, exemptable-question master policy, exemption approval workflow
 - [Exemption Criteria Admin Configuration](mem://features/annual-review/exemption-policy-admin) — ADR-223 admin-managed exemptable criteria, protected rows, policy audit trail
 - [Filter UI Standard](mem://design/filter-standard) — Multi-select + search + cascading filters required everywhere (ADR-229)
+- [Annual Review Report Effective Outcome](mem://features/reports/annual-review-effective-outcome) — ADR-230: calibrated rating + post-exemption slab % on every report surface; reportRating.ts SSOT
