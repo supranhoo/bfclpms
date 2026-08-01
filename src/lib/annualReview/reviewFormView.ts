@@ -151,15 +151,6 @@ export function buildStageMatrix(args: {
   return { stages, rows };
 }
 
-interface _SystemScoreRowLegacy {
-  id: string;
-  name: string;
-  source?: string;
-  raw: number | null;
-  points: number | null;
-  weight: number;
-}
-
 /** System slots with their raw keyed-in value and resolved points. */
 export function buildSystemScoreRows(
   template: Pick<AnnualReviewTemplate, 'sections'> | null | undefined,
