@@ -5608,6 +5608,8 @@ Rules:
 
 13. **Single calibration surface (ADR-218h, 2026-08-01).** Rating calibration happens in exactly one place: the Bell Curve heat map drill-down "Calibrate" action, backed by the ADR-220 admin-gated RPCs (`admin_calibrate_final_rating` / `admin_bulk_calibrate_final_rating` / clear), which require a reason and write an audit row. The legacy Annual Review Admin **Calibration** tab and its free-text `final_rating` override are removed; `useOverrideRating` is deprecated and must not be re-mounted in the UI.
 
+14. **Two configuration surfaces (ADR-222a, 2026-08-01).** Bell curve configuration is split into two admin/HR-only dialogs opened from the Bell Curve header: **Configure targets** (band targets, total-100% validation, green/amber thresholds) and **Exemption penalty** (enable switch, penalty type, type-specific fields, floor %, per-slab effect preview). Both persist to the same `annual_review_bell_curve_config` row and must always save a **full** config copy seeded from the current record, so neither surface can blank the other's fields. Cycle-scope (organisation default vs cycle override) is offered identically in both.
+
 **Guard.** `src/test/annualReview/bellCurve.test.ts` (24 cases), `src/test/annualReview/bellCurveDrilldown.test.ts` (6 cases).
 
 ---
