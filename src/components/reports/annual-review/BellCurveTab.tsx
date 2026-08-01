@@ -209,9 +209,24 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
     });
   }, [filtered, selectedIds, view]);
 
+  /** ADR-222/224 penalty settings — also drive ADR-228 band placement. */
+  const capOptions = useMemo(() => (config ? {
+    slabs: slabs.length > 0 ? slabs : undefined,
+    capEnabled: config.exempted_slab_cap_enabled !== false,
+    topTiersExcluded: config.exempted_top_tiers_excluded ?? 0,
+    penalty: {
+      mode: config.exempted_penalty_mode ?? 'top_tiers_excluded',
+      stepDownSlabs: config.exempted_step_down_slabs ?? 1,
+      topTiersExcluded: config.exempted_top_tiers_excluded ?? 0,
+      scope: config.exempted_penalty_scope ?? 'all_slabs',
+      topSlabs: config.exempted_penalty_top_slabs ?? 2,
+      floorPercent: config.exempted_penalty_floor_percent ?? 0,
+    },
+  } : null), [config, slabs]);
+
   const banding = useMemo(
-    () => (config ? makeBanding(bandMode, config, slabs) : null),
-    [config, bandMode, slabs],
+    () => (config && capOptions ? makeBanding(bandMode, config, slabs, capOptions) : null),
+    [config, bandMode, slabs, capOptions],
   );
   const bands = useMemo(() => (config && banding ? computeBands(scoped, banding, config) : []), [scoped, banding, config]);
   const summary = useMemo(() => (config && banding ? summarize(scoped, banding, config) : null), [scoped, banding, config]);
@@ -225,24 +240,11 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
   if (!cycleId) {
     return <Card><CardContent className="p-8 text-center text-muted-foreground">Pick a cycle to view the bell curve.</CardContent></Card>;
   }
-  if (isLoading || !config || !summary || !banding) {
+  if (isLoading || !config || !summary || !banding || !capOptions) {
     return <Card><CardContent className="p-8 flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading distribution…</CardContent></Card>;
   }
 
   const hasTargets = banding.hasTargets;
-  const capOptions = {
-    slabs: slabs.length > 0 ? slabs : undefined,
-    capEnabled: config.exempted_slab_cap_enabled !== false,
-    topTiersExcluded: config.exempted_top_tiers_excluded ?? 0,
-    penalty: {
-      mode: config.exempted_penalty_mode ?? 'top_tiers_excluded',
-      stepDownSlabs: config.exempted_step_down_slabs ?? 1,
-      topTiersExcluded: config.exempted_top_tiers_excluded ?? 0,
-      scope: config.exempted_penalty_scope ?? 'all_slabs',
-      topSlabs: config.exempted_penalty_top_slabs ?? 2,
-      floorPercent: config.exempted_penalty_floor_percent ?? 0,
-    },
-  };
   const capNote = capOptions.capEnabled && (capOptions.topTiersExcluded ?? 0) > 0
     ? ` · Exempted: top ${capOptions.topTiersExcluded} tier(s) excluded`
     : '';
@@ -410,6 +412,12 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
           return (
             <BandEmployeeList
               employees={employeesInBand(filtered, view, rowId, banding, bandKey)}
+              originalBandLabelOf={(e) => {
+                const originalKey = banding.keyOf(e.rating);
+                if (originalKey === null || originalKey === bandKey) return null;
+                const original = banding.defs.find((d) => d.key === originalKey);
+                return original ? `${original.label} ${original.sub}` : null;
+              }}
               groupName={group.name}
               bandLabel={def.label}
               bandSub={def.sub}

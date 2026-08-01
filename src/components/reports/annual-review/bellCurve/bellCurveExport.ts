@@ -26,11 +26,20 @@ function safeName(s: string) {
   return s.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
-function bandLabelOf(rating: number | null, banding: Banding): string {
-  if (rating === null) return 'Unrated';
-  const key = banding.keyOf(rating);
+function labelForKey(key: string | null, banding: Banding): string {
   const def = banding.defs.find((d) => d.key === key);
   return def ? `${def.label} ${def.sub}` : 'Unrated';
+}
+
+function bandLabelOf(rating: number | null, banding: Banding): string {
+  if (rating === null) return 'Unrated';
+  return labelForKey(banding.keyOf(rating), banding);
+}
+
+/** ADR-228 — where the row is actually counted after the exemption penalty. */
+function effectiveBandLabelOf(row: BellCurveInput, rating: number | null, banding: Banding): string {
+  if (rating === null) return 'Unrated';
+  return labelForKey(banding.keyOfRow(row, rating), banding);
 }
 
 function employeeRows(rows: BellCurveInput[], banding: Banding, cap?: SlabCapOptions) {
@@ -50,7 +59,8 @@ function employeeRows(rows: BellCurveInput[], banding: Banding, cap?: SlabCapOpt
         'Manager': r.manager_name ?? '',
         'Final Score': r.total_score ?? '',
         'Rating (/5)': rating ?? '',
-        [banding.mode === 'slab' ? 'Slab Band' : 'Rating Band']: bandLabelOf(rating, banding),
+        [banding.mode === 'slab' ? 'Slab Band (actual)' : 'Rating Band (actual)']: bandLabelOf(rating, banding),
+        [banding.mode === 'slab' ? 'Slab Band (effective)' : 'Rating Band (effective)']: effectiveBandLabelOf(r, rating, banding),
         'Slab %': formatSlabPercent(effectiveSlabPercent(raw, status, cap)),
         'Exemption Cap Applied': isSlabCapped(raw, status, cap) ? 'Yes' : '',
         'Scoring Source': SCORING_SOURCE_LABELS[scoringSourceOf(r)],
