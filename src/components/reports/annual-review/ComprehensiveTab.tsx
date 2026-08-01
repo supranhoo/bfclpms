@@ -274,7 +274,7 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
               { label: 'Division', value: r.division_name ?? '—' },
               { label: 'Grade', value: r.grade ?? '—' },
               { label: 'Date of Joining', value: r.doj ?? '—' },
-              { label: 'Eligibility', value: eligibilityLabel(r) },
+              { label: 'Eligibility', value: reportEligibilityLabel(r, ratingOf(r).eligibilityStatus) },
             ];
 
             const stageRow = (label: string, name: string | null, score: number | null, comment: string | null): Cell[] => [
@@ -309,11 +309,38 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
 
             const systemScoredBanner = isSystemScoredOnly(r);
 
+            const rr = ratingOf(r);
             const outcome: Cell[] = [
               { label: 'Final Score', value: fmt(r.total_score) },
-              { label: 'Final Rating', value: r.final_rating ?? '—' },
-              { label: 'Final Rating (/5)', value: formatRating5(toRatingOutOf5(r.total_score)) },
-              { label: 'Slab %', value: formatSlabPercent(resolveSlabPercent(toRatingOutOf5(r.total_score), slabs)) },
+              { label: 'Final Rating', value: effectiveBandLabel(r) ?? '—' },
+              {
+                label: 'Final Rating (/5)',
+                value: (
+                  <span className="inline-flex items-center gap-2">
+                    {formatRating5(rr.effectiveRating)}
+                    {rr.isCalibrated && <Badge variant="secondary">Calibrated</Badge>}
+                  </span>
+                ),
+              },
+              ...(rr.isCalibrated
+                ? [
+                    { label: 'Computed Rating (/5)', value: formatRating5(rr.computedRating) },
+                    { label: 'Calibration Reason', value: rr.calibrationReason || '—', wide: true },
+                  ]
+                : []),
+              {
+                label: 'Slab %',
+                value: (
+                  <span className="inline-flex items-center gap-2">
+                    {formatSlabPercent(rr.slabPercent)}
+                    {rr.capApplied && <Badge variant="outline">Capped</Badge>}
+                  </span>
+                ),
+              },
+              ...(rr.capApplied
+                ? [{ label: 'Slab % before exemption penalty', value: formatSlabPercent(rr.rawSlabPercent) },
+                   { label: 'Exemption rule', value: penaltyNote, wide: true }]
+                : []),
               { label: 'Current Stage', value: pendingWith(r.overall_status) },
               { label: 'Pending With', value: pending },
               { label: 'Completion Status', value: completionStatus(r.overall_status) },
