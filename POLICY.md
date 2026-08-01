@@ -5630,3 +5630,16 @@ Rules:
 **Guard.** `src/test/annualReview/effectiveEligibility.test.ts` (17 cases), `src/test/annualReview/exemptionPolicy.test.ts` (5 cases), `src/test/annualReview/bulkExemption.test.ts` (8 cases).
 
 ---
+
+## §AR-RECOMMENDATION-TRACKING (ADR-226)
+
+1. **Structured capture.** A Dept Head, BU Head or Management reviewer may record a structured recommendation alongside their narrative: one or more recommendation types, an amount (percentage or absolute) where the type requires it, a proposed designation and/or grade where the type requires a target, and a suggested effective date. The narrative remains the source of truth for wording and is never overwritten by the structured record.
+2. **Master data only.** Recommendation types live in `annual_review_recommendation_types` and are editable by Admin / HR PMS. No recommendation type, monetary flag or requirement is hardcoded in the UI.
+3. **Stage ownership.** Only the reviewer named on that stage of the review may create or edit that stage's recommendation, and only while the review is not completed. HR PMS, Management and Admin may edit at any time. Enforcement is server-side in `ar_save_recommendation`; the client never writes the table directly.
+4. **Decision authority.** Approve / approve-with-modification / reject / defer / mark-implemented is restricted to Admin, HR PMS and Management. A reason is mandatory for every decision, including bulk decisions.
+5. **Immutable audit.** Every save and every decision writes an `annual_review_access_audit` row with the actor, the target employee, the before/after payload and the reason.
+6. **Visibility.** The employee, every named reviewer on their instance, HR PMS, Management and Admin can read the recommendation. Nobody else can.
+7. **Pagination.** The recommendations queue is paginated server-side (25 rows per page) via `ar_recommendation_queue`; the full set is never loaded into the browser.
+8. **Increment linkage (Phase 2).** An approved monetary recommendation is a *proposal* into the increment run — it never changes a final score, rating or slab by itself.
+
+**Guard.** `src/services/annualReview/__tests__/recommendations.test.ts`.

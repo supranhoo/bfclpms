@@ -7858,3 +7858,11 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - `src/components/annual-review/CycleBulkDataUploadDialog.tsx`: commit failures raise a destructive 20s toast listing the first per-employee errors, log the full list, and keep the dry-run preview open.
 - Tests: `src/test/annualReview/cycleBulkCorrectionRouting.test.ts` (3 cases — downward routing + text-compatible `p_final_rating`, upward routing to the monotonic RPC, RPC exception reported as `failed` with error text).
 - Docs: `docs/adr/ADR-225a.md`; Policy: POLICY.md §AR-SYSTEM-SCORE-ADMIN-CORRECTION items 6–7.
+
+### v2.66.225 (2026-08-01 — ADR-226 Phase 1: structured recommendation tracking)
+- Schema: `annual_review_recommendation_types` (master data, 7 seeded types), `annual_review_recommendations` (one row per instance+reviewer stage: types, amount kind/value, proposed designation & grade, effective date, narrative, source, decision fields), `annual_review_recommendation_items`. GRANTs + RLS on all three; visibility via `ar_can_view_recommendation()` and `ar_can_decide_recommendation()` (SECURITY DEFINER).
+- RPCs: `ar_save_recommendation` (stage-owner or decider only, blocked on completed reviews), `ar_decide_recommendation`, `ar_bulk_decide_recommendations` (Admin/HR/Management, reason mandatory), `ar_recommendation_queue` (server-side paginated + filtered read). All writes audited in `annual_review_access_audit` (`recommendation.saved|decided|bulk_decided`, whitelist extended).
+- UI: `src/components/annual-review/recommendations/StructuredRecommendationFields.tsx` mounted inside `OverallRecommendationCard` (passed `instanceId` from `TeamReviewDetailContent`); new **Recommendations** tab in Annual Review Admin via `src/components/annual-review/recommendations/RecommendationsTab.tsx` (25/page server-side pagination, status/type/monetary/search filters, per-row + bulk decision dialogs, CSV export).
+- Service/hooks: `src/services/annualReview/recommendations.ts`, `src/hooks/useAnnualReviewRecommendations.ts`.
+- Tests: `src/services/annualReview/__tests__/recommendations.test.ts` (4 cases — percent/absolute formatting, unset edge cases, status label coverage).
+- Docs: `docs/adr/ADR-226.md`; Policy: POLICY.md §AR-RECOMMENDATION-TRACKING.
