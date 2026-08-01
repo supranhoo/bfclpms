@@ -17,6 +17,12 @@ import {
 import {
   toRatingOutOf5, resolveSlabPercent, DEFAULT_RATING_SLABS, type RatingSlab,
 } from '@/lib/annualReview/ratingSlab';
+// ADR-230 — calibration + eligibility/exemption aware outcome columns.
+import {
+  reportEligibilityLabel, resolveReportRating,
+  type ReportRatingContext,
+} from '@/lib/annualReview/reportRating';
+import { resolveFinalRating } from '@/lib/annualReview/finalScoreScale';
 
 export interface ExportInput {
   cycleName: string;
@@ -32,6 +38,13 @@ export interface ExportInput {
   byStage: GroupSummary[];
   /** ADR-212 — admin-configured rating slab bands (falls back to defaults). */
   ratingSlabs?: ReadonlyArray<RatingSlab>;
+  /**
+   * ADR-230 — calibrations, exemptions and the penalty rule. Omitted ⇒ the
+   * workbook reproduces the pre-ADR-230 raw values byte-for-byte.
+   */
+  ratingContext?: ReportRatingContext;
+  /** Human-readable description of the penalty rule in force. */
+  penaltyNote?: string;
 }
 
 /** ADR-188 — one shared KRA context for both the Employees column and the sheet. */
@@ -48,6 +61,7 @@ function toEmployeeSheet(
   eligColumns: EligibilityColumn[],
   kra: KraContext,
   slabs: ReadonlyArray<RatingSlab>,
+  ratingContext: ReportRatingContext | undefined,
 ) {
   // ADR-181 — stable column set: every question, blank when not on the template.
   const blankElig: Record<string, string> = {};
@@ -55,6 +69,8 @@ function toEmployeeSheet(
   return rows.map((r) => {
     const diag = diagnoseHr(r);
     const elig = buildEligibilityRow(r.template_id, r.eligibility_inputs, eligMaps);
+    // ADR-230 — effective rating (calibration) + effective slab % (exemption).
+    const rr = resolveReportRating(r, { slabs, ...(ratingContext ?? {}) });
     const hodScore = r.dept_head_score ?? r.manager_score ?? null;
     const hodComment = r.dept_head_comment ?? r.manager_comment ?? '';
     // ADR-155 — dept=BU collapse: blank the HOD columns to avoid a
@@ -71,6 +87,8 @@ function toEmployeeSheet(
     'Grade': r.grade ?? '',
     'Date of Joining': r.doj ?? '',
     'Eligibility': eligibilityLabel(r),
+    // ADR-230 — resolved eligibility incl. approved exemptions.
+    'Eligibility Status': reportEligibilityLabel(r, rr.eligibilityStatus),
     // ADR-181 — eligibility questions: value, expected condition and verdict.
     'Eligibility Result': elig.summary,
     ...blankElig,
@@ -101,8 +119,14 @@ function toEmployeeSheet(
     'Final Score': r.total_score ?? '',
     'Rating': r.final_rating ?? '',
     // ADR-212 — 5-point rating + configured increment slab.
-    'Final Rating (out of 5)': toRatingOutOf5(r.total_score) ?? '',
-    'Slab %': resolveSlabPercent(toRatingOutOf5(r.total_score), slabs) ?? '',
+    // ADR-230 — these are the EFFECTIVE values (calibration + exemption).
+    'Final Rating (out of 5)': rr.effectiveRating ?? '',
+    'Computed Rating (/5)': rr.computedRating ?? '',
+    'Calibrated Rating': rr.calibratedRating ?? '',
+    'Calibration Reason': rr.calibrationReason ?? '',
+    'Slab %': rr.slabPercent ?? '',
+    'Raw Slab %': rr.rawSlabPercent ?? '',
+    'Exemption Cap Applied': rr.capApplied ? 'Yes' : '',
     // ADR-174 — how the rating was derived + the raw scoring parameters.
     'Rating Derived From': r.scoring_mode ?? '',
     // ADR-179 — whether the /5 stage ratings came from criteria or KRA.
