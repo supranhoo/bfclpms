@@ -7,6 +7,7 @@ import {
   useInstanceStageScores, useInstanceStageCells, useRollbackFinalizedInstance,
 } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
+import { RecommendationsTab } from '@/components/annual-review/recommendations/RecommendationsTab';
 import { remapStageValueMapByDuplicates } from '@/lib/annualReview/displayStageForResponse';
 import { rollbackTerminalLabel } from '@/lib/annualReview/rollbackTerminalStage';
 import { canEditWorkflowAndReviewers } from '@/lib/annualReview/workflowEditVisibility';
