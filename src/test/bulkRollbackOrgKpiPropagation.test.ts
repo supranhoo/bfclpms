@@ -125,3 +125,69 @@ describe('Bulk Rollback gate — OKV-truth (ADR-091)', () => {
     expect(hasBulkRollbackTarget(null)).toBe(false);
   });
 });
+// =============================================================================
+// ADR-227 — child-truth rollback
+// =============================================================================
+
+import { deriveScopedRowStatus } from '@/lib/orgKpiStatus';
+
+/** Mirrors the child-truth work list of rollback_org_kpi_propagation_by_children. */
+type ChildKpi = { id: string; status: string };
+const FROZEN = new Set(['approved', 'management_review']);
+function planChildRollback(children: ChildKpi[]) {
+  const targets = children.filter(k => !FROZEN.has(k.status));
+  return {
+    targets,
+    managerStageCleared: targets.filter(k => k.status !== 'kra_set' && k.status !== 'self_review').length,
+    skippedApproved: children.length - targets.length,
+  };
+}
+
+describe('ADR-227 — child-truth bulk rollback plan', () => {
+  it('acts even when every master row is draft (July 2026 case)', () => {
+    const masterRows = [{ status: 'draft' }, { status: 'draft' }];
+    expect(selectRollbackTargets(
+      masterRows.map((r, i) => ({ id: String(i), achieved_value: null, category_id: 'c', ...r })),
+    )).toHaveLength(0);
+
+    const plan = planChildRollback([
+      { id: 'a', status: 'self_review' },
+      { id: 'b', status: 'manager_check' },
+    ]);
+    expect(plan.targets).toHaveLength(2);
+  });
+
+  it('force-resets manager_check cells and counts them', () => {
+    const plan = planChildRollback([
+      { id: 'a', status: 'self_review' },
+      { id: 'b', status: 'manager_check' },
+      { id: 'c', status: 'manager_check' },
+      { id: 'd', status: 'kra_set' },
+    ]);
+    expect(plan.targets.map(t => t.id)).toEqual(['a', 'b', 'c', 'd']);
+    expect(plan.managerStageCleared).toBe(2);
+  });
+
+  it('never touches approved or management_review cells', () => {
+    const plan = planChildRollback([
+      { id: 'a', status: 'approved' },
+      { id: 'b', status: 'management_review' },
+      { id: 'c', status: 'self_review' },
+    ]);
+    expect(plan.targets.map(t => t.id)).toEqual(['c']);
+    expect(plan.skippedApproved).toBe(2);
+  });
+
+  it('button gate stays aligned with the child-truth action', () => {
+    // Master row draft + child past kra_set → derived row status "propagated".
+    const rowStatus = deriveScopedRowStatus({
+      okvStatus: 'draft',
+      okvHasValue: false,
+      isInPropagatedSet: false,
+      hasSubmissionFallback: false,
+      isPastKraSet: true,
+    });
+    expect(rowStatus).toBe('propagated');
+    expect(hasBulkRollbackTarget([{ status: rowStatus }])).toBe(true);
+  });
+});

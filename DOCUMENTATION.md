@@ -7909,3 +7909,13 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Tests: `src/lib/annualReview/reviewFormView.test.ts` (4 cases).
 - Docs: `docs/adr/ADR-218j.md`; Policy: POLICY.md §AR-RECOMMENDATION-TRACKING item 17.
 - Rollback: revert `reviewFormView.ts` and `StageComparisonTable.tsx`.
+
+### v2.66.231 (2026-08-01 — ADR-227: child-truth Org KPI bulk rollback)
+- Bug: "Rollback All Scopes" failed with "No propagated scopes to bulk-roll-back for this period" for the July 2026 Training-Hours Org KPIs, leaving an erroneous upload on 85 employee scorecards.
+- RCA: the master `org_kpi_values` rows had already been reset to `draft` while the child scorecards were still populated (17+9 and 47+10+2). The hook derived its work list from `org_kpi_values.status IN ('propagated','approved')` and aborted before touching any scorecard; the card badge read "Propagated" because it is inferred from the children (ADR-055).
+- Fix: new SECURITY DEFINER RPC `rollback_org_kpi_propagation_by_children` (admin or data owner, reason required) builds the work list from `kpis`, clears all reviewer stages on `review_submissions`, steps cells back to `kra_set` including admin-forced `manager_check` resets, skips `approved` / `management_review`, resets the master rows, audits (`bulk_rollback_children`) and notifies data owners — all in one transaction. `useBulkRollbackOrgKpiPropagation` now calls it and reports the counters; the confirm dialog states the reviewer-score consequence.
+- Added: `org_kpi_master_child_drift(period, year)` + `useOrgKpiMasterChildDrift` and an admin-only reconciliation banner on `/admin/org-kpi-data`.
+- Scale / data: bounded to one KRA + KPI + period; single round trip instead of 5+ client writes. Frozen scores untouched.
+- Tests: `src/test/orgKpiChildRollbackRpc.contract.test.ts` (5); `src/test/bulkRollbackOrgKpiPropagation.test.ts` ADR-227 block (4).
+- Docs: `docs/adr/ADR-227.md`; Policy: POLICY.md §ORG-KPI-ROLLBACK-CHILD-TRUTH.
+- Rollback: drop both functions and revert `useRollbackOrgKpiPropagation.ts`; no schema change.

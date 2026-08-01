@@ -198,18 +198,20 @@ export function deriveScopedRowStatus(input: DeriveScopedRowStatusInput): Scoped
 }
 
 // =============================================================================
-// Bulk Rollback gate (ADR-091)
+// Bulk Rollback gate (ADR-091, extended by ADR-227)
 // =============================================================================
 
 /**
- * The "Rollback All Scopes" button must only show when there is at least one
- * `org_kpi_values` row in `propagated` or `approved` status for the current
- * period — that's the only state `useBulkRollbackOrgKpiPropagation` can act on.
+ * The "Rollback All Scopes" button shows when at least one scoped row is
+ * effectively propagated. `scopedRows[].status` is the *derived* row status
+ * (`deriveScopedRowStatus`), which already folds in child truth
+ * (`isPastKraSet`) as well as the OKV snapshot status.
  *
- * The card-level `data.status` uses ADR-055 fact-based inference (child
- * scorecards advanced past `kra_set` → "propagated" even when no OKV snapshot
- * exists), which is intentionally more permissive than what bulk rollback can
- * target. Gating the button on card status produces a guaranteed-fail UX.
+ * ADR-227: the bulk rollback action itself is now child-truth driven
+ * (`rollback_org_kpi_propagation_by_children`), so it can act on every state
+ * this predicate accepts — including master rows already reset to `draft`
+ * while the child scorecards still carry the wrong value. Button and action
+ * therefore share one notion of "there is something to roll back".
  */
 export function hasBulkRollbackTarget(
   scopedRows: ReadonlyArray<{ status?: string | null }> | undefined | null,

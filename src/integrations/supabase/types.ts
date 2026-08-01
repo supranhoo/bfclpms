@@ -17791,6 +17791,17 @@ export type Database = {
           kpi_status: string
         }[]
       }
+      org_kpi_master_child_drift: {
+        Args: { p_review_period: string; p_review_year: number }
+        Returns: {
+          children_past_kra_set: number
+          children_total: number
+          kpi_name: string
+          kra_name: string
+          master_propagated: number
+          master_rows: number
+        }[]
+      }
       override_annual_review_rating: {
         Args: { p_instance_id: string; p_new_rating: string; p_reason: string }
         Returns: undefined
@@ -18296,6 +18307,16 @@ export type Database = {
       rollback_annual_review_completed: {
         Args: { p_instance_id: string; p_reason: string }
         Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
+      rollback_org_kpi_propagation_by_children: {
+        Args: {
+          p_kpi_name: string
+          p_kra_name: string
+          p_reason: string
+          p_review_period: string
+          p_review_year: number
+        }
+        Returns: Json
       }
       rpc_bulk_employee_attrs: {
         Args: { p_employee_ids: string[] }

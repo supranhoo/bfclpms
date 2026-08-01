@@ -14,6 +14,7 @@ import { PropagationPreviewDialog } from '@/components/admin/PropagationPreviewD
 
 import { useBatchInsertAuditLogs } from '@/hooks/useOrgKpiAuditLog';
 import { useRollbackOrgKpiPropagation, useBulkRollbackOrgKpiPropagation } from '@/hooks/useRollbackOrgKpiPropagation';
+import { useOrgKpiMasterChildDrift } from '@/hooks/useOrgKpiMasterChildDrift';
 import { OrgLevelScope } from '@/hooks/useKpis';
 import { supabase } from '@/integrations/supabase/client';
 // useQueryClient imported above with useQuery
@@ -163,6 +164,8 @@ export default function OrgKpiDataEntry() {
   const insertAuditLogs = useBatchInsertAuditLogs();
   const rollbackMutation = useRollbackOrgKpiPropagation();
   const bulkRollbackMutation = useBulkRollbackOrgKpiPropagation();
+  // ADR-227 — admin-only reconciliation diagnostic (master vs child truth).
+  const { data: driftRows } = useOrgKpiMasterChildDrift(selectedPeriod, selectedYear, isAdmin);
   const unmarkMutation = useUnmarkAsOrgLevel();
 
   // Per-employee target map and KPI IDs map from the hook (no separate query needed)
@@ -1997,6 +2000,29 @@ export default function OrgKpiDataEntry() {
                     Diagnostics — backend: {orgLevelData?.totalOrgKpis ?? 0} · ownership: {ownershipFilteredKpis.length} · frequency: {frequencyFilteredKpis.length} · grouped: {groupedKpis.length}
                   </p>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {isAdmin && driftRows && driftRows.length > 0 && (
+            <Card className="border-amber-500/40 bg-amber-500/5">
+              <CardContent className="p-4 space-y-1.5">
+                <p className="text-sm font-medium text-foreground">
+                  Master / scorecard reconciliation — {driftRows.length} KPI{driftRows.length === 1 ? '' : 's'} out of sync for {selectedPeriod} {selectedYear}
+                </p>
+                <ul className="text-xs text-muted-foreground space-y-1">
+                  {driftRows.slice(0, 10).map((d) => (
+                    <li key={`${d.kra_name}||${d.kpi_name}`}>
+                      <span className="font-medium text-foreground">{d.kpi_name}</span> — master propagated: {d.master_propagated}/{d.master_rows} · scorecards past KRA-set: {d.children_past_kra_set}/{d.children_total}
+                    </li>
+                  ))}
+                </ul>
+                {driftRows.length > 10 && (
+                  <p className="text-xs text-muted-foreground/70">+{driftRows.length - 10} more</p>
+                )}
+                <p className="text-xs text-muted-foreground/70">
+                  Use “Rollback All Scopes” to reset both sides together (ADR-227).
+                </p>
               </CardContent>
             </Card>
           )}
