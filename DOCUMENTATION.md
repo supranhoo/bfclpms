@@ -7876,3 +7876,11 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Report: **RPT-REC-001 — Recommendation & Cost Roll-up** at `/reports/recommendations` (`src/pages/reports/RecommendationsReport.tsx`), server-paginated at 50/page via the same queue RPC; registered in `catalog.ts`, `accessCatalog.ts` (Admin / HR PMS / Management view; Admin / HR PMS download), `ReportsHub.tsx` and `App.tsx`.
 - Tests: `src/test/annualReview/recommendationClassifier.test.ts` (14 cases — rupee/lakh/percent parsing, confident vs weak classification, multi-type detection, malformed-pattern resilience).
 - Docs: `docs/adr/ADR-226.md` (Phase 2 section); Policy: POLICY.md §AR-RECOMMENDATION-TRACKING items 9–13.
+
+### v2.66.227 (2026-08-01 — ADR-226 queue schema-drift repair)
+- RCA / 5 Why: 1,375 legacy rows were imported correctly, but `ar_recommendation_queue` still joined `profiles.designation_id`; that retired column no longer exists because profiles store the display value in `profiles.designation`. Every queue call therefore raised before returning rows. The Recommendations table did not render React Query's error state and incorrectly appeared as a legitimate empty result.
+- Database: recreated `ar_recommendation_queue` using `profiles.designation`, preserving role authorization, filters and server-side pagination; revoked public/anonymous execution and retained authenticated/service-role execution only. No recommendation data was changed. Backup coverage remains automatic through `get_backup_table_order()`; no table was added or excluded.
+- UI: `RecommendationsTab.tsx` now distinguishes query failure from a zero-row result and displays the backend message plus Retry.
+- Tests / mock data: `src/services/annualReview/__tests__/recommendations.test.ts` includes a realistic legacy queue row and guards both the 1,077-row paginated total and RPC schema-error propagation.
+- Rollback: restore the prior function migration and UI state; this correction is non-destructive and does not alter historical records.
+- Policy: POLICY.md §AR-RECOMMENDATION-TRACKING item 14.

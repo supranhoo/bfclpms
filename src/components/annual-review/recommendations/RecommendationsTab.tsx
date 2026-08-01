@@ -86,7 +86,7 @@ export function RecommendationsTab() {
     [cycle?.id, status, typeKey, monetaryOnly, search, source, page],
   );
 
-  const { data, isLoading, isFetching } = useRecommendationQueue(filters, !!cycle?.id);
+  const { data, isLoading, isFetching, isError, error, refetch } = useRecommendationQueue(filters, !!cycle?.id);
   const rows = data?.rows ?? [];
   const total = data?.total ?? 0;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -232,7 +232,18 @@ export function RecommendationsTab() {
                     <Loader2 className="h-4 w-4 animate-spin inline" />
                   </TableCell></TableRow>
                 )}
-                {!isLoading && rows.length === 0 && (
+                {!isLoading && isError && (
+                  <TableRow><TableCell colSpan={10} className="text-center py-8">
+                    <div className="space-y-3">
+                      <p className="font-medium text-destructive">Recommendations could not be loaded.</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(error as Error)?.message ?? 'The recommendation queue request failed.'}
+                      </p>
+                      <Button size="sm" variant="outline" onClick={() => refetch()}>Retry</Button>
+                    </div>
+                  </TableCell></TableRow>
+                )}
+                {!isLoading && !isError && rows.length === 0 && (
                   <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                     No recommendations match these filters.
                   </TableCell></TableRow>

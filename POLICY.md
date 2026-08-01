@@ -5653,5 +5653,6 @@ Rules:
 11. **Confidence gating.** An imported recommendation whose combined keyword weight is below 3 is stored with status `needs_classification` and is excluded from bulk decisions until a human confirms its type via `ar_reclassify_recommendation`. Machine classification never approves, rejects or prices anything.
 12. **Provenance is permanent.** Every recommendation carries `source = stage_form | legacy_import`, is filterable by source in the governance queue and the report, and is labelled "Legacy" in the UI so a reader can always tell a parsed record from a captured one.
 13. **Cost reporting.** RPT-REC-001 (`/reports/recommendations`, Admin / HR PMS / Management) reads the same `ar_recommendation_queue` RPC as the governance tab — there is no second query path — and rolls up asked vs approved amounts. Percentage asks are counted separately and are never summed into a rupee figure.
+14. **Queue failure transparency.** A failed `ar_recommendation_queue` request must be rendered as an actionable error with retry; the UI must never translate a backend, authorization or schema error into a valid zero-row state. Employee designation is sourced from the current `profiles.designation` field, not a retired designation foreign key.
 
-**Guard.** `src/test/annualReview/recommendationClassifier.test.ts` (14 cases).
+**Guard.** `src/test/annualReview/recommendationClassifier.test.ts` (14 cases); `src/services/annualReview/__tests__/recommendations.test.ts` (queue success and failure transparency).
