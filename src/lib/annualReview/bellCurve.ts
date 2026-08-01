@@ -10,10 +10,15 @@ import {
   DEFAULT_RATING_SLABS,
   describeSlab,
   resolveSlab,
+  resolveSlabPercent,
   type RatingSlab,
 } from './ratingSlab';
 import { effectiveRating } from './effectiveRating';
-import type { EligibilityStatus } from './effectiveEligibility';
+import {
+  effectiveSlabPercent,
+  type EligibilityStatus,
+  type SlabCapOptions,
+} from './effectiveEligibility';
 
 export type RatingBand = 1 | 2 | 3 | 4 | 5;
 export type ComplianceLevel = 'green' | 'amber' | 'red';
@@ -289,33 +294,98 @@ export interface Banding {
   defs: BandDef[];
   /** Bucket key for a /5 rating, or null when it falls outside every band. */
   keyOf: (rating: number) => string | null;
+  /**
+   * ADR-228 — placement-aware bucket key for a row. Identical to `keyOf` unless
+   * an eligibility penalty moved the employee to a lower increment slab.
+   */
+  keyOfRow: (row: BellCurveInput, rating: number) => string | null;
+  /** True when placement can differ from the raw rating band. */
+  placementAware: boolean;
   hasTargets: boolean;
+}
+
+/* ------------------------------------------------------------------ *
+ * ADR-228 — exemption-aware band placement.
+ * ------------------------------------------------------------------ */
+
+function activeSorted(slabs: ReadonlyArray<RatingSlab>): RatingSlab[] {
+  return activeSlabs(slabs);
+}
+
+/** The slab that owns an effective increment percentage (highest match). */
+function slabForPercent(active: RatingSlab[], percent: number): RatingSlab | null {
+  let found: RatingSlab | null = null;
+  for (const s of active) {
+    if (Number(s.increment_percent) === percent) found = s;
+  }
+  if (found) return found;
+  for (let i = active.length - 1; i >= 0; i -= 1) {
+    if (Number(active[i].increment_percent) <= percent) return active[i];
+  }
+  return active[0] ?? null;
+}
+
+/**
+ * The rating a row should be *placed* at. Equals the actual rating unless the
+ * eligibility penalty (ADR-221/222/224) lowered the increment percentage, in
+ * which case the row is clamped into the effective slab's rating window so both
+ * the slab dashboard and the 1–5 rating dashboard show where they now stand.
+ *
+ * Display values (rating column, average rating) keep using the actual rating.
+ */
+export function placementRatingOf(
+  row: BellCurveInput,
+  rating: number,
+  cap?: SlabCapOptions,
+): number {
+  if (!cap) return rating;
+  const status = row.eligibility_status ?? 'unknown';
+  if (status !== 'exempted' && status !== 'ineligible') return rating;
+  const slabs = activeSorted(cap.slabs ?? DEFAULT_RATING_SLABS);
+  if (slabs.length === 0) return rating;
+  const raw = resolveSlabPercent(rating, slabs);
+  const eff = effectiveSlabPercent(raw, status, { ...cap, slabs });
+  if (raw === null || eff === null || eff >= raw) return rating;
+  const target = slabForPercent(slabs, eff);
+  if (!target) return rating;
+  const upper = target.rating_to === null || target.rating_to === undefined
+    ? Number.POSITIVE_INFINITY
+    : Number(target.rating_to) - 0.01;
+  return Math.max(target.rating_from, Math.min(rating, upper));
 }
 
 export function makeBanding(
   mode: BandMode,
   config: BellCurveConfig,
   slabs: ReadonlyArray<RatingSlab> = DEFAULT_RATING_SLABS,
+  cap?: SlabCapOptions,
 ): Banding {
+  const place = (row: BellCurveInput, rating: number) => placementRatingOf(row, rating, cap);
   if (mode === 'slab') {
     const resolved = activeSlabs(slabs);
+    const keyOf = (rating: number) => {
+      const slab = resolveSlab(rating, resolved);
+      return slab ? slabBandKey(slab) : null;
+    };
     return {
       mode,
       defs: slabBandDefs(resolved),
-      keyOf: (rating) => {
-        const slab = resolveSlab(rating, resolved);
-        return slab ? slabBandKey(slab) : null;
-      },
+      keyOf,
+      keyOfRow: (row, rating) => keyOf(place(row, rating)),
+      placementAware: Boolean(cap),
       hasTargets: false,
     };
   }
+  const keyOf = (rating: number) => {
+    const band = bandForRating(rating);
+    return band === null ? null : String(band);
+  };
   return {
     mode: 'rating',
     defs: ratingBandDefs(config),
-    keyOf: (rating) => {
-      const band = bandForRating(rating);
-      return band === null ? null : String(band);
-    },
+    keyOf,
+    keyOfRow: (row, rating) => keyOf(place(row, rating)),
+    placementAware: Boolean(cap),
     hasTargets: true,
   };
 }
@@ -347,7 +417,7 @@ export function computeBands(
   const denom = rated.length;
   const counts = new Map<string, number>();
   for (const r of rated) {
-    const key = banding.keyOf(r.rating);
+    const key = banding.keyOfRow(r, r.rating);
     if (key === null) continue;
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
@@ -591,7 +661,7 @@ export function employeesInBand(
   bandKey: string,
 ): BandEmployee[] {
   return ratedRows(rows)
-    .filter((r) => groupIdentity(r, key).id === groupId && banding.keyOf(r.rating) === bandKey)
+    .filter((r) => groupIdentity(r, key).id === groupId && banding.keyOfRow(r, r.rating) === bandKey)
     .sort((a, b) => b.rating - a.rating);
 }
 

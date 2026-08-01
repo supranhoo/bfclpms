@@ -7919,3 +7919,11 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Tests: `src/test/orgKpiChildRollbackRpc.contract.test.ts` (5); `src/test/bulkRollbackOrgKpiPropagation.test.ts` ADR-227 block (4).
 - Docs: `docs/adr/ADR-227.md`; Policy: POLICY.md §ORG-KPI-ROLLBACK-CHILD-TRUTH.
 - Rollback: drop both functions and revert `useRollbackOrgKpiPropagation.ts`; no schema change.
+
+### v2.66.232 (2026-08-01 — ADR-228: exemption-aware Bell Curve band placement)
+- Problem: after an exemption was processed, the employee stayed in the heat map / bell curve band of their raw rating even though their effective increment slab had been penalised (or was 0% for ineligible employees).
+- Fix: new placement layer `placementRatingOf()` + `Banding.keyOfRow()` in `src/lib/annualReview/bellCurve.ts`, wired through `computeBands`, `groupBands`, `heatmapBands`, `summarize` and `employeesInBand`. Applies in both Rating bands (1–5) and Slab % modes; placement can only move down.
+- Surfaces: `BellCurveTab.tsx` now builds `capOptions` before the banding and passes it into `makeBanding`; the drill-down shows "moved from <band>" plus a CSV column; the Excel export carries `Band (actual)` and `Band (effective)`; the PDF inherits the effective counts.
+- Display unchanged: actual rating still drives the Rating (/5) column, average rating and calibration.
+- Tests: `src/test/annualReview/bellCurve.test.ts` ADR-228 block (5).
+- Docs: `docs/adr/ADR-228.md`; Policy: POLICY.md §AR-ELIGIBILITY-EXEMPTION item 10.

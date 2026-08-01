@@ -42,7 +42,8 @@ function targetOf(e: BandEmployee): CalibrationTarget {
  */
 export function BandEmployeeList({
   employees, groupName, bandLabel, bandSub, slabs = DEFAULT_RATING_SLABS, canCalibrate = false,
-  eligibilityOf, canManageExemptions = false, canApproveExemptions = false, capOptions, onClose,
+  eligibilityOf, canManageExemptions = false, canApproveExemptions = false, capOptions,
+  originalBandLabelOf, onClose,
 }: {
   employees: BandEmployee[];
   groupName: string;
@@ -56,6 +57,11 @@ export function BandEmployeeList({
   canApproveExemptions?: boolean;
   /** ADR-222 — exemption increment cap settings from the bell curve config. */
   capOptions?: SlabCapOptions;
+  /**
+   * ADR-228 — the band the employee would sit in without the exemption penalty.
+   * Null when the penalty did not move them.
+   */
+  originalBandLabelOf?: (e: BandEmployee) => string | null;
   onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
@@ -85,6 +91,7 @@ export function BandEmployeeList({
       'Employee Code', 'Name', 'Grade', 'Manager',
       'Rating Given by Dept', 'Rating Given by BU', 'Slab %',
       'Computed Rating', 'Calibrated Rating', 'Calibration Reason', 'Eligibility', 'Exemption Cap Applied',
+      'Original Band (before penalty)',
       'Exemption Source', 'Exemption Impact',
     ];
     const lines = [header.join(',')];
@@ -108,6 +115,7 @@ export function BandEmployeeList({
         e.calibration_reason ?? '',
         elig ? eligibilitySummary(elig) : '',
         isSlabCapped(raw, status, cap) ? 'Yes' : '',
+        originalBandLabelOf?.(e) ?? '',
         sources,
         penalty.applied ? describeExemptionPenalty(penalty) : '',
       ].map(csvCell).join(','));
@@ -211,6 +219,11 @@ export function BandEmployeeList({
                 <td className="p-2 tabular-nums">{e.employee_code ?? '—'}</td>
                 <td className="p-2 font-medium">
                   {e.employee_name ?? '—'}
+                  {originalBandLabelOf?.(e) && (
+                    <span className="ml-2 text-[10px] text-muted-foreground">
+                      moved from {originalBandLabelOf(e)}
+                    </span>
+                  )}
                   {isCalibrated(e) && (
                     <Badge variant="outline" className="ml-2 text-[10px]" title={
                       `Computed ${formatRating5(computedRating(e))} → calibrated ${formatRating5(e.calibrated_rating)}`
