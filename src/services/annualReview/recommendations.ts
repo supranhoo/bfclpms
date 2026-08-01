@@ -95,6 +95,7 @@ export interface RecommendationQueueRow {
   effective_from: string | null;
   narrative: string | null;
   status: RecommendationStatus;
+  source: 'stage_form' | 'legacy_import';
   decided_at: string | null;
   decision_reason: string | null;
   final_rating: string | null;
@@ -197,6 +198,8 @@ export interface RecommendationQueueFilters {
   typeKey?: string | null;
   monetaryOnly?: boolean;
   search?: string | null;
+  /** ADR-226 Phase 2 — distinguish stage-form captures from legacy imports. */
+  source?: 'stage_form' | 'legacy_import' | null;
   /** Server-side pagination is mandatory for this queue (POLICY §13). */
   page: number;
   pageSize: number;
@@ -213,6 +216,7 @@ export async function fetchRecommendationQueue(
     p_search: f.search ?? undefined,
     p_limit: f.pageSize,
     p_offset: f.page * f.pageSize,
+    p_source: f.source ?? undefined,
   });
   if (error) throw error;
   const rows = (data ?? []) as unknown as RecommendationQueueRow[];

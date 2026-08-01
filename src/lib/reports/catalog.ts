@@ -414,6 +414,23 @@ REPORT_CATALOG.push(
   ], 215),
 );
 
+// ADR-226 Phase 2 — recommendation & cost roll-up.
+REPORT_CATALOG.push(
+  r('RPT-REC-001', 'recommendations', 'REC', 'Recommendation & Cost Roll-up',
+    '/reports/recommendations', null, [
+    f('employee_code', 'Employee Code', 10, { is_required: true, data_type: 'string' }),
+    f('employee',      'Employee',      20, { is_required: true, data_type: 'string' }),
+    f('department',    'Department',    30, { data_type: 'string' }),
+    f('business_unit', 'Business Unit', 40, { data_type: 'string' }),
+    f('reviewer',      'Recommended By',50, { data_type: 'string' }),
+    f('types',         'Types',         60, { data_type: 'string' }),
+    f('asked',         'Asked',         70, { data_type: 'string' }),
+    f('approved',      'Approved',      80, { data_type: 'string' }),
+    f('status',        'Status',        90, { data_type: 'string' }),
+    f('source',        'Source',       100, { data_type: 'string' }),
+  ], 216),
+);
+
 REPORT_CATALOG.push(
   r('RPT-ANR-001', 'annual-review', 'ANR', 'Annual Review Report',
     '/reports/annual-review', null, [

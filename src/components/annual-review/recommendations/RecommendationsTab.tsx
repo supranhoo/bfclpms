@@ -22,7 +22,10 @@ import {
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { Download, Loader2 } from 'lucide-react';
+import { Download, Loader2, Settings2, Upload, Wand2 } from 'lucide-react';
+import { LegacyImportDialog } from './LegacyImportDialog';
+import { ReclassifyDialog } from './ReclassifyDialog';
+import { RecommendationKeywordRulesCard } from './RecommendationKeywordRulesCard';
 import { useActiveCycle } from '@/hooks/useAnnualReview';
 import {
   useBulkDecideRecommendations,
@@ -39,6 +42,8 @@ import {
 
 const PAGE_SIZE = 25;
 const ALL = '__all__';
+
+type SourceFilter = typeof ALL | 'stage_form' | 'legacy_import';
 
 const DECISIONS: RecommendationStatus[] = [
   'approved', 'approved_modified', 'rejected', 'deferred', 'implemented',
@@ -62,6 +67,10 @@ export function RecommendationsTab() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [decideRow, setDecideRow] = useState<RecommendationQueueRow | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [source, setSource] = useState<SourceFilter>(ALL);
+  const [importOpen, setImportOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [reclassifyRow, setReclassifyRow] = useState<RecommendationQueueRow | null>(null);
 
   const filters = useMemo(
     () => ({
@@ -70,10 +79,11 @@ export function RecommendationsTab() {
       typeKey: typeKey === ALL ? null : typeKey,
       monetaryOnly,
       search: search.trim() || null,
+      source: source === ALL ? null : source,
       page,
       pageSize: PAGE_SIZE,
     }),
-    [cycle?.id, status, typeKey, monetaryOnly, search, page],
+    [cycle?.id, status, typeKey, monetaryOnly, search, source, page],
   );
 
   const { data, isLoading, isFetching } = useRecommendationQueue(filters, !!cycle?.id);
@@ -86,7 +96,7 @@ export function RecommendationsTab() {
       'Employee code', 'Employee', 'Department', 'Business unit', 'Designation',
       'Recommended by', 'Stage', 'Types', 'Amount asked', 'Amount approved',
       'Proposed designation', 'Proposed grade', 'Effective from', 'Rating',
-      'Status', 'Decision reason', 'Narrative',
+      'Status', 'Source', 'Decision reason', 'Narrative',
     ];
     const body = rows.map((r) => [
       r.employee_code ?? '', r.employee_name ?? '', r.department_name ?? '',
@@ -96,6 +106,7 @@ export function RecommendationsTab() {
       formatRecommendationAmount(r.approved_amount_kind, r.approved_amount_value),
       r.proposed_designation ?? '', r.proposed_grade ?? '', r.effective_from ?? '',
       r.final_rating ?? '', RECOMMENDATION_STATUS_LABEL[r.status] ?? r.status,
+      r.source === 'legacy_import' ? 'Legacy import' : 'Review form',
       r.decision_reason ?? '', (r.narrative ?? '').replace(/\s+/g, ' '),
     ]);
     const csv = [head, ...body]
@@ -167,10 +178,29 @@ export function RecommendationsTab() {
               />
               Monetary only
             </label>
+            <div className="space-y-1.5 min-w-[170px]">
+              <Label className="text-xs text-muted-foreground">Source</Label>
+              <Select value={source} onValueChange={(v) => { setSource(v as SourceFilter); setPage(0); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All sources</SelectItem>
+                  <SelectItem value="stage_form">Review form</SelectItem>
+                  <SelectItem value="legacy_import">Legacy import</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Button variant="outline" size="sm" onClick={exportCsv} disabled={!rows.length}>
               <Download className="h-4 w-4 mr-2" />Export page
             </Button>
+            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+              <Upload className="h-4 w-4 mr-2" />Import legacy
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setRulesOpen((o) => !o)}>
+              <Settings2 className="h-4 w-4 mr-2" />{rulesOpen ? 'Hide rules' : 'Classification rules'}
+            </Button>
           </div>
+
+          {rulesOpen && <RecommendationKeywordRulesCard />}
 
           {selectedIds.length > 0 && (
             <div className="flex items-center gap-3 rounded-md border bg-muted/40 p-2 text-sm">
@@ -246,12 +276,24 @@ export function RecommendationsTab() {
                     </TableCell>
                     <TableCell className="text-xs">{r.final_rating ?? '—'}</TableCell>
                     <TableCell>
-                      <Badge variant={statusVariant(r.status)}>
-                        {RECOMMENDATION_STATUS_LABEL[r.status] ?? r.status}
-                      </Badge>
+                      <div className="flex flex-col items-start gap-1">
+                        <Badge variant={statusVariant(r.status)}>
+                          {RECOMMENDATION_STATUS_LABEL[r.status] ?? r.status}
+                        </Badge>
+                        {r.source === 'legacy_import' && (
+                          <Badge variant="outline" className="text-[10px]">Legacy</Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button size="sm" variant="outline" onClick={() => setDecideRow(r)}>Decide</Button>
+                      <div className="flex justify-end gap-1">
+                        {r.status === 'needs_classification' && (
+                          <Button size="sm" variant="ghost" onClick={() => setReclassifyRow(r)}>
+                            <Wand2 className="h-4 w-4 mr-1" />Classify
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline" onClick={() => setDecideRow(r)}>Decide</Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -275,6 +317,13 @@ export function RecommendationsTab() {
       </Card>
 
       <DecideDialog row={decideRow} onClose={() => setDecideRow(null)} />
+      <ReclassifyDialog row={reclassifyRow} onClose={() => setReclassifyRow(null)} />
+      <LegacyImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        cycleId={cycle.id}
+        cycleName={cycle.name}
+      />
       <BulkDecideDialog
         open={bulkOpen}
         ids={selectedIds}

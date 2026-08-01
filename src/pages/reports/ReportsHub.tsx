@@ -190,6 +190,14 @@ const reports: ReportCard[] = [
     reportKey: 'change-history',
   },
   {
+    title: 'Recommendation & Cost Roll-up',
+    description: 'Promotion, special hike and other monetary recommendations raised by Dept / BU / Management heads, with HR decisions and cost impact.',
+    icon: History,
+    path: '/reports/recommendations',
+    color: 'text-emerald-600',
+    reportKey: 'recommendations',
+  },
+  {
     title: 'Same KPI — Manager vs Team',
     description: 'Compare scores on shared KPIs between managers and their direct reports — only mismatches shown',
     icon: Users,

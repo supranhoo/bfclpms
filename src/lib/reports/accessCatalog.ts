@@ -43,6 +43,8 @@ export const DEFAULT_REPORT_ACCESS: Record<string, ReportAccessDefault> = {
   'change-history': { view_roles: ['admin', 'hr_pms'], download_roles: ['admin'] },
   'dev-report': { view_roles: ['admin', 'management', 'auditor'], download_roles: ['admin', 'management'] },
   'annual-review': { view_roles: ['admin', 'manager', 'management', 'hr_pms', 'auditor'], download_roles: ['admin', 'hr_pms', 'management'] },
+  // ADR-226 — recommendation cost roll-up: HR / Management / Admin only.
+  'recommendations': { view_roles: ['admin', 'hr_pms', 'management'], download_roles: ['admin', 'hr_pms'] },
 };
 
 /** Least-privilege fallback for a report with no declared default. */

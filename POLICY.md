@@ -5645,3 +5645,13 @@ Rules:
 8. **Increment linkage (Phase 2).** An approved monetary recommendation is a *proposal* into the increment run — it never changes a final score, rating or slab by itself.
 
 **Guard.** `src/services/annualReview/__tests__/recommendations.test.ts`.
+
+### §AR-RECOMMENDATION-TRACKING — Phase 2 additions (ADR-226 Phase 2)
+
+9. **Legacy classification is configurable, never hardcoded.** The words and phrases that map a free-text recommendation to a recommendation type live in `annual_review_recommendation_keywords` (pattern, target type, weight, active flag), editable by Admin / HR PMS at Annual Review → Recommendations → **Classification rules**. Changing a rule only affects future imports; already-imported records keep their assigned type until a human reclassifies them.
+10. **Import is preview-first and reversible.** `ar_backfill_legacy_recommendations` must be run as a dry run before it can be committed. Every run — dry or committed — is recorded in `annual_review_recommendation_import_runs` with the actor, counts and type breakdown. A committed run can be rolled back; rollback removes only imported records that HR has not yet decided, and never touches recommendations captured directly in a review form.
+11. **Confidence gating.** An imported recommendation whose combined keyword weight is below 3 is stored with status `needs_classification` and is excluded from bulk decisions until a human confirms its type via `ar_reclassify_recommendation`. Machine classification never approves, rejects or prices anything.
+12. **Provenance is permanent.** Every recommendation carries `source = stage_form | legacy_import`, is filterable by source in the governance queue and the report, and is labelled "Legacy" in the UI so a reader can always tell a parsed record from a captured one.
+13. **Cost reporting.** RPT-REC-001 (`/reports/recommendations`, Admin / HR PMS / Management) reads the same `ar_recommendation_queue` RPC as the governance tab — there is no second query path — and rolls up asked vs approved amounts. Percentage asks are counted separately and are never summed into a rupee figure.
+
+**Guard.** `src/test/annualReview/recommendationClassifier.test.ts` (14 cases).
