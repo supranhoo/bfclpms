@@ -89,8 +89,22 @@ export function CycleBulkDataUploadDialog({
       const correctionNote = res.correctedRows
         ? ` (${res.correctedRows} row${res.correctedRows === 1 ? '' : 's'} corrected downward)`
         : '';
-      if (res.failed) toast.error(`Committed ${res.updated}, ${res.failed} failed${upgradeNote}${correctionNote}.`);
-      else toast.success(`Committed ${res.updated} instance${res.updated === 1 ? '' : 's'}${upgradeNote}${correctionNote}.`);
+      if (res.failed) {
+        // ADR-225a: a server-side RPC exception must never look like a silent
+        // no-op. Surface the first failures verbatim and keep the preview open.
+        const sample = res.errors.slice(0, 3).join(' | ');
+        const more = res.errors.length > 3 ? ` (+${res.errors.length - 3} more)` : '';
+        toast.error(
+          `Committed ${res.updated}, ${res.failed} FAILED${upgradeNote}${correctionNote}. ${sample}${more}`,
+          { duration: 20000 },
+        );
+        // eslint-disable-next-line no-console
+        console.error('[bulk-upload] commit errors', res.errors);
+        onDone?.();
+        await refetch();
+        return;
+      }
+      toast.success(`Committed ${res.updated} instance${res.updated === 1 ? '' : 's'}${upgradeNote}${correctionNote}.`);
       setReport(null); setFile(null);
       onDone?.();
       await refetch();
