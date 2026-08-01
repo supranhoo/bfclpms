@@ -35,6 +35,7 @@ import {
   effectiveSlabPercent, isSlabCapped, resolveEligibility, type SlabCapOptions,
 } from '@/lib/annualReview/effectiveEligibility';
 import { effectiveRating } from '@/lib/annualReview/effectiveRating';
+import { buildSlabCapOptions } from '@/lib/annualReview/reportRating';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { CalibrateRatingDialog, type CalibrationTarget } from '@/components/annual-review/CalibrateRatingDialog';
