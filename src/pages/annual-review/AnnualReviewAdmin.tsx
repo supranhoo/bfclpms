@@ -7,6 +7,7 @@ import {
   useInstanceStageScores, useInstanceStageCells, useRollbackFinalizedInstance,
 } from '@/hooks/useAnnualReview';
 import * as svc from '@/services/annualReview/annualReviewService';
+import { RecommendationsTab } from '@/components/annual-review/recommendations/RecommendationsTab';
 import { remapStageValueMapByDuplicates } from '@/lib/annualReview/displayStageForResponse';
 import { rollbackTerminalLabel } from '@/lib/annualReview/rollbackTerminalStage';
 import { canEditWorkflowAndReviewers } from '@/lib/annualReview/workflowEditVisibility';
@@ -127,6 +128,7 @@ export default function AnnualReviewAdmin() {
         <TabsList className="flex flex-wrap md:flex-nowrap w-full h-auto gap-1 p-1 overflow-x-auto justify-start">
           <TabsTrigger value="progress" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><ListChecks className="h-4 w-4" />Progress</TabsTrigger>
           <TabsTrigger value="bell-curve" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><BarChart3 className="h-4 w-4" />Bell Curve</TabsTrigger>
+          <TabsTrigger value="recommendations" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><ListChecks className="h-4 w-4" />Recommendations</TabsTrigger>
           <TabsTrigger value="cycles" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><Calendar className="h-4 w-4" />Cycles</TabsTrigger>
           <TabsTrigger value="templates" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><Settings2 className="h-4 w-4" />Templates</TabsTrigger>
           <TabsTrigger value="rules" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><Layers className="h-4 w-4" />Rules</TabsTrigger>
@@ -140,6 +142,7 @@ export default function AnnualReviewAdmin() {
         </TabsList>
         <TabsContent value="progress" className="mt-4"><ProgressTab /></TabsContent>
         <TabsContent value="bell-curve" className="mt-4"><AdminBellCurveTab /></TabsContent>
+        <TabsContent value="recommendations" className="mt-4"><RecommendationsTab /></TabsContent>
         <TabsContent value="cycles" className="mt-4"><CyclesTab /></TabsContent>
         <TabsContent value="templates" className="mt-4"><TemplatesTab /></TabsContent>
         <TabsContent value="rules" className="mt-4"><RulesTab /></TabsContent>

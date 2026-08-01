@@ -606,6 +606,7 @@ function TeamReviewDetailInner(props: any) {
         }
         responses={responses ?? []}
         reviewerNames={reviewerNamesByStage}
+        instanceId={instance.id}
       />
 
       {role && !locked && (

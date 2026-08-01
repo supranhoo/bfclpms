@@ -2166,6 +2166,182 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_recommendation_items: {
+        Row: {
+          created_at: string
+          id: string
+          recommendation_id: string
+          type_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          recommendation_id: string
+          type_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          recommendation_id?: string
+          type_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_recommendation_items_recommendation_id_fkey"
+            columns: ["recommendation_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_recommendations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_recommendation_items_type_id_fkey"
+            columns: ["type_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_recommendation_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      annual_review_recommendation_types: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          is_monetary: boolean
+          key: string
+          label: string
+          requires_amount: boolean
+          requires_target_role: boolean
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_monetary?: boolean
+          key: string
+          label: string
+          requires_amount?: boolean
+          requires_target_role?: boolean
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_monetary?: boolean
+          key?: string
+          label?: string
+          requires_amount?: boolean
+          requires_target_role?: boolean
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      annual_review_recommendations: {
+        Row: {
+          amount_kind: string | null
+          amount_value: number | null
+          approved_amount_kind: string | null
+          approved_amount_value: number | null
+          created_at: string
+          cycle_id: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_reason: string | null
+          effective_from: string | null
+          employee_id: string
+          id: string
+          instance_id: string
+          narrative: string | null
+          proposed_designation_id: string | null
+          proposed_grade_id: string | null
+          reviewer_id: string | null
+          reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+          source: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount_kind?: string | null
+          amount_value?: number | null
+          approved_amount_kind?: string | null
+          approved_amount_value?: number | null
+          created_at?: string
+          cycle_id: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_reason?: string | null
+          effective_from?: string | null
+          employee_id: string
+          id?: string
+          instance_id: string
+          narrative?: string | null
+          proposed_designation_id?: string | null
+          proposed_grade_id?: string | null
+          reviewer_id?: string | null
+          reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_kind?: string | null
+          amount_value?: number | null
+          approved_amount_kind?: string | null
+          approved_amount_value?: number | null
+          created_at?: string
+          cycle_id?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_reason?: string | null
+          effective_from?: string | null
+          employee_id?: string
+          id?: string
+          instance_id?: string
+          narrative?: string | null
+          proposed_designation_id?: string | null
+          proposed_grade_id?: string | null
+          reviewer_id?: string | null
+          reviewer_role?: Database["public"]["Enums"]["annual_reviewer_role"]
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_recommendations_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_cycles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_recommendations_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_recommendations_proposed_designation_id_fkey"
+            columns: ["proposed_designation_id"]
+            isOneToOne: false
+            referencedRelation: "designations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_recommendations_proposed_grade_id_fkey"
+            columns: ["proposed_grade_id"]
+            isOneToOne: false
+            referencedRelation: "pms_grades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       annual_review_rescore_audit_2026_07: {
         Row: {
           created_at: string
@@ -15582,9 +15758,32 @@ export type Database = {
           run_id: string
         }[]
       }
+      ar_bulk_decide_recommendations: {
+        Args: {
+          p_reason: string
+          p_recommendation_ids: string[]
+          p_status: string
+        }
+        Returns: number
+      }
       ar_can_approve_eligibility_exemption: {
         Args: { _user: string }
         Returns: boolean
+      }
+      ar_can_decide_recommendation: { Args: never; Returns: boolean }
+      ar_can_view_recommendation: {
+        Args: { p_instance_id: string }
+        Returns: boolean
+      }
+      ar_decide_recommendation: {
+        Args: {
+          p_approved_amount_kind?: string
+          p_approved_amount_value?: number
+          p_reason: string
+          p_recommendation_id: string
+          p_status: string
+        }
+        Returns: undefined
       }
       ar_eligibility_evaluate: {
         Args: {
@@ -15607,6 +15806,61 @@ export type Database = {
         }[]
       }
       ar_normalise_question: { Args: { _name: string }; Returns: string }
+      ar_recommendation_queue: {
+        Args: {
+          p_cycle_id: string
+          p_limit?: number
+          p_monetary_only?: boolean
+          p_offset?: number
+          p_search?: string
+          p_status?: string
+          p_type_key?: string
+        }
+        Returns: {
+          amount_kind: string
+          amount_value: number
+          approved_amount_kind: string
+          approved_amount_value: number
+          business_unit_name: string
+          created_at: string
+          decided_at: string
+          decision_reason: string
+          department_name: string
+          designation_name: string
+          effective_from: string
+          employee_code: string
+          employee_id: string
+          employee_name: string
+          final_rating: string
+          id: string
+          instance_id: string
+          is_monetary: boolean
+          narrative: string
+          proposed_designation: string
+          proposed_grade: string
+          reviewer_name: string
+          reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+          status: string
+          total_count: number
+          total_score: number
+          type_keys: string[]
+          type_labels: string[]
+        }[]
+      }
+      ar_save_recommendation: {
+        Args: {
+          p_amount_kind?: string
+          p_amount_value?: number
+          p_designation_id?: string
+          p_effective_from?: string
+          p_grade_id?: string
+          p_instance_id: string
+          p_narrative?: string
+          p_reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+          p_type_keys?: string[]
+        }
+        Returns: string
+      }
       archive_annual_review_response: {
         Args: { p_reason: string; p_response_id: string }
         Returns: undefined
