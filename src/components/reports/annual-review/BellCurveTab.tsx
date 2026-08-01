@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, FileText, Loader2, Settings2, Lightbulb, Users } from 'lucide-react';
+import { Download, FileText, Loader2, Settings2, Lightbulb, Users, SlidersHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchComprehensiveReport, type ComprehensiveRow } from '@/services/annualReview/comprehensiveReport';
@@ -46,6 +46,7 @@ import { RatingHeatmap } from './bellCurve/RatingHeatmap';
 import { BandEmployeeList } from './bellCurve/BandEmployeeList';
 import { ComplianceChip } from './bellCurve/ComplianceChip';
 import { BellCurveConfigDialog } from './bellCurve/BellCurveConfigDialog';
+import { ExemptionPenaltyDialog } from './bellCurve/ExemptionPenaltyDialog';
 import { BulkExemptionDialog } from './bellCurve/BulkExemptionDialog';
 import { exportBellCurveExcel, exportBellCurvePdf } from './bellCurve/bellCurveExport';
 
@@ -108,6 +109,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
   const [scoringSource, setScoringSource] = useState<string>(ALL);
   const [eligibility, setEligibility] = useState<string>(ALL);
   const [configOpen, setConfigOpen] = useState(false);
+  const [penaltyOpen, setPenaltyOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   // Multi-select drill-down on the heat map, per grouping view.
   const [groupSel, setGroupSel] = useState<Record<GroupKey, string[]>>({
@@ -273,6 +275,11 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
             {canConfigure && !hasTargets && (
               <Button variant="outline" size="sm" className="gap-2" onClick={() => setConfigOpen(true)}>
                 <Settings2 className="h-4 w-4" /> Configure
+              </Button>
+            )}
+            {canConfigure && (
+              <Button variant="outline" size="sm" className="gap-2" onClick={() => setPenaltyOpen(true)}>
+                <SlidersHorizontal className="h-4 w-4" /> Exemption penalty
               </Button>
             )}
             {canManageExemptions && (
@@ -459,6 +466,14 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
       <BellCurveConfigDialog
         open={configOpen}
         onOpenChange={setConfigOpen}
+        config={config}
+        cycleId={cycleId}
+        cycleName={cycleName}
+      />
+
+      <ExemptionPenaltyDialog
+        open={penaltyOpen}
+        onOpenChange={setPenaltyOpen}
         config={config}
         cycleId={cycleId}
         cycleName={cycleName}
