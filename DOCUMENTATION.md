@@ -7828,3 +7828,11 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - UI: new `EligibilityExemptionPolicyCard` mounted in Annual Review → Admin → Settings (protected-row unlock, destructive-delete confirmation); `ExemptionDialog` now links to the rules card.
 - Tests: `src/test/annualReview/exemptionPolicy.test.ts` (5 cases).
 - Docs: `docs/adr/ADR-223.md`; Policy: POLICY.md §AR-ELIGIBILITY-EXEMPTION item 7.
+
+### v2.66.221 — ADR-224 Bulk criterion exemption + configurable exemption penalty (2026-07-31)
+- Feature: (a) waive one eligibility criterion for every employee in a cycle whose value is within an admin threshold; (b) replace the fixed "top N tiers excluded" clamp with a configurable penalty rule (`none` / `top_tiers_excluded` / `step_down`, optional `top_slabs_only` scope and a floor %).
+- Migration: penalty columns on `annual_review_bell_curve_config`; `annual_review_bulk_exemption_runs` (RLS, revocable); provenance + frozen impact columns (`source`, `bulk_run_id`, `penalty_from_percent`, `penalty_to_percent`) on `annual_review_eligibility_exemptions`; SECURITY DEFINER RPCs `ar_eligibility_evaluate`, `bulk_exempt_eligibility_criterion` (dry-run capable) and `revoke_bulk_exemption_run`.
+- Code: `applyExemptionPenalty()` / `describeExemptionPenalty()` in `ratingSlab.ts`; `resolvePenaltyRule()` / `exemptionPenaltyFor()` in `effectiveEligibility.ts`; service layer `src/services/annualReview/bulkExemption.ts` (`matchesBulkRule`, `applyBulkExemption`, `fetchBulkExemptionRuns`, `revokeBulkExemptionRun`).
+- UI: penalty rule editor with live per-slab preview in `BellCurveConfigDialog.tsx`; **Bulk exempt** toolbar action in `BellCurveTab.tsx` opening `BulkExemptionDialog.tsx` (dry-run preview, run history, destructive-confirm revoke); `ExemptionImpactPopover.tsx` in the drill-down grid plus `Exemption Source` / `Exemption Impact` CSV columns in `BandEmployeeList.tsx`.
+- Tests: `src/test/annualReview/bulkExemption.test.ts` (8 cases — threshold match, sole-failure gate, protected criteria, step-down, floor clamp, none-mode).
+- Docs: `docs/adr/ADR-224.md`; Policy: POLICY.md §AR-ELIGIBILITY-EXEMPTION item 8.

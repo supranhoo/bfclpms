@@ -17,6 +17,11 @@ function mapRow(r: Record<string, unknown>): BellCurveConfig {
     amber_threshold: Number(r.amber_threshold),
     exempted_slab_cap_enabled: (r.exempted_slab_cap_enabled as boolean | null) ?? true,
     exempted_top_tiers_excluded: Number(r.exempted_top_tiers_excluded ?? 2),
+    exempted_penalty_mode: (r.exempted_penalty_mode as BellCurveConfig['exempted_penalty_mode']) ?? 'top_tiers_excluded',
+    exempted_step_down_slabs: Number(r.exempted_step_down_slabs ?? 1),
+    exempted_penalty_scope: (r.exempted_penalty_scope as BellCurveConfig['exempted_penalty_scope']) ?? 'all_slabs',
+    exempted_penalty_top_slabs: Number(r.exempted_penalty_top_slabs ?? 2),
+    exempted_penalty_floor_percent: Number(r.exempted_penalty_floor_percent ?? 0),
   };
 }
 
@@ -31,7 +36,7 @@ export function useBellCurveConfig(cycleId?: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('annual_review_bell_curve_config')
-        .select('id, cycle_id, target_5, target_4, target_3, target_2, target_1, green_threshold, amber_threshold, exempted_slab_cap_enabled, exempted_top_tiers_excluded, is_active')
+        .select('id, cycle_id, target_5, target_4, target_3, target_2, target_1, green_threshold, amber_threshold, exempted_slab_cap_enabled, exempted_top_tiers_excluded, exempted_penalty_mode, exempted_step_down_slabs, exempted_penalty_scope, exempted_penalty_top_slabs, exempted_penalty_floor_percent, is_active')
         .eq('is_active', true);
       if (error) throw error;
       const rows = (data ?? []) as Array<Record<string, unknown>>;
@@ -59,6 +64,11 @@ export function useSaveBellCurveConfig() {
         amber_threshold: config.amber_threshold,
         exempted_slab_cap_enabled: config.exempted_slab_cap_enabled ?? true,
         exempted_top_tiers_excluded: config.exempted_top_tiers_excluded ?? 2,
+        exempted_penalty_mode: config.exempted_penalty_mode ?? 'top_tiers_excluded',
+        exempted_step_down_slabs: config.exempted_step_down_slabs ?? 1,
+        exempted_penalty_scope: config.exempted_penalty_scope ?? 'all_slabs',
+        exempted_penalty_top_slabs: config.exempted_penalty_top_slabs ?? 2,
+        exempted_penalty_floor_percent: config.exempted_penalty_floor_percent ?? 0,
         is_active: true,
         updated_by: userRes?.user?.id ?? null,
       };

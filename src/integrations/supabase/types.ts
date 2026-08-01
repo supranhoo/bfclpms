@@ -437,7 +437,12 @@ export type Database = {
           amber_threshold: number
           created_at: string
           cycle_id: string | null
+          exempted_penalty_floor_percent: number
+          exempted_penalty_mode: string
+          exempted_penalty_scope: string
+          exempted_penalty_top_slabs: number
           exempted_slab_cap_enabled: boolean
+          exempted_step_down_slabs: number
           exempted_top_tiers_excluded: number
           green_threshold: number
           id: string
@@ -454,7 +459,12 @@ export type Database = {
           amber_threshold?: number
           created_at?: string
           cycle_id?: string | null
+          exempted_penalty_floor_percent?: number
+          exempted_penalty_mode?: string
+          exempted_penalty_scope?: string
+          exempted_penalty_top_slabs?: number
           exempted_slab_cap_enabled?: boolean
+          exempted_step_down_slabs?: number
           exempted_top_tiers_excluded?: number
           green_threshold?: number
           id?: string
@@ -471,7 +481,12 @@ export type Database = {
           amber_threshold?: number
           created_at?: string
           cycle_id?: string | null
+          exempted_penalty_floor_percent?: number
+          exempted_penalty_mode?: string
+          exempted_penalty_scope?: string
+          exempted_penalty_top_slabs?: number
           exempted_slab_cap_enabled?: boolean
+          exempted_step_down_slabs?: number
           exempted_top_tiers_excluded?: number
           green_threshold?: number
           id?: string
@@ -665,6 +680,66 @@ export type Database = {
           instance_id?: string
           performed_by?: string | null
           reason?: string
+        }
+        Relationships: []
+      }
+      annual_review_bulk_exemption_runs: {
+        Row: {
+          applied_count: number
+          created_at: string
+          criterion_key: string
+          criterion_label: string | null
+          cycle_id: string
+          details: Json
+          id: string
+          matched_count: number
+          only_sole_failure: boolean
+          operator: string
+          performed_by: string | null
+          reason: string
+          revoked_at: string | null
+          revoked_by: string | null
+          status: string
+          threshold: string | null
+          updated_at: string
+        }
+        Insert: {
+          applied_count?: number
+          created_at?: string
+          criterion_key: string
+          criterion_label?: string | null
+          cycle_id: string
+          details?: Json
+          id?: string
+          matched_count?: number
+          only_sole_failure?: boolean
+          operator?: string
+          performed_by?: string | null
+          reason: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          status?: string
+          threshold?: string | null
+          updated_at?: string
+        }
+        Update: {
+          applied_count?: number
+          created_at?: string
+          criterion_key?: string
+          criterion_label?: string | null
+          cycle_id?: string
+          details?: Json
+          id?: string
+          matched_count?: number
+          only_sole_failure?: boolean
+          operator?: string
+          performed_by?: string | null
+          reason?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          status?: string
+          threshold?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -1117,6 +1192,7 @@ export type Database = {
       }
       annual_review_eligibility_exemptions: {
         Row: {
+          bulk_run_id: string | null
           created_at: string
           criterion_id: string
           criterion_name: string
@@ -1127,13 +1203,19 @@ export type Database = {
           employee_id: string | null
           id: string
           instance_id: string
+          penalty_applied: boolean
+          penalty_from_percent: number | null
+          penalty_note: string | null
+          penalty_to_percent: number | null
           reason: string | null
           requested_at: string
           requested_by: string | null
+          source: string
           status: string
           updated_at: string
         }
         Insert: {
+          bulk_run_id?: string | null
           created_at?: string
           criterion_id: string
           criterion_name: string
@@ -1144,13 +1226,19 @@ export type Database = {
           employee_id?: string | null
           id?: string
           instance_id: string
+          penalty_applied?: boolean
+          penalty_from_percent?: number | null
+          penalty_note?: string | null
+          penalty_to_percent?: number | null
           reason?: string | null
           requested_at?: string
           requested_by?: string | null
+          source?: string
           status?: string
           updated_at?: string
         }
         Update: {
+          bulk_run_id?: string | null
           created_at?: string
           criterion_id?: string
           criterion_name?: string
@@ -1161,13 +1249,25 @@ export type Database = {
           employee_id?: string | null
           id?: string
           instance_id?: string
+          penalty_applied?: boolean
+          penalty_from_percent?: number | null
+          penalty_note?: string | null
+          penalty_to_percent?: number | null
           reason?: string | null
           requested_at?: string
           requested_by?: string | null
+          source?: string
           status?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "annual_review_eligibility_exemptions_bulk_run_id_fkey"
+            columns: ["bulk_run_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_bulk_exemption_runs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "annual_review_eligibility_exemptions_instance_id_fkey"
             columns: ["instance_id"]
@@ -15475,6 +15575,15 @@ export type Database = {
         Args: { _user: string }
         Returns: boolean
       }
+      ar_eligibility_evaluate: {
+        Args: {
+          _actual: Json
+          _expected: Json
+          _operator: string
+          _type: string
+        }
+        Returns: boolean
+      }
       ar_eligibility_is_exemptable: {
         Args: { _criterion_name: string }
         Returns: boolean
@@ -15544,6 +15653,25 @@ export type Database = {
           instance_id: string
           message: string
           status: string
+        }[]
+      }
+      bulk_exempt_eligibility_criterion: {
+        Args: {
+          p_criterion_id: string
+          p_cycle_id: string
+          p_dry_run?: boolean
+          p_only_sole_failure?: boolean
+          p_operator: string
+          p_reason?: string
+          p_threshold: string
+        }
+        Returns: {
+          action: string
+          actual: string
+          criterion_name: string
+          employee_id: string
+          instance_id: string
+          message: string
         }[]
       }
       bulk_finalize_annual_reviews: {
@@ -17753,6 +17881,7 @@ export type Database = {
         Args: { p_assigned_to: string; p_incident_id: string; p_notes?: string }
         Returns: Json
       }
+      revoke_bulk_exemption_run: { Args: { p_run_id: string }; Returns: number }
       rollback_annual_review_completed: {
         Args: { p_instance_id: string; p_reason: string }
         Returns: Database["public"]["Enums"]["annual_review_status"]

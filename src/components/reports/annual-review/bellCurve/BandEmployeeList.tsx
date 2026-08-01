@@ -13,9 +13,11 @@ import { CalibrateRatingDialog, type CalibrationTarget } from '@/components/annu
 import { ReviewFormViewerDialog } from '@/components/annual-review/ReviewFormViewerDialog';
 import {
   ELIGIBILITY_STATUS_LABELS, effectiveSlabPercent, eligibilitySummary,
-  isSlabCapped, type EffectiveEligibility, type SlabCapOptions,
+  isSlabCapped, describeExemptionPenalty, exemptionPenaltyFor,
+  type EffectiveEligibility, type SlabCapOptions,
 } from '@/lib/annualReview/effectiveEligibility';
 import { ExemptionDialog } from './ExemptionDialog';
+import { ExemptionImpactPopover } from './ExemptionImpactPopover';
 
 const PAGE_SIZE = 25;
 
@@ -83,6 +85,7 @@ export function BandEmployeeList({
       'Employee Code', 'Name', 'Grade', 'Manager',
       'Rating Given by Dept', 'Rating Given by BU', 'Slab %',
       'Computed Rating', 'Calibrated Rating', 'Calibration Reason', 'Eligibility', 'Exemption Cap Applied',
+      'Exemption Source', 'Exemption Impact',
     ];
     const lines = [header.join(',')];
     for (const e of visible) {
@@ -91,6 +94,10 @@ export function BandEmployeeList({
       const raw = resolveSlabPercent(e.rating, slabs);
       const pct = effectiveSlabPercent(raw, status, cap);
       const comp = computedRating(e);
+      const penalty = exemptionPenaltyFor(raw, status, cap);
+      const sources = Array.from(new Set(
+        (elig?.waived ?? []).map((f) => f.exemption?.source ?? 'manual'),
+      )).join(' / ');
       lines.push([
         e.employee_code, e.employee_name, e.grade ?? '', e.manager_name ?? '',
         e.dept_head_rating_5 === null || e.dept_head_rating_5 === undefined ? '' : Number(e.dept_head_rating_5).toFixed(2),
@@ -101,6 +108,8 @@ export function BandEmployeeList({
         e.calibration_reason ?? '',
         elig ? eligibilitySummary(elig) : '',
         isSlabCapped(raw, status, cap) ? 'Yes' : '',
+        sources,
+        penalty.applied ? describeExemptionPenalty(penalty) : '',
       ].map(csvCell).join(','));
     }
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -231,6 +240,11 @@ export function BandEmployeeList({
                           >
                             Capped
                           </Badge>
+                        )}
+                        {status !== 'unknown' && (
+                          <span className="ml-1 inline-block align-middle">
+                            <ExemptionImpactPopover result={elig} computedPercent={raw} capOptions={cap} />
+                          </span>
                         )}
                       </>
                     );

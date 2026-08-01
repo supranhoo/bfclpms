@@ -83,7 +83,7 @@ export function useEligibilityExemptions(cycleId?: string) {
     queryFn: async (): Promise<Record<string, ExemptionRecord[]>> => {
       const { data, error } = await (supabase as any)
         .from('annual_review_eligibility_exemptions')
-        .select('id, instance_id, criterion_id, criterion_name, status, reason, decision_note, decided_at')
+        .select('id, instance_id, criterion_id, criterion_name, status, reason, decision_note, decided_at, source, bulk_run_id, penalty_from_percent, penalty_to_percent')
         .eq('cycle_id', cycleId);
       if (error) throw error;
       const out: Record<string, ExemptionRecord[]> = {};
