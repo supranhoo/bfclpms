@@ -178,10 +178,29 @@ export function RecommendationsTab() {
               />
               Monetary only
             </label>
+            <div className="space-y-1.5 min-w-[170px]">
+              <Label className="text-xs text-muted-foreground">Source</Label>
+              <Select value={source} onValueChange={(v) => { setSource(v as SourceFilter); setPage(0); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL}>All sources</SelectItem>
+                  <SelectItem value="stage_form">Review form</SelectItem>
+                  <SelectItem value="legacy_import">Legacy import</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Button variant="outline" size="sm" onClick={exportCsv} disabled={!rows.length}>
               <Download className="h-4 w-4 mr-2" />Export page
             </Button>
+            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+              <Upload className="h-4 w-4 mr-2" />Import legacy
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setRulesOpen((o) => !o)}>
+              <Settings2 className="h-4 w-4 mr-2" />{rulesOpen ? 'Hide rules' : 'Classification rules'}
+            </Button>
           </div>
+
+          {rulesOpen && <RecommendationKeywordRulesCard />}
 
           {selectedIds.length > 0 && (
             <div className="flex items-center gap-3 rounded-md border bg-muted/40 p-2 text-sm">
@@ -257,12 +276,24 @@ export function RecommendationsTab() {
                     </TableCell>
                     <TableCell className="text-xs">{r.final_rating ?? '—'}</TableCell>
                     <TableCell>
-                      <Badge variant={statusVariant(r.status)}>
-                        {RECOMMENDATION_STATUS_LABEL[r.status] ?? r.status}
-                      </Badge>
+                      <div className="flex flex-col items-start gap-1">
+                        <Badge variant={statusVariant(r.status)}>
+                          {RECOMMENDATION_STATUS_LABEL[r.status] ?? r.status}
+                        </Badge>
+                        {r.source === 'legacy_import' && (
+                          <Badge variant="outline" className="text-[10px]">Legacy</Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button size="sm" variant="outline" onClick={() => setDecideRow(r)}>Decide</Button>
+                      <div className="flex justify-end gap-1">
+                        {r.status === 'needs_classification' && (
+                          <Button size="sm" variant="ghost" onClick={() => setReclassifyRow(r)}>
+                            <Wand2 className="h-4 w-4 mr-1" />Classify
+                          </Button>
+                        )}
+                        <Button size="sm" variant="outline" onClick={() => setDecideRow(r)}>Decide</Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -286,6 +317,13 @@ export function RecommendationsTab() {
       </Card>
 
       <DecideDialog row={decideRow} onClose={() => setDecideRow(null)} />
+      <ReclassifyDialog row={reclassifyRow} onClose={() => setReclassifyRow(null)} />
+      <LegacyImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        cycleId={cycle.id}
+        cycleName={cycle.name}
+      />
       <BulkDecideDialog
         open={bulkOpen}
         ids={selectedIds}
