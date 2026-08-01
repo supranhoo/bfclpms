@@ -52,9 +52,6 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import * as XLSX from 'xlsx';
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
-} from 'recharts';
 import { AnnualReviewStatusBadge } from '@/components/annual-review/AnnualReviewStatusBadge';
 import { HrFinalizationSheet } from '@/components/annual-review/HrFinalizationSheet';
 import { BulkActionsTab } from '@/components/annual-review/BulkActionsTab';
@@ -1546,12 +1543,6 @@ function ChangeTemplateDialog({
     </AlertDialog>
   );
 }
-
-const STAGE_ORDER = ['not_started','pending_self','pending_manager','pending_skip','pending_dept','pending_bu','pending_hr','completed'] as const;
-const STAGE_LABEL: Record<string, string> = {
-  not_started: 'Not started', pending_self: 'Self', pending_manager: 'Manager',
-  pending_skip: 'Skip', pending_dept: 'Dept', pending_bu: 'BU', pending_hr: 'HR', completed: 'Completed',
-};
 
 /**
  * ADR-218g — Bell Curve replaces the legacy hand-rolled Analytics tab.
