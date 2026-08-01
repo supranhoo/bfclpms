@@ -1,9 +1,12 @@
 /**
- * ADR-218i / POLICY §AR-BELL-CURVE — interdependent (cascading) Bell Curve filters.
+ * ADR-218i + ADR-229 / POLICY §AR-BELL-CURVE, §UI-FILTER-STANDARD —
+ * interdependent (cascading) MULTI-SELECT Bell Curve filters.
  *
  * Each filter axis lists only the values that still exist once every OTHER
  * active filter is applied, so no combination can silently produce an empty
- * result set. Pure functions only — no React, no data access.
+ * result set. Every axis holds an array of selected ids: an EMPTY array means
+ * "All". Semantics are OR within an axis and AND across axes.
+ * Pure functions only — no React, no data access.
  */
 import {
   matchesEligibility,
@@ -29,7 +32,16 @@ export const FILTER_AXES: FilterAxis[] = [
   'bu', 'dept', 'manager', 'division', 'grade', 'scoringSource', 'eligibility',
 ];
 
-export type BellCurveFilters = Record<FilterAxis, string>;
+/** Empty array on an axis === no restriction ("All"). */
+export type BellCurveFilters = Record<FilterAxis, string[]>;
+
+export const EMPTY_FILTERS: BellCurveFilters = {
+  bu: [], dept: [], manager: [], division: [], grade: [], scoringSource: [], eligibility: [],
+};
+
+export function emptyFilters(): BellCurveFilters {
+  return { bu: [], dept: [], manager: [], division: [], grade: [], scoringSource: [], eligibility: [] };
+}
 
 export type FilterOption = [id: string, label: string];
 
@@ -51,9 +63,10 @@ export function matchesFilters(
 ): boolean {
   for (const axis of FILTER_AXES) {
     if (axis === except) continue;
-    const value = filters[axis];
-    if (!value || value === ALL_FILTER) continue;
-    if (!AXIS_MATCH[axis](row, value)) return false;
+    const values = (filters[axis] ?? []).filter((v) => v && v !== ALL_FILTER);
+    if (values.length === 0) continue;
+    // OR within the axis.
+    if (!values.some((v) => AXIS_MATCH[axis](row, v))) return false;
   }
   return true;
 }
@@ -105,14 +118,51 @@ export function allAxisOptions(
   return out;
 }
 
-/** Axes whose current selection no longer exists in their option list. */
+/** Axes holding at least one selection that no longer exists in their option list. */
 export function staleAxes(
   filters: BellCurveFilters,
   options: Record<FilterAxis, FilterOption[]>,
 ): FilterAxis[] {
   return FILTER_AXES.filter((axis) => {
-    const value = filters[axis];
-    if (!value || value === ALL_FILTER) return false;
-    return !options[axis].some(([id]) => id === value);
+    const values = filters[axis] ?? [];
+    if (values.length === 0) return false;
+    const ids = new Set(options[axis].map(([id]) => id));
+    return values.some((v) => !ids.has(v));
   });
+}
+
+/**
+ * ADR-229 — prune (never blanket-reset) selections that became impossible after
+ * another axis changed. Returns the same object when nothing had to change so
+ * callers can bail out of a state update.
+ */
+export function reconcileFilters(
+  filters: BellCurveFilters,
+  options: Record<FilterAxis, FilterOption[]>,
+): { filters: BellCurveFilters; changed: FilterAxis[] } {
+  const changed: FilterAxis[] = [];
+  const next = { ...filters };
+  for (const axis of FILTER_AXES) {
+    const values = filters[axis] ?? [];
+    if (values.length === 0) continue;
+    const ids = new Set(options[axis].map(([id]) => id));
+    const kept = values.filter((v) => ids.has(v));
+    if (kept.length !== values.length) {
+      next[axis] = kept;
+      changed.push(axis);
+    }
+  }
+  return { filters: changed.length ? next : filters, changed };
+}
+
+/** Human-readable summary of one axis for export headers. */
+export function axisSummary(
+  values: string[],
+  options: FilterOption[],
+  maxNames = 2,
+): string {
+  if (!values || values.length === 0) return 'All';
+  const labelById = new Map(options.map(([id, label]) => [id, label]));
+  if (values.length <= maxNames) return values.map((v) => labelById.get(v) ?? v).join(', ');
+  return `${values.length} selected`;
 }
