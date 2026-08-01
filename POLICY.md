@@ -5606,6 +5606,8 @@ Rules:
 
 12. **Review form viewer layout (ADR-218f, 2026-08-01).** The read-only "Submitted review form" dialog opened from a drill-down row renders at `w-[96vw] max-w-[1400px]` and presents every reviewer stage as **columns of a single table** (one row per criterion, tfoot rows for stage score and overall remark), so Self / Dept Head / BU Head ratings are comparable side by side. Column order is the canonical `STAGE_ORDER`; stages with no response render em-dash cells rather than being hidden. Per-criterion remarks are exposed through an icon + tooltip **and** a keyboard-reachable "Criterion remarks" list — never hover-only. Below `md` the stacked per-stage cards are retained. Presentation only: same `useInstanceReviewForm` payload, no schema, RPC, RLS or scoring change.
 
+13. **Single calibration surface (ADR-218h, 2026-08-01).** Rating calibration happens in exactly one place: the Bell Curve heat map drill-down "Calibrate" action, backed by the ADR-220 admin-gated RPCs (`admin_calibrate_final_rating` / `admin_bulk_calibrate_final_rating` / clear), which require a reason and write an audit row. The legacy Annual Review Admin **Calibration** tab and its free-text `final_rating` override are removed; `useOverrideRating` is deprecated and must not be re-mounted in the UI.
+
 **Guard.** `src/test/annualReview/bellCurve.test.ts` (24 cases), `src/test/annualReview/bellCurveDrilldown.test.ts` (6 cases).
 
 ---
