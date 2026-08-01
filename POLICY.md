@@ -5631,6 +5631,8 @@ Rules:
 
 **Guard.** `src/test/annualReview/effectiveEligibility.test.ts` (17 cases), `src/test/annualReview/exemptionPolicy.test.ts` (5 cases), `src/test/annualReview/bulkExemption.test.ts` (8 cases).
 
+9. **Bulk apply must never fail on internal naming (2026-08-01).** `bulk_exempt_eligibility_criterion` exposes OUT columns (`instance_id`, `employee_id`, …) that shadow table columns inside PL/pgSQL. Its exemption upsert therefore infers the conflict by constraint name (`ON CONFLICT ON CONSTRAINT ar_elig_exemption_unique`), never by column list. Any future edit to this function must preserve that, otherwise Apply fails with `column reference "instance_id" is ambiguous` while the dry-run preview still succeeds.
+
 ---
 
 ## §AR-RECOMMENDATION-TRACKING (ADR-226)
