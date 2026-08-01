@@ -14,6 +14,7 @@ import { PropagationPreviewDialog } from '@/components/admin/PropagationPreviewD
 
 import { useBatchInsertAuditLogs } from '@/hooks/useOrgKpiAuditLog';
 import { useRollbackOrgKpiPropagation, useBulkRollbackOrgKpiPropagation } from '@/hooks/useRollbackOrgKpiPropagation';
+import { useOrgKpiMasterChildDrift } from '@/hooks/useOrgKpiMasterChildDrift';
 import { OrgLevelScope } from '@/hooks/useKpis';
 import { supabase } from '@/integrations/supabase/client';
 // useQueryClient imported above with useQuery
