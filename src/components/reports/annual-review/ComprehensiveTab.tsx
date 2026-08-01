@@ -465,7 +465,7 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
                   <TableCell className="text-sm">{r.department_name ?? '—'}</TableCell>
                   <TableCell className="text-sm">{r.business_unit_name ?? '—'}</TableCell>
                   <TableCell className="text-sm">{r.grade ?? '—'}</TableCell>
-                  <TableCell className="text-sm">{eligibilityLabel(r)}</TableCell>
+                  <TableCell className="text-sm">{reportEligibilityLabel(r, ratingOf(r).eligibilityStatus)}</TableCell>
                   {/* ADR-179 — show the normalised /5 rating (KRA-derived when
                       the template has no criteria) instead of a blank cell. */}
                   <TableCell className="text-right tabular-nums">{r.self_rating_5?.toFixed(2) ?? r.self_score?.toFixed(2) ?? '—'}</TableCell>
@@ -473,9 +473,36 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
                   <TableCell className="text-right tabular-nums">{r.bu_head_rating_5?.toFixed(2) ?? r.bu_head_score?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.hr_rating_5?.toFixed(2) ?? r.hr_score?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">{r.total_score?.toFixed(2) ?? '—'}</TableCell>
-                  <TableCell className="text-sm">{r.final_rating ?? '—'}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatRating5(toRatingOutOf5(r.total_score))}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatSlabPercent(resolveSlabPercent(toRatingOutOf5(r.total_score), slabs))}</TableCell>
+                  <TableCell className="text-sm">{effectiveBandLabel(r) ?? '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    <span className="inline-flex items-center justify-end gap-1">
+                      {formatRating5(ratingOf(r).effectiveRating)}
+                      {ratingOf(r).isCalibrated && (
+                        <Badge
+                          variant="secondary"
+                          className="px-1 py-0 text-[10px]"
+                          title={`Computed ${formatRating5(ratingOf(r).computedRating)} → calibrated ${formatRating5(ratingOf(r).effectiveRating)}`
+                            + (ratingOf(r).calibrationReason ? ` · ${ratingOf(r).calibrationReason}` : '')}
+                        >
+                          Cal
+                        </Badge>
+                      )}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    <span className="inline-flex items-center justify-end gap-1">
+                      {formatSlabPercent(ratingOf(r).slabPercent)}
+                      {ratingOf(r).capApplied && (
+                        <Badge
+                          variant="outline"
+                          className="px-1 py-0 text-[10px]"
+                          title={`Before exemption penalty: ${formatSlabPercent(ratingOf(r).rawSlabPercent)} · ${penaltyNote}`}
+                        >
+                          Capped
+                        </Badge>
+                      )}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-sm whitespace-nowrap">
                     {r.scoring_mode ?? '—'}
                     {(r.kra_weight ?? 0) > 0 && (
