@@ -7884,3 +7884,11 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Tests / mock data: `src/services/annualReview/__tests__/recommendations.test.ts` includes a realistic legacy queue row and guards both the 1,077-row paginated total and RPC schema-error propagation.
 - Rollback: restore the prior function migration and UI state; this correction is non-destructive and does not alter historical records.
 - Policy: POLICY.md §AR-RECOMMENDATION-TRACKING item 14.
+
+### v2.66.228 (2026-08-01 — ADR-226: Excel download for the recommendation queue)
+- UI: the Recommendations tab's single "Export page" button is now an **Export** dropdown — *Current page (Excel)*, *All filtered rows (Excel)*, *Current page (CSV)* (CSV preserved for existing habits). The trigger shows a spinner and is disabled while a full export runs.
+- Logic: new SSOT module `src/lib/annualReview/recommendationExport.ts` — `RECOMMENDATION_EXPORT_COLUMNS` (locked order, mirrors the CSV header), pure `buildRecommendationRows` / `buildRecommendationWorkbook` / `describeRecommendationFilters`, plus `fetchAllRecommendationRows` which pages `ar_recommendation_queue` at 500 rows/batch up to `MAX_RECOMMENDATION_EXPORT_ROWS = 50_000`. Progress and cap state are surfaced by toast; failures toast the backend message instead of emitting an empty file.
+- Scale / data: read-only; no schema, RLS or RPC change. Uses the existing `xlsx` (SheetJS) dependency — no new packages. Filters and RLS are honoured because the export reuses the queue RPC as the single data path.
+- Tests: `src/test/annualReview/recommendationExcelExport.test.ts` (5 cases — locked columns, amount/status/type formatting, narrative whitespace collapse, legacy vs form provenance, empty set, filter-note stamping).
+- Rollback: delete the module and restore the single CSV button; additive change only.
+- Policy: POLICY.md §AR-RECOMMENDATION-TRACKING item 15.
