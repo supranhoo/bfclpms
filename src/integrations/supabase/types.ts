@@ -2166,6 +2166,182 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_recommendation_items: {
+        Row: {
+          created_at: string
+          id: string
+          recommendation_id: string
+          type_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          recommendation_id: string
+          type_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          recommendation_id?: string
+          type_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_recommendation_items_recommendation_id_fkey"
+            columns: ["recommendation_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_recommendations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_recommendation_items_type_id_fkey"
+            columns: ["type_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_recommendation_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      annual_review_recommendation_types: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          is_monetary: boolean
+          key: string
+          label: string
+          requires_amount: boolean
+          requires_target_role: boolean
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_monetary?: boolean
+          key: string
+          label: string
+          requires_amount?: boolean
+          requires_target_role?: boolean
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          is_monetary?: boolean
+          key?: string
+          label?: string
+          requires_amount?: boolean
+          requires_target_role?: boolean
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      annual_review_recommendations: {
+        Row: {
+          amount_kind: string | null
+          amount_value: number | null
+          approved_amount_kind: string | null
+          approved_amount_value: number | null
+          created_at: string
+          cycle_id: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_reason: string | null
+          effective_from: string | null
+          employee_id: string
+          id: string
+          instance_id: string
+          narrative: string | null
+          proposed_designation_id: string | null
+          proposed_grade_id: string | null
+          reviewer_id: string | null
+          reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+          source: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount_kind?: string | null
+          amount_value?: number | null
+          approved_amount_kind?: string | null
+          approved_amount_value?: number | null
+          created_at?: string
+          cycle_id: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_reason?: string | null
+          effective_from?: string | null
+          employee_id: string
+          id?: string
+          instance_id: string
+          narrative?: string | null
+          proposed_designation_id?: string | null
+          proposed_grade_id?: string | null
+          reviewer_id?: string | null
+          reviewer_role: Database["public"]["Enums"]["annual_reviewer_role"]
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_kind?: string | null
+          amount_value?: number | null
+          approved_amount_kind?: string | null
+          approved_amount_value?: number | null
+          created_at?: string
+          cycle_id?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_reason?: string | null
+          effective_from?: string | null
+          employee_id?: string
+          id?: string
+          instance_id?: string
+          narrative?: string | null
+          proposed_designation_id?: string | null
+          proposed_grade_id?: string | null
+          reviewer_id?: string | null
+          reviewer_role?: Database["public"]["Enums"]["annual_reviewer_role"]
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_recommendations_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_cycles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_recommendations_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_instances"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_recommendations_proposed_designation_id_fkey"
+            columns: ["proposed_designation_id"]
+            isOneToOne: false
+            referencedRelation: "designations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "annual_review_recommendations_proposed_grade_id_fkey"
+            columns: ["proposed_grade_id"]
+            isOneToOne: false
+            referencedRelation: "pms_grades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       annual_review_rescore_audit_2026_07: {
         Row: {
           created_at: string
@@ -15584,6 +15760,11 @@ export type Database = {
       }
       ar_can_approve_eligibility_exemption: {
         Args: { _user: string }
+        Returns: boolean
+      }
+      ar_can_decide_recommendation: { Args: never; Returns: boolean }
+      ar_can_view_recommendation: {
+        Args: { p_instance_id: string }
         Returns: boolean
       }
       ar_eligibility_evaluate: {
