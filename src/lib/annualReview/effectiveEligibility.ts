@@ -85,6 +85,11 @@ export interface ExemptionRecord {
   reason?: string | null;
   decision_note?: string | null;
   decided_at?: string | null;
+  /** ADR-224 — provenance: manual request vs bulk criterion run. */
+  source?: 'manual' | 'bulk' | string | null;
+  bulk_run_id?: string | null;
+  penalty_from_percent?: number | null;
+  penalty_to_percent?: number | null;
 }
 
 export function normaliseQuestion(name: string | null | undefined): string {
