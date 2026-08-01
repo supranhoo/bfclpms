@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, FileText, Loader2, Settings2, Lightbulb } from 'lucide-react';
+import { Download, FileText, Loader2, Settings2, Lightbulb, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchComprehensiveReport, type ComprehensiveRow } from '@/services/annualReview/comprehensiveReport';
@@ -46,6 +46,7 @@ import { RatingHeatmap } from './bellCurve/RatingHeatmap';
 import { BandEmployeeList } from './bellCurve/BandEmployeeList';
 import { ComplianceChip } from './bellCurve/ComplianceChip';
 import { BellCurveConfigDialog } from './bellCurve/BellCurveConfigDialog';
+import { BulkExemptionDialog } from './bellCurve/BulkExemptionDialog';
 import { exportBellCurveExcel, exportBellCurvePdf } from './bellCurve/bellCurveExport';
 
 const ALL = '__all__';
@@ -107,6 +108,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
   const [scoringSource, setScoringSource] = useState<string>(ALL);
   const [eligibility, setEligibility] = useState<string>(ALL);
   const [configOpen, setConfigOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   // Multi-select drill-down on the heat map, per grouping view.
   const [groupSel, setGroupSel] = useState<Record<GroupKey, string[]>>({
     department: [], business_unit: [], division: [], manager: [],
@@ -227,6 +229,14 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
     slabs: slabs.length > 0 ? slabs : undefined,
     capEnabled: config.exempted_slab_cap_enabled !== false,
     topTiersExcluded: config.exempted_top_tiers_excluded ?? 0,
+    penalty: {
+      mode: config.exemption_penalty_mode ?? 'top_tiers_excluded',
+      stepDownSlabs: config.exemption_penalty_step_down_slabs ?? 1,
+      topTiersExcluded: config.exempted_top_tiers_excluded ?? 0,
+      scope: config.exemption_penalty_scope ?? 'all_slabs',
+      topSlabs: config.exemption_penalty_top_slabs ?? 2,
+      floorPercent: config.exemption_penalty_floor_percent ?? 0,
+    },
   };
   const capNote = capOptions.capEnabled && (capOptions.topTiersExcluded ?? 0) > 0
     ? ` · Exempted: top ${capOptions.topTiersExcluded} tier(s) excluded`
@@ -263,6 +273,11 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
             {canConfigure && !hasTargets && (
               <Button variant="outline" size="sm" className="gap-2" onClick={() => setConfigOpen(true)}>
                 <Settings2 className="h-4 w-4" /> Configure
+              </Button>
+            )}
+            {canManageExemptions && (
+              <Button variant="outline" size="sm" className="gap-2" onClick={() => setBulkOpen(true)}>
+                <Users className="h-4 w-4" /> Bulk exempt
               </Button>
             )}
             <Button
@@ -448,6 +463,23 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
         cycleId={cycleId}
         cycleName={cycleName}
       />
+
+      {canManageExemptions && (
+        <BulkExemptionDialog
+          open={bulkOpen}
+          onOpenChange={setBulkOpen}
+          cycleId={cycleId}
+          cycleName={cycleName}
+          eligMaps={eligMaps}
+          policy={exemptionPolicy}
+          eligibilityByInstance={eligibilityByInstance}
+          rows={(rows as ComprehensiveRow[]).map((r) => ({
+            instance_id: r.instance_id,
+            employee_code: r.employee_code ?? null,
+            employee_name: r.employee_name ?? null,
+          }))}
+        />
+      )}
     </div>
   );
 }
