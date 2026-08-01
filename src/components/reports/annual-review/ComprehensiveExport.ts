@@ -223,6 +223,13 @@ function summaryRows(s: KpiSummary, cycleName: string) {
   ];
 }
 
+/** ADR-230 — effective (calibrated) rating band used by the distribution sheet. */
+function effectiveBandOf(r: ComprehensiveRow, ctx: ReportRatingContext | undefined): string | null {
+  const rr = resolveReportRating(r, ctx ?? {});
+  if (!rr.isCalibrated || rr.effectiveRating == null) return r.final_rating;
+  return resolveFinalRating(rr.effectiveRating * 20);
+}
+
 function groupToSheet(g: GroupSummary[]) {
   return g.map((r) => ({
     Name: r.name,
@@ -259,10 +266,14 @@ export async function downloadComprehensiveWorkbook(input: ExportInput) {
   append('Employees', toEmployeeSheet(
     input.rows, labelMaps, eligMaps, eligColumns, kra,
     input.ratingSlabs ?? DEFAULT_RATING_SLABS,
+    input.ratingContext,
   ));
   // ADR-188 — month-by-month KRA detail for KRA-template employees only.
   append('Monthly KRA Scores', buildMonthlyKraSheet(kra));
-  append('Rating Distribution', ratingDistribution(input.rows));
+  append('Rating Distribution', ratingDistribution(
+    input.rows,
+    input.ratingContext ? (r) => effectiveBandOf(r, input.ratingContext) : undefined,
+  ));
   append('By Department', groupToSheet(input.byDepartment));
   append('By Business Unit', groupToSheet(input.byBusinessUnit));
   append('By Division', groupToSheet(input.byDivision));
