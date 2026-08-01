@@ -7900,3 +7900,12 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Tests: `src/test/annualReview/recommendationFormLink.test.ts` (3 cases — stage_form and legacy_import rows link to a form, missing `instance_id` is flagged).
 - Rollback: remove the state, the dialog mount and the icon button.
 - Policy: POLICY.md §AR-RECOMMENDATION-TRACKING item 16.
+
+### v2.66.230 (2026-08-01 — ADR-218j: overall recommendation is a dedicated row, not a criterion)
+- Bug: the review-form viewer listed a literal `__overall_recommendation` criterion row with "—" scores, and the reviewer's prose was only readable through a speech-bubble tooltip that clipped off the right edge of the dialog.
+- RCA: `buildStageBlocks` derived criterion ids from `criteria_scores` plus every `qualitative_responses` key and filtered only `self_review_fields`; the ADR-226 reserved key shares that map and therefore leaked in as a pseudo-criterion.
+- Fix: `reviewFormView.ts` exports `OVERALL_RECOMMENDATION_KEY`, filters it out of criteria and exposes it as `StageBlock.recommendation`; `StageComparisonTable` renders an **Overall recommendation** footer row with wrapped left-aligned text; criterion tooltips gain `side="left"` + `collisionPadding` so they can never render off-dialog.
+- Scale / data: presentation + pure-builder change. No RPC, RLS, schema or scoring change.
+- Tests: `src/lib/annualReview/reviewFormView.test.ts` (4 cases).
+- Docs: `docs/adr/ADR-218j.md`; Policy: POLICY.md §AR-RECOMMENDATION-TRACKING item 17.
+- Rollback: revert `reviewFormView.ts` and `StageComparisonTable.tsx`.
