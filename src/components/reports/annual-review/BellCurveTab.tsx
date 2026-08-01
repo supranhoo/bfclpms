@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,24 +16,27 @@ import {
   groupBands,
   heatmapBands,
   makeBanding,
-  matchesEligibility,
-  matchesScoringSource,
   normalizationHints,
   summarize,
   SCORING_SOURCE_LABELS,
-  SCORING_SOURCE_ORDER,
-  scoringSourceOf,
   type BandMode,
   type BandRow,
   type BellCurveInput,
   type GroupKey,
   type ScoringSource,
 } from '@/lib/annualReview/bellCurve';
+import {
+  allAxisOptions,
+  matchesFilters,
+  staleAxes,
+  type BellCurveFilters,
+  type FilterAxis,
+} from '@/lib/annualReview/bellCurveFilters';
 import { useBellCurveConfig } from '@/hooks/useBellCurveConfig';
 import { useAnnualReviewRatingSlabs } from '@/hooks/useAnnualReviewRatingSlabs';
 import { fetchTemplateEligibilityMaps } from '@/services/annualReview/eligibilityReportColumns';
 import {
-  ELIGIBILITY_STATUS_LABELS, ELIGIBILITY_STATUS_ORDER, resolveEligibility,
+  resolveEligibility,
   type EffectiveEligibility, type EligibilityStatus,
 } from '@/lib/annualReview/effectiveEligibility';
 import {
@@ -117,29 +120,11 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
   });
   const selectedIds = groupSel[view];
 
-  const options = useMemo(() => {
-    const pick = (get: (r: ComprehensiveRow) => [string | null, string | null]) => {
-      const map = new Map<string, string>();
-      for (const r of rows) {
-        const [id, name] = get(r);
-        if (id) map.set(id, name ?? 'Unnamed');
-      }
-      return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-    };
-    return {
-      bu: pick((r) => [r.business_unit_id, r.business_unit_name]),
-      dept: pick((r) => [r.department_id, r.department_name]),
-      manager: pick((r) => [r.manager_id, r.manager_name]),
-      division: pick((r) => [r.division_id, r.division_name]),
-      grade: pick((r) => [r.grade, r.grade]),
-      scoringSource: SCORING_SOURCE_ORDER
-        .filter((s) => rows.some((r) => scoringSourceOf(r as BellCurveInput) === s))
-        .map((s) => [s, SCORING_SOURCE_LABELS[s]] as [string, string]),
-    };
-  }, [rows]);
-
-  const filtered = useMemo<BellCurveInput[]>(() => {
-    // Attach effective eligibility to every row before any filtering.
+  /**
+   * Eligibility-annotated, manager-scoped rows — the shared base for both the
+   * filtered set and the cascading option lists (ADR-218i).
+   */
+  const baseRows = useMemo<BellCurveInput[]>(() => {
     let base: BellCurveInput[] = (rows as ComprehensiveRow[]).map((r) => {
       const res = resolveEligibility({
         criteria: r.template_id ? eligMaps[r.template_id] : undefined,
@@ -158,16 +143,34 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
     if (isManagerScope && user?.id) {
       base = base.filter((r) => r.manager_id === user.id);
     }
-    return base.filter((r) =>
-      (bu === ALL || r.business_unit_id === bu)
-      && (dept === ALL || r.department_id === dept)
-      && (manager === ALL || r.manager_id === manager)
-      && (division === ALL || r.division_id === division)
-      && (pmsGrade === ALL || r.grade === pmsGrade)
-      && matchesEligibility(r, eligibility === ALL ? null : (eligibility as EligibilityStatus))
-      && matchesScoringSource(r, scoringSource === ALL ? null : (scoringSource as ScoringSource)));
-  }, [rows, eligMaps, exemptions, exemptionPolicy, cycleId, isManagerScope, user?.id,
-    bu, dept, manager, division, pmsGrade, scoringSource, eligibility]);
+    return base;
+  }, [rows, eligMaps, exemptions, exemptionPolicy, cycleId, isManagerScope, user?.id]);
+
+  const filters = useMemo<BellCurveFilters>(() => ({
+    bu, dept, manager, division, grade: pmsGrade, scoringSource, eligibility,
+  }), [bu, dept, manager, division, pmsGrade, scoringSource, eligibility]);
+
+  /** ADR-218i — each axis lists only values available under the other filters. */
+  const options = useMemo(() => allAxisOptions(baseRows, filters), [baseRows, filters]);
+
+  const setByAxis: Record<FilterAxis, (v: string) => void> = {
+    bu: setBu, dept: setDept, manager: setManager, division: setDivision,
+    grade: setPmsGrade, scoringSource: setScoringSource, eligibility: setEligibility,
+  };
+
+  // Reconcile selections that became impossible after another filter changed.
+  useEffect(() => {
+    const stale = staleAxes(filters, options);
+    if (stale.length === 0) return;
+    for (const axis of stale) setByAxis[axis](ALL);
+    setGroupSel({ department: [], business_unit: [], division: [], manager: [] });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters, options]);
+
+  const filtered = useMemo<BellCurveInput[]>(
+    () => baseRows.filter((r) => matchesFilters(r, filters)),
+    [baseRows, filters],
+  );
 
   /** Full eligibility detail for the drill-down / exemption dialog. */
   const eligibilityByInstance = useMemo(() => {
@@ -329,8 +332,7 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
               ['Division / Location', division, setDivision, options.division],
               ['PMS Grade', pmsGrade, setPmsGrade, options.grade],
               ['Scoring Source (KRA)', scoringSource, setScoringSource, options.scoringSource],
-              ['Eligibility', eligibility, setEligibility,
-                ELIGIBILITY_STATUS_ORDER.map((s) => [s, ELIGIBILITY_STATUS_LABELS[s]] as [string, string])],
+              ['Eligibility', eligibility, setEligibility, options.eligibility],
             ] as const).map(([label, value, setter, opts]) => (
               <div key={label} className="space-y-1">
                 <Label className="text-xs">{label}</Label>
