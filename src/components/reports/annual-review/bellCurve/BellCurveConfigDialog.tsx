@@ -3,16 +3,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { BAND_LABELS, BAND_ORDER, targetsSum, validateConfig, type BellCurveConfig } from '@/lib/annualReview/bellCurve';
-import {
-  DEFAULT_RATING_SLABS,
-  applyExemptionPenalty,
-  formatSlabPercent,
-} from '@/lib/annualReview/ratingSlab';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAnnualReviewRatingSlabs } from '@/hooks/useAnnualReviewRatingSlabs';
 import { useSaveBellCurveConfig } from '@/hooks/useBellCurveConfig';
 
 const FIELD: Record<number, keyof BellCurveConfig> = {
@@ -31,7 +23,6 @@ export function BellCurveConfigDialog({
   const [draft, setDraft] = useState<BellCurveConfig>(config);
   const [scopeCycle, setScopeCycle] = useState(false);
   const save = useSaveBellCurveConfig();
-  const { data: slabs = [] } = useAnnualReviewRatingSlabs();
 
   useEffect(() => {
     if (open) {
@@ -45,23 +36,6 @@ export function BellCurveConfigDialog({
 
   const sum = targetsSum(draft);
   const error = validateConfig(draft);
-  const activeSlabs = slabs.length > 0 ? slabs : DEFAULT_RATING_SLABS;
-  const penaltyRule = {
-    mode: draft.exempted_penalty_mode ?? 'top_tiers_excluded',
-    stepDownSlabs: draft.exempted_step_down_slabs ?? 1,
-    topTiersExcluded: draft.exempted_top_tiers_excluded ?? 0,
-    scope: draft.exempted_penalty_scope ?? 'all_slabs',
-    topSlabs: draft.exempted_penalty_top_slabs ?? 2,
-    floorPercent: draft.exempted_penalty_floor_percent ?? 0,
-  } as const;
-  const previewRows = [...activeSlabs]
-    .filter((s) => s.is_active !== false)
-    .sort((a, b) => b.rating_from - a.rating_from)
-    .map((s) => {
-      const from = Number(s.increment_percent);
-      const res = applyExemptionPenalty(from, activeSlabs, penaltyRule);
-      return { from, to: res.percent ?? from, applied: res.applied };
-    });
 
   const onSave = async () => {
     if (error) { toast.error(error); return; }
