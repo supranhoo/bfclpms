@@ -396,7 +396,7 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <RatingDistributionChart rows={rows} />
+        <RatingDistributionChart rows={rows} ratingLabelOf={effectiveBandLabel} />
         <Card><CardHeader className="pb-2"><CardTitle className="text-base">Stage split</CardTitle></CardHeader>
           <CardContent className="p-0 overflow-x-auto"><GroupTable rows={byStage} /></CardContent>
         </Card>
