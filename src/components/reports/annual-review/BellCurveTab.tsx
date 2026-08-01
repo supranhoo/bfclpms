@@ -18,12 +18,10 @@ import {
   makeBanding,
   normalizationHints,
   summarize,
-  SCORING_SOURCE_LABELS,
   type BandMode,
   type BandRow,
   type BellCurveInput,
   type GroupKey,
-  type ScoringSource,
 } from '@/lib/annualReview/bellCurve';
 import {
   allAxisOptions,
@@ -55,8 +53,6 @@ import { BellCurveConfigDialog } from './bellCurve/BellCurveConfigDialog';
 import { ExemptionPenaltyDialog } from './bellCurve/ExemptionPenaltyDialog';
 import { BulkExemptionDialog } from './bellCurve/BulkExemptionDialog';
 import { exportBellCurveExcel, exportBellCurvePdf } from './bellCurve/bellCurveExport';
-
-const ALL = '__all__';
 
 /** ADR-229 — label + axis for each cascading multi-select filter, in render order. */
 const FILTER_FIELDS: ReadonlyArray<readonly [string, FilterAxis]> = [
