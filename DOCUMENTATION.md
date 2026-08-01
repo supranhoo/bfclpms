@@ -7866,3 +7866,13 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Service/hooks: `src/services/annualReview/recommendations.ts`, `src/hooks/useAnnualReviewRecommendations.ts`.
 - Tests: `src/services/annualReview/__tests__/recommendations.test.ts` (4 cases — percent/absolute formatting, unset edge cases, status label coverage).
 - Docs: `docs/adr/ADR-226.md`; Policy: POLICY.md §AR-RECOMMENDATION-TRACKING.
+
+### v2.66.226 (2026-08-02 — ADR-226 Phase 2: legacy recommendation classification, import & cost report)
+- Schema: `annual_review_recommendation_keywords` (configurable pattern → type rules with weights) and `annual_review_recommendation_import_runs` (per-run audit: actor, dry-run flag, scanned/created/updated/skipped/needs-classification counts, type breakdown, rollback state). GRANTs + RLS on both; write access limited to `ar_can_decide_recommendation()`.
+- RPCs: `ar_backfill_legacy_recommendations(p_cycle_id, p_dry_run, p_limit)` (idempotent classifier over `annual_review_responses -> __overall_recommendation`, rupee/percent amount extraction, confidence gate at weight >= 3), `ar_rollback_recommendation_import(p_run_id)` (undecided imported rows only), `ar_reclassify_recommendation(p_recommendation_id, p_type_keys, p_amount_kind, p_amount_value)`. `ar_recommendation_queue` extended with `p_source`.
+- Logic SSOT: `src/lib/annualReview/recommendationClassifier.ts` mirrors the SQL classifier for UI preview and tests.
+- Service/hooks: `src/services/annualReview/recommendationImport.ts`, `src/hooks/useRecommendationImport.ts`; `RecommendationQueueRow.source` and the `source` filter added to `src/services/annualReview/recommendations.ts`.
+- UI: `LegacyImportDialog.tsx` (dry-run preview with sample rows and type breakdown, commit, run history, rollback behind `ConfirmDestructiveDialog`), `RecommendationKeywordRulesCard.tsx` (rule CRUD + activation), `ReclassifyDialog.tsx` (HR correction of auto-classified rows). `RecommendationsTab.tsx` gains a Source filter, a "Legacy" badge, a Classify action on `needs_classification` rows and a Source column in the CSV export.
+- Report: **RPT-REC-001 — Recommendation & Cost Roll-up** at `/reports/recommendations` (`src/pages/reports/RecommendationsReport.tsx`), server-paginated at 50/page via the same queue RPC; registered in `catalog.ts`, `accessCatalog.ts` (Admin / HR PMS / Management view; Admin / HR PMS download), `ReportsHub.tsx` and `App.tsx`.
+- Tests: `src/test/annualReview/recommendationClassifier.test.ts` (14 cases — rupee/lakh/percent parsing, confident vs weak classification, multi-type detection, malformed-pattern resilience).
+- Docs: `docs/adr/ADR-226.md` (Phase 2 section); Policy: POLICY.md §AR-RECOMMENDATION-TRACKING items 9–13.
