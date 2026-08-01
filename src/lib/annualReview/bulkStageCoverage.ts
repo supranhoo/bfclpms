@@ -35,6 +35,12 @@ export interface StageCoverageOptions {
   allowCompletedUpgrades?: boolean;
   /** ADR-186 — apply monotonic upgrades to mid-workflow rows. */
   allowMidWorkflowUpgrades?: boolean;
+  /**
+   * ADR-225 — admin correction mode. Does NOT change which rows are covered;
+   * it only relaxes the per-cell monotonic guard so a corrected value may
+   * lower a stored score. Routing at commit time picks the correction RPC.
+   */
+  allowDowngrades?: boolean;
 }
 
 /** Statuses the uploader may write to directly (no reviewer has locked yet). */
