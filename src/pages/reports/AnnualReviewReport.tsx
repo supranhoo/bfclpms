@@ -35,6 +35,7 @@ import {
   effectiveSlabPercent, isSlabCapped, resolveEligibility, type SlabCapOptions,
 } from '@/lib/annualReview/effectiveEligibility';
 import { effectiveRating } from '@/lib/annualReview/effectiveRating';
+import { buildSlabCapOptions } from '@/lib/annualReview/reportRating';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { CalibrateRatingDialog, type CalibrationTarget } from '@/components/annual-review/CalibrateRatingDialog';
@@ -91,11 +92,9 @@ export default function AnnualReviewReport() {
     staleTime: 5 * 60_000,
     queryFn: () => fetchTemplateEligibilityMaps(templateIds),
   });
-  const capOptions: SlabCapOptions = {
-    slabs,
-    capEnabled: bellCurveConfig?.exempted_slab_cap_enabled !== false,
-    topTiersExcluded: bellCurveConfig?.exempted_top_tiers_excluded ?? 0,
-  };
+  // ADR-230 — one builder shared with the Bell Curve and Comprehensive tabs so
+  // the ADR-224 penalty rule (not just the legacy cap) applies here too.
+  const capOptions: SlabCapOptions = buildSlabCapOptions(bellCurveConfig, slabs);
   const eligibilityStatusFor = (i: InstanceWithEmployee) => resolveEligibility({
     criteria: eligMaps[(i.template_override_id ?? i.template_id) as string],
     inputs: i.eligibility_inputs ?? undefined,

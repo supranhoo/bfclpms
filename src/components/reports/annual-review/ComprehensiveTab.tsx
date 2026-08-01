@@ -31,6 +31,22 @@ import {
   formatRating5,
   formatSlabPercent,
 } from '@/lib/annualReview/ratingSlab';
+// ADR-230 — calibration + eligibility/exemption aware rating & slab.
+import {
+  buildSlabCapOptions,
+  reportEligibilityLabel,
+  resolveReportRating,
+  type ReportRating,
+  type ReportRatingContext,
+} from '@/lib/annualReview/reportRating';
+import { resolveFinalRating } from '@/lib/annualReview/finalScoreScale';
+import { useAnnualReviewCalibrations } from '@/hooks/useAnnualReviewCalibrations';
+import {
+  useEligibilityExemptionPolicy, useEligibilityExemptions,
+} from '@/hooks/annualReview/useEligibilityExemptions';
+import { useBellCurveConfig } from '@/hooks/useBellCurveConfig';
+import { fetchTemplateEligibilityMaps } from '@/services/annualReview/eligibilityReportColumns';
+import { describeExemptionPenalty, exemptionPenaltyFor } from '@/lib/annualReview/effectiveEligibility';
 
 function KpiCard({ label, value, tone }: { label: string; value: number | string; tone?: 'muted' | 'ok' | 'warn' | 'bad' }) {
   const toneCls = tone === 'ok' ? 'text-emerald-600'
@@ -92,6 +108,55 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
   const { data: slabs } = useAnnualReviewRatingSlabs();
   const [rcaSearch, setRcaSearch] = useState('101784');
 
+  // ADR-230 — the same calibration + exemption context the Bell Curve and the
+  // Detail tab use, so all three report one number per employee.
+  const { data: bellCurveConfig } = useBellCurveConfig(cycleId);
+  const { data: calibrations = {} } = useAnnualReviewCalibrations(rows.map((r) => r.instance_id));
+  const { data: exemptions = {} } = useEligibilityExemptions(cycleId);
+  const { data: exemptionPolicy = [] } = useEligibilityExemptionPolicy();
+  const templateIds = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.template_id).filter(Boolean) as string[])),
+    [rows],
+  );
+  const { data: criteriaMaps = {} } = useQuery({
+    queryKey: ['ar-comprehensive-template-eligibility', templateIds.slice().sort().join(',')],
+    enabled: templateIds.length > 0,
+    staleTime: 5 * 60_000,
+    queryFn: () => fetchTemplateEligibilityMaps(templateIds),
+  });
+
+  const ratingCtx = useMemo<ReportRatingContext>(() => ({
+    slabs,
+    capOptions: buildSlabCapOptions(bellCurveConfig, slabs),
+    calibrations,
+    exemptions,
+    policy: exemptionPolicy,
+    criteriaMaps,
+  }), [slabs, bellCurveConfig, calibrations, exemptions, exemptionPolicy, criteriaMaps]);
+
+  /** instance_id → resolved effective rating / slab %. */
+  const ratings = useMemo(() => {
+    const out = new Map<string, ReportRating>();
+    for (const r of rows) out.set(r.instance_id, resolveReportRating(r, ratingCtx));
+    return out;
+  }, [rows, ratingCtx]);
+  const ratingOf = (r: ComprehensiveRow): ReportRating =>
+    ratings.get(r.instance_id) ?? resolveReportRating(r, ratingCtx);
+
+  /** Effective rating band label — calibrated rows re-band (ADR-220). */
+  const effectiveBandLabel = (r: ComprehensiveRow): string | null => {
+    const rr = ratingOf(r);
+    if (!rr.isCalibrated || rr.effectiveRating == null) return r.final_rating;
+    return resolveFinalRating(rr.effectiveRating * 20);
+  };
+
+  const penaltyNote = useMemo(() => {
+    const opts = ratingCtx.capOptions;
+    if (!opts || opts.capEnabled === false) return 'Exemption penalty: disabled';
+    const sample = exemptionPenaltyFor(20, 'exempted', opts);
+    return `Exemption penalty: ${describeExemptionPenalty(sample)}`;
+  }, [ratingCtx]);
+
   const rcaRow = useMemo<ComprehensiveRow | null>(() => {
     const q = rcaSearch.trim().toLowerCase();
     if (!q) return null;
@@ -135,6 +200,9 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
         byDesignation: byDesig,
         byStage,
         ratingSlabs: slabs,
+        // ADR-230 — effective (calibrated + exemption-penalised) outcome.
+        ratingContext: ratingCtx,
+        penaltyNote,
       });
     } catch (e) {
       toast.error((e as Error).message);
@@ -206,7 +274,7 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
               { label: 'Division', value: r.division_name ?? '—' },
               { label: 'Grade', value: r.grade ?? '—' },
               { label: 'Date of Joining', value: r.doj ?? '—' },
-              { label: 'Eligibility', value: eligibilityLabel(r) },
+              { label: 'Eligibility', value: reportEligibilityLabel(r, ratingOf(r).eligibilityStatus) },
             ];
 
             const stageRow = (label: string, name: string | null, score: number | null, comment: string | null): Cell[] => [
@@ -241,11 +309,38 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
 
             const systemScoredBanner = isSystemScoredOnly(r);
 
+            const rr = ratingOf(r);
             const outcome: Cell[] = [
               { label: 'Final Score', value: fmt(r.total_score) },
-              { label: 'Final Rating', value: r.final_rating ?? '—' },
-              { label: 'Final Rating (/5)', value: formatRating5(toRatingOutOf5(r.total_score)) },
-              { label: 'Slab %', value: formatSlabPercent(resolveSlabPercent(toRatingOutOf5(r.total_score), slabs)) },
+              { label: 'Final Rating', value: effectiveBandLabel(r) ?? '—' },
+              {
+                label: 'Final Rating (/5)',
+                value: (
+                  <span className="inline-flex items-center gap-2">
+                    {formatRating5(rr.effectiveRating)}
+                    {rr.isCalibrated && <Badge variant="secondary">Calibrated</Badge>}
+                  </span>
+                ),
+              },
+              ...(rr.isCalibrated
+                ? [
+                    { label: 'Computed Rating (/5)', value: formatRating5(rr.computedRating) },
+                    { label: 'Calibration Reason', value: rr.calibrationReason || '—', wide: true },
+                  ]
+                : []),
+              {
+                label: 'Slab %',
+                value: (
+                  <span className="inline-flex items-center gap-2">
+                    {formatSlabPercent(rr.slabPercent)}
+                    {rr.capApplied && <Badge variant="outline">Capped</Badge>}
+                  </span>
+                ),
+              },
+              ...(rr.capApplied
+                ? [{ label: 'Slab % before exemption penalty', value: formatSlabPercent(rr.rawSlabPercent) },
+                   { label: 'Exemption rule', value: penaltyNote, wide: true }]
+                : []),
               { label: 'Current Stage', value: pendingWith(r.overall_status) },
               { label: 'Pending With', value: pending },
               { label: 'Completion Status', value: completionStatus(r.overall_status) },
@@ -282,7 +377,10 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
 
       {/* Executive Summary */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-muted-foreground">Executive Summary — {cycleName}</h3>
+        <h3 className="text-sm font-semibold text-muted-foreground">
+          Executive Summary — {cycleName}
+          <span className="ml-2 font-normal">· {penaltyNote}</span>
+        </h3>
         <Button variant="outline" size="sm" className="gap-2" onClick={onExport}>
           <Download className="h-4 w-4" /> Export full workbook
         </Button>
@@ -301,7 +399,7 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <RatingDistributionChart rows={rows} />
+        <RatingDistributionChart rows={rows} ratingLabelOf={effectiveBandLabel} />
         <Card><CardHeader className="pb-2"><CardTitle className="text-base">Stage split</CardTitle></CardHeader>
           <CardContent className="p-0 overflow-x-auto"><GroupTable rows={byStage} /></CardContent>
         </Card>
@@ -353,8 +451,8 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
               <TableHead className="text-right" title="HR rating on a 0–5 scale.">HR /5</TableHead>
               <TableHead className="text-right">Final</TableHead>
               <TableHead>Rating</TableHead>
-              <TableHead className="text-right" title="Final Score converted to a 5-point rating.">Final Rating (/5)</TableHead>
-              <TableHead className="text-right" title="Increment slab resolved from the /5 rating.">Slab %</TableHead>
+              <TableHead className="text-right" title="Effective 5-point rating — the admin-calibrated value when one exists (ADR-220).">Final Rating (/5)</TableHead>
+              <TableHead className="text-right" title="Effective increment slab — after the ineligible→0% rule and the exemption penalty (ADR-221/222/224).">Slab %</TableHead>
               {/* ADR-174 — how the rating was derived (KRA vs criteria). */}
               <TableHead>Rating Derived</TableHead>
               <TableHead>Stage</TableHead>
@@ -370,7 +468,7 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
                   <TableCell className="text-sm">{r.department_name ?? '—'}</TableCell>
                   <TableCell className="text-sm">{r.business_unit_name ?? '—'}</TableCell>
                   <TableCell className="text-sm">{r.grade ?? '—'}</TableCell>
-                  <TableCell className="text-sm">{eligibilityLabel(r)}</TableCell>
+                  <TableCell className="text-sm">{reportEligibilityLabel(r, ratingOf(r).eligibilityStatus)}</TableCell>
                   {/* ADR-179 — show the normalised /5 rating (KRA-derived when
                       the template has no criteria) instead of a blank cell. */}
                   <TableCell className="text-right tabular-nums">{r.self_rating_5?.toFixed(2) ?? r.self_score?.toFixed(2) ?? '—'}</TableCell>
@@ -378,9 +476,36 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
                   <TableCell className="text-right tabular-nums">{r.bu_head_rating_5?.toFixed(2) ?? r.bu_head_score?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.hr_rating_5?.toFixed(2) ?? r.hr_score?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-right tabular-nums font-medium">{r.total_score?.toFixed(2) ?? '—'}</TableCell>
-                  <TableCell className="text-sm">{r.final_rating ?? '—'}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatRating5(toRatingOutOf5(r.total_score))}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatSlabPercent(resolveSlabPercent(toRatingOutOf5(r.total_score), slabs))}</TableCell>
+                  <TableCell className="text-sm">{effectiveBandLabel(r) ?? '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    <span className="inline-flex items-center justify-end gap-1">
+                      {formatRating5(ratingOf(r).effectiveRating)}
+                      {ratingOf(r).isCalibrated && (
+                        <Badge
+                          variant="secondary"
+                          className="px-1 py-0 text-[10px]"
+                          title={`Computed ${formatRating5(ratingOf(r).computedRating)} → calibrated ${formatRating5(ratingOf(r).effectiveRating)}`
+                            + (ratingOf(r).calibrationReason ? ` · ${ratingOf(r).calibrationReason}` : '')}
+                        >
+                          Cal
+                        </Badge>
+                      )}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    <span className="inline-flex items-center justify-end gap-1">
+                      {formatSlabPercent(ratingOf(r).slabPercent)}
+                      {ratingOf(r).capApplied && (
+                        <Badge
+                          variant="outline"
+                          className="px-1 py-0 text-[10px]"
+                          title={`Before exemption penalty: ${formatSlabPercent(ratingOf(r).rawSlabPercent)} · ${penaltyNote}`}
+                        >
+                          Capped
+                        </Badge>
+                      )}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-sm whitespace-nowrap">
                     {r.scoring_mode ?? '—'}
                     {(r.kra_weight ?? 0) > 0 && (

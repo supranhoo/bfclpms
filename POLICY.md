@@ -5524,6 +5524,20 @@ Rules:
 
 ---
 
+### §AR-REPORT-EFFECTIVE-OUTCOME — One number per employee across every report surface (ADR-230, 2026-08-01)
+
+1. **Effective, not raw.** Every Annual Review report surface that shows a rating or an increment slab MUST show the EFFECTIVE value: the admin-calibrated rating (§AR-CALIBRATION / ADR-220) and the post-eligibility, post-exemption-penalty slab % (§AR-ELIGIBILITY-EXEMPTION / ADR-221/222/224). Deriving a displayed rating or slab directly from `total_score` is a defect.
+2. **Single resolver.** `src/lib/annualReview/reportRating.ts` (`resolveReportRating`) is the only place a report row's outcome is resolved. It composes the existing SSOTs (`effectiveRating`, `resolveEligibility`, `effectiveSlabPercent`) and never re-implements them. New report surfaces consume it; they do not call `toRatingOutOf5` / `resolveSlabPercent` for display.
+3. **Single context builder.** The exemption penalty rule is assembled ONLY by `buildSlabCapOptions(bellCurveConfig, slabs)`, which carries every ADR-224 field (mode, step-down count, scope, top-slab window, floor). Inline `SlabCapOptions` literals are forbidden — they silently drop penalty fields.
+4. **Transparency, not substitution.** Wherever an effective value differs from the computed one, the surface must expose the original: a `Cal` / `Capped` badge with a tooltip on screen, and explicit `Computed Rating (/5)`, `Calibrated Rating`, `Calibration Reason`, `Raw Slab %` and `Exemption Cap Applied` columns in the workbook. Nothing is hidden.
+5. **Distributions follow placement.** Any rating-band distribution (chart or sheet) buckets on the effective band, consistent with §AR-BELL-CURVE / ADR-228.
+6. **Stored data is untouched.** This is a presentation-layer rule. `annual_review_instances.total_score` and `final_rating` remain the raw computed values; calibrations and exemptions stay in their own audited tables.
+7. **Template override wins.** Eligibility questions resolve against `template_override_id ?? template_id` (§AR-TEMPLATE-OVERRIDE / ADR-117).
+
+**Guard.** `src/test/annualReview/reportRating.test.ts`.
+
+---
+
 ## §CHG-HISTORY-SSOT — Master Change History (ADR-213)
 
 1. **Capture is mandatory and automatic.** Business-relevant changes are recorded by database triggers, never by application code: `log_profile_identity_change` (21 employee-detail fields including department, reporting manager, functional manager, grade, level, location, portal access and `is_active`) and `trg_workflow_config_audit` (`log_workflow_config_change`) for workflow-mapping edits. Adding a new business column to `profiles` requires adding it to the trigger's tracked-field list in the same migration.
