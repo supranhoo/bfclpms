@@ -5569,6 +5569,8 @@ Rules:
 
 11. **Heat map cell drill-down (ADR-218c, 2026-07-31).** Every heat map cell with a non-zero count is clickable and expands the list of employees it counts directly beneath that row, in both band modes. The list is derived by `employeesInBand()` from the same `ratedRows` + banding used to compute the cell, so the listed count always equals the displayed count. Only one cell is expanded at a time and the expansion collapses whenever the grouping view, band mode or any filter changes. The panel is read-only (code, name, department, grade, manager, final score, rating /5, slab %), paginated at 25 rows, and its CSV export contains exactly the listed employees. No new query is issued — it reads the dataset the tab already loaded, so row-level visibility is unchanged.
 
+12. **Review form viewer layout (ADR-218f, 2026-08-01).** The read-only "Submitted review form" dialog opened from a drill-down row renders at `w-[96vw] max-w-[1400px]` and presents every reviewer stage as **columns of a single table** (one row per criterion, tfoot rows for stage score and overall remark), so Self / Dept Head / BU Head ratings are comparable side by side. Column order is the canonical `STAGE_ORDER`; stages with no response render em-dash cells rather than being hidden. Per-criterion remarks are exposed through an icon + tooltip **and** a keyboard-reachable "Criterion remarks" list — never hover-only. Below `md` the stacked per-stage cards are retained. Presentation only: same `useInstanceReviewForm` payload, no schema, RPC, RLS or scoring change.
+
 **Guard.** `src/test/annualReview/bellCurve.test.ts` (24 cases), `src/test/annualReview/bellCurveDrilldown.test.ts` (6 cases).
 
 ---

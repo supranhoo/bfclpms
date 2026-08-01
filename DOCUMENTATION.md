@@ -7836,3 +7836,10 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - UI: penalty rule editor with live per-slab preview in `BellCurveConfigDialog.tsx`; **Bulk exempt** toolbar action in `BellCurveTab.tsx` opening `BulkExemptionDialog.tsx` (dry-run preview, run history, destructive-confirm revoke); `ExemptionImpactPopover.tsx` in the drill-down grid plus `Exemption Source` / `Exemption Impact` CSV columns in `BandEmployeeList.tsx`.
 - Tests: `src/test/annualReview/bulkExemption.test.ts` (8 cases — threshold match, sole-failure gate, protected criteria, step-down, floor clamp, none-mode).
 - Docs: `docs/adr/ADR-224.md`; Policy: POLICY.md §AR-ELIGIBILITY-EXEMPTION item 8.
+
+### v2.66.222 (2026-08-01 — ADR-218f: wide review-form viewer with side-by-side reviewer matrix)
+- `src/lib/annualReview/reviewFormView.ts`: new pure builder `buildStageMatrix()` pivoting stage blocks into stage columns × criterion rows (canonical `STAGE_ORDER`, unknown criterion ids appended by raw id).
+- New `src/components/annual-review/StageComparisonTable.tsx`: sticky criterion column, per-stage header (label / reviewer / submitted date), tooltip + collapsible list for criterion remarks, tfoot stage score and overall remark rows.
+- `src/components/annual-review/ReviewFormViewerDialog.tsx`: dialog widened to `w-[96vw] max-w-[1400px]`; matrix on `md+`, stacked per-stage cards retained below `md`.
+- Tests: `src/test/annualReview/reviewFormView.test.ts` (+3 cases — pivot, missing stage columns, unknown criterion naming).
+- Docs: `docs/adr/ADR-218f.md`; Policy: POLICY.md §AR-BELL-CURVE item 12. No schema, RPC, RLS or scoring change.
