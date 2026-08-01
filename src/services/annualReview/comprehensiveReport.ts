@@ -212,12 +212,20 @@ export function groupBy(
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function ratingDistribution(rows: ComprehensiveRow[]): Array<{ rating: string; count: number; pct: number }> {
+export function ratingDistribution(
+  rows: ComprehensiveRow[],
+  /**
+   * ADR-230 — optional override so the chart/sheet can bucket on the
+   * *effective* (calibrated) rating band. Omitted ⇒ legacy behaviour.
+   */
+  ratingLabelOf?: (row: ComprehensiveRow) => string | null | undefined,
+): Array<{ rating: string; count: number; pct: number }> {
   const map = new Map<string, number>();
   let denom = 0;
   for (const r of rows) {
     if (r.is_excluded) continue;
-    const key = r.final_rating?.trim() || 'Unrated';
+    const label = ratingLabelOf ? ratingLabelOf(r) : r.final_rating;
+    const key = label?.trim() || 'Unrated';
     map.set(key, (map.get(key) ?? 0) + 1);
     denom++;
   }
