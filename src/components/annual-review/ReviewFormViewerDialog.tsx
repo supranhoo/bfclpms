@@ -17,7 +17,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ExternalLink, FileText } from 'lucide-react';
 import { useInstanceReviewForm } from '@/hooks/annualReview/useInstanceReviewForm';
 import { ScoreBreakdownCard } from '@/components/annual-review/ScoreBreakdownCard';
-import { buildStageBlocks, buildSystemScoreRows } from '@/lib/annualReview/reviewFormView';
+import { buildStageMatrix, buildSystemScoreRows } from '@/lib/annualReview/reviewFormView';
+import { StageComparisonTable } from '@/components/annual-review/StageComparisonTable';
 import { STATUS_LABEL } from '@/lib/annualReview/constants';
 import {
   DEFAULT_RATING_SLABS, formatRating5, formatSlabPercent, type RatingSlab,
@@ -41,13 +42,14 @@ export function ReviewFormViewerDialog({
   const instance = data?.instance as AnnualReviewInstance | undefined;
   const template = data?.template ?? null;
 
-  const stages = data
-    ? buildStageBlocks({
+  const matrix = data
+    ? buildStageMatrix({
       template,
       responses: data.responses,
       enabledStages: instance?.enabled_stages ?? null,
     })
-    : [];
+    : { stages: [], rows: [] };
+  const stages = matrix.stages;
   const systemRows = buildSystemScoreRows(
     template,
     instance?.system_scores ?? null,
@@ -67,7 +69,7 @@ export function ReviewFormViewerDialog({
 
   return (
     <Dialog open={!!instanceId} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+      <DialogContent className="max-h-[90vh] w-[96vw] max-w-[1400px] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-muted-foreground" />
@@ -153,6 +155,12 @@ export function ReviewFormViewerDialog({
                 <CardTitle className="text-base">Reviewer ratings &amp; remarks</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* md+ : single side-by-side matrix (ADR-218f) */}
+                <div className="hidden md:block">
+                  <StageComparisonTable matrix={matrix} />
+                </div>
+                {/* narrow screens keep the stacked per-stage cards */}
+                <div className="space-y-4 md:hidden">
                 {stages.length === 0 && (
                   <p className="text-sm text-muted-foreground">No reviewer stages recorded.</p>
                 )}
@@ -199,6 +207,7 @@ export function ReviewFormViewerDialog({
                     )}
                   </div>
                 ))}
+                </div>
                 {instance.hr_remarks && (
                   <div className="rounded-md border p-3">
                     <p className="text-xs text-muted-foreground">HR remarks</p>
