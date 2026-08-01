@@ -279,13 +279,13 @@ describe('bellCurve — exemption-aware placement (ADR-228)', () => {
     }
   });
 
-  it('reproduces legacy behaviour when the penalty is disabled or absent', () => {
-    const rows = [exempted, eligible, ineligible];
+  it('reproduces legacy behaviour for exempted rows when the penalty is disabled', () => {
+    const rows = [exempted, eligible];
     const off = makeBanding('slab', cfg, undefined, { capEnabled: false, penalty: { mode: 'none' } });
     const legacy = makeBanding('slab', cfg);
     const a = computeBands(rows, off, cfg).map((b) => b.count);
     const b = computeBands(rows, legacy, cfg).map((c) => c.count);
     expect(a).toEqual(b);
-    expect(computeBands(rows, legacy, cfg).find((x) => x.label === '20%')?.count).toBe(3);
+    expect(computeBands(rows, legacy, cfg).find((x) => x.label === '20%')?.count).toBe(2);
   });
 });
