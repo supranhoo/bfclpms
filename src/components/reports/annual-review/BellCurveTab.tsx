@@ -230,12 +230,12 @@ export function BellCurveTab({ cycleId, cycleName }: { cycleId?: string; cycleNa
     capEnabled: config.exempted_slab_cap_enabled !== false,
     topTiersExcluded: config.exempted_top_tiers_excluded ?? 0,
     penalty: {
-      mode: config.exemption_penalty_mode ?? 'top_tiers_excluded',
-      stepDownSlabs: config.exemption_penalty_step_down_slabs ?? 1,
+      mode: config.exempted_penalty_mode ?? 'top_tiers_excluded',
+      stepDownSlabs: config.exempted_step_down_slabs ?? 1,
       topTiersExcluded: config.exempted_top_tiers_excluded ?? 0,
-      scope: config.exemption_penalty_scope ?? 'all_slabs',
-      topSlabs: config.exemption_penalty_top_slabs ?? 2,
-      floorPercent: config.exemption_penalty_floor_percent ?? 0,
+      scope: config.exempted_penalty_scope ?? 'all_slabs',
+      topSlabs: config.exempted_penalty_top_slabs ?? 2,
+      floorPercent: config.exempted_penalty_floor_percent ?? 0,
     },
   };
   const capNote = capOptions.capEnabled && (capOptions.topTiersExcluded ?? 0) > 0
