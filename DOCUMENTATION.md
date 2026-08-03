@@ -8065,4 +8065,28 @@ answers were additionally suppressed because the row was `completed`.
   badge, per-column breakdown, and the eligibility-correction opt-in with shared
   correction-reason validation.
 - `public.admin_apply_eligibility_inputs_correction` — admin/hr_pms only, reason ≥ 10
-  chars, audited to `annual_review_access_audit` (`eligibility_inputs.admin_correction`).
+  chars, audited to `annual_review_access_audit` with the permitted `admin_edit` action
+  and `after.edit_scope = eligibility_inputs.admin_correction`.
+
+### v2.66.240 — Eligibility pending-state parity and typed bulk correction (2026-08-03)
+
+- RCA follow-up for employee 101715: the governed correction path existed, but the live
+  completed instance still had an empty `eligibility_inputs` object. The Final Outcome
+  resolver also interpreted every missing answer as a failure, contradicting the neutral
+  pending state already shown by `SystemScoresPanel`.
+- `resolveEligibility()` now tracks `missing` criteria separately. Missing-only and
+  otherwise-passing incomplete records are `Not assessed`; supplied failing answers
+  remain `Ineligible`.
+- The Final Outcome card lists pending criterion names, and detail-page evaluation merges
+  deterministic tenure auto-inputs under persisted manual answers.
+- Bulk eligibility values are criterion-typed: `7 Months` parses to `7`, while
+  `0/No/false` parses to boolean false. Unparseable values receive a named cell warning.
+- One-time governed repair for employee 101715 restored the verified values
+  `{absent_days: 0, lwp_days: 0, disciplinary_actions: false, elig_g3dbsuv: 7}`.
+  Verification confirmed `overall_status = completed` and `total_score = 90.70` were
+  unchanged; the repair is recorded in `annual_review_access_audit` as `admin_edit`.
+- Profile self-update defense was strengthened at both layers: the existing trigger and
+  the RLS `WITH CHECK` now lock `pms_grade_id` and `employee_category`, preventing an
+  employee from selecting a higher incentive/increment grade or eligibility category.
+- Regression coverage: `effectiveEligibility.test.ts`,
+  `bulkUploadNoSilentDrop.test.ts`, and the existing System Scores pending-state tests.

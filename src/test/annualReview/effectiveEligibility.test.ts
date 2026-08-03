@@ -74,9 +74,18 @@ describe('ADR-221 effective eligibility', () => {
     expect(r.hasPendingExemption).toBe(true);
   });
 
-  it('missing answer counts as a failure', () => {
+  it('missing answer remains not assessed rather than becoming ineligible', () => {
     const r = resolveEligibility({ criteria: [tenure], inputs: {}, policy });
+    expect(r.status).toBe('unknown');
+    expect(r.missing).toEqual([tenure]);
+    expect(r.blocking).toHaveLength(0);
+  });
+
+  it('a real supplied failure remains ineligible when another answer is missing', () => {
+    const r = resolveEligibility({ criteria: [absent, tenure], inputs: { absent: 9 }, policy });
     expect(r.status).toBe('ineligible');
+    expect(r.blocking).toHaveLength(1);
+    expect(r.missing).toEqual([tenure]);
   });
 
   it('ineligible employees show a 0% slab', () => {

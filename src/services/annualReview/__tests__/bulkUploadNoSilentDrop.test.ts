@@ -17,7 +17,8 @@ vi.mock('@/services/annualReview/annualReviewService', () => ({
   resolveTemplateId: vi.fn(),
 }));
 
-import { parseAndDryRun, downloadBulkTemplate, type CycleBulkPlan } from '../cycleBulkDataUpload';
+import { coerceEligibilityValue, parseAndDryRun, downloadBulkTemplate, type CycleBulkPlan } from '../cycleBulkDataUpload';
+import type { EligibilityCriterion } from '@/types/annualReview';
 
 function makePlan(): CycleBulkPlan {
   return {
@@ -61,6 +62,15 @@ function sheetFile(rows: Array<Record<string, unknown>>): File {
 }
 
 describe('ADR-239 bulk upload transparency', () => {
+  it('normalizes typed eligibility values without losing workbook intent', () => {
+    const months: EligibilityCriterion = { id: 'months', name: '6 Month Completion', type: 'number', operator: 'gte', expected_value: 6 };
+    const disciplinary: EligibilityCriterion = { id: 'disc', name: 'Disciplinary Actions', type: 'boolean', operator: 'equals', expected_value: false };
+    expect(coerceEligibilityValue('7 Months', months)).toEqual({ value: 7 });
+    expect(coerceEligibilityValue(0, disciplinary)).toEqual({ value: false });
+    expect(coerceEligibilityValue('No', disciplinary)).toEqual({ value: false });
+    expect(coerceEligibilityValue('unknown', disciplinary).error).toContain('expected');
+    expect(coerceEligibilityValue('months unknown', months).error).toContain('numeric');
+  });
   it('reports unmapped filled cells instead of dropping them silently', async () => {
     const report = await parseAndDryRun(
       sheetFile([{ 'Employee Code': '101715', 'Annual Production Target Vs Actual': '100%', 'Absent Days': 0 }]),

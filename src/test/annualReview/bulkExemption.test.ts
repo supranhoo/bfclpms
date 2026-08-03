@@ -14,7 +14,7 @@ function elig(blocking: Array<{ id: string; name: string; actual: unknown; exemp
     exemptable: b.exemptable ?? true,
     waived: false,
   }));
-  return { status: 'ineligible', failures, waived: [], blocking: failures, hasPendingExemption: false };
+  return { status: 'ineligible', missing: [], failures, waived: [], blocking: failures, hasPendingExemption: false };
 }
 
 describe('ADR-224 bulk exemption matching', () => {
