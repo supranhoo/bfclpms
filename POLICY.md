@@ -5834,3 +5834,32 @@ reason**. Silently discarding a filled cell is prohibited.
   `admin_apply_eligibility_inputs_correction(p_instance_id, p_eligibility_inputs,
   p_reason)`. A reason of at least 10 characters is mandatory, the full before/after
   map is written to `annual_review_access_audit`, and `overall_status` is never touched.
+
+## §SEC-INACTIVE-SUPPRESSION — Inactive employees receive nothing (ADR-241)
+
+An employee whose `profiles.is_active = false` is a **suppressed principal**. Two
+invariants hold system-wide:
+
+1. **No new notifications.** Every insert into `public.notifications` passes through
+   `trg_notifications_skip_inactive`, which silently drops rows whose recipient has an
+   inactive profile. The drop is deliberate and best-effort — notification delivery must
+   never abort the business transaction that produced it (same rule as §108). The RLS
+   `WITH CHECK` on the table additionally calls
+   `public.notification_recipient_is_active(user_id)` so client-side inserts fail fast
+   rather than vanishing silently. Producers MUST NOT re-implement this check per call
+   site; the trigger is the single enforcement point.
+2. **No outbound email.** `send-email-notification` resolves the recipient profile and
+   returns `{ skipped: true, reason: 'recipient_inactive' }` before any provider call.
+   Because every scheduler and reminder function dispatches through this one function,
+   the gate is global. Delivery attempts are still logged to `email_logs` with status
+   `skipped`.
+3. **No password reset.** Self-service reset calls
+   `public.password_reset_allowed(p_email, p_client_ip)` (SECURITY DEFINER, rate-limited
+   through `auth_lookup_attempts`) before `resetPasswordForEmail`. Unknown and inactive
+   accounts return `false` and the UI shows the **identical** success state — the dialog
+   must never reveal whether an account exists or is active. The admin `reset-password`
+   edge function refuses both `generate_link` and `set_password` for inactive profiles
+   with HTTP 403; reactivation is the only path.
+
+Reactivating a profile restores all three behaviours immediately; nothing is queued or
+replayed for the suppressed period.

@@ -137,7 +137,22 @@ export default function Auth() {
 
     try {
       const redirectUrl = `${window.location.origin}/reset-password`;
-      
+
+      // ADR-241 / POLICY §SEC-INACTIVE-SUPPRESSION: never send a recovery mail to
+      // an unknown or deactivated account. UI outcome is identical either way so
+      // the dialog cannot be used to enumerate accounts.
+      const { data: allowed, error: gateError } = await supabase.rpc('password_reset_allowed', {
+        p_email: forgotPasswordEmail,
+        p_client_ip: null,
+      });
+
+      if (gateError || allowed !== true) {
+        setForgotPasswordSuccess(true);
+        setLastResetRequest(Date.now());
+        setCooldownRemaining(COOLDOWN_SECONDS);
+        return;
+      }
+
       const { error } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail, {
         redirectTo: redirectUrl,
       });
