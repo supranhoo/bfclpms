@@ -7935,3 +7935,9 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Display unchanged: actual rating still drives the Rating (/5) column, average rating and calibration.
 - Tests: `src/test/annualReview/bellCurve.test.ts` ADR-228 block (5).
 - Docs: `docs/adr/ADR-228.md`; Policy: POLICY.md §AR-ELIGIBILITY-EXEMPTION item 10.
+
+### 2026-08-03 — Two-decimal precision for /5 scores (POLICY §UI-SCORE-PRECISION)
+- Change: every out-of-5 score shown in dashboards, review surfaces and report tables now renders with two decimals (`4.75` instead of `4.8`).
+- Surfaces: employee selector grid badge, mobile KPI card, KPI tracker modal, cumulative summary card, direct reportees monitor, unified scorecard, bulk review matrix/virtual grid/signoff preview/cell drawer, self-review sub-period average, annual review admin `<Stage> /5` grid + employee results view, Org KPI audit/impact/propagation dialogs, KPI Detail/TNI/Employee Performance Summary report tables, Comprehensive tab KRA points.
+- Unchanged: percentages, completion rates, day counts, file sizes, monetary values and all file exports.
+- Guard: `src/lib/utils.test.ts` (`fmt2` precision cases).
