@@ -15610,6 +15610,14 @@ export type Database = {
         Returns: undefined
       }
       activate_permit: { Args: { p_permit_id: string }; Returns: Json }
+      admin_apply_eligibility_inputs_correction: {
+        Args: {
+          p_eligibility_inputs: Json
+          p_instance_id: string
+          p_reason: string
+        }
+        Returns: Json
+      }
       admin_apply_system_scores_correction: {
         Args: {
           p_final_rating?: string

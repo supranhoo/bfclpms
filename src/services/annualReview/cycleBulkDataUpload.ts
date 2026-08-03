@@ -340,7 +340,9 @@ export function downloadBulkTemplate(plan: CycleBulkPlan, cycleLabel: string): v
     };
     for (const col of plan.columns) {
       const slot = i.slotByCanonical.get(`${col.kind}::${norm(col.name)}`);
-      if (!slot) { base[col.name] = ''; continue; }
+      // ADR-239: mark non-applicable cells explicitly so nobody fills a value
+      // that this employee's template can never store. Import ignores "n/a".
+      if (!slot) { base[col.name] = 'n/a'; continue; }
       if (col.kind === 'system_scores') {
         // Prefer the raw HR-entered value; fall back to legacy scaled value if raw is missing.
         const raw = i.systemScoresRaw[slot.id];
@@ -417,6 +419,14 @@ export interface DryRunReport {
   skipsByStatus: Array<{ status: string; count: number }>;
   /** ADR-225: number of cells whose score will be LOWERED by this run. */
   downgradeCount: number;
+  /**
+   * ADR-239 / POLICY §AR-BULK-UPLOAD-NO-SILENT-DROP: number of filled cells
+   * that target a column NOT present in that employee's effective template.
+   * These can never be stored — they must be visible before commit.
+   */
+  ignoredCellCount: number;
+  /** ADR-239: per-column breakdown of ignored cells, biggest first. */
+  ignoredByColumn: Array<{ column: string; count: number }>;
 }
 
 const MAX_ROWS = 5000;
@@ -462,11 +472,17 @@ export async function parseAndDryRun(
     allowMidWorkflowUpgrades?: boolean;
     /** ADR-225 — admin opt-in: permit lowering stored scores (corrections). */
     allowDowngrades?: boolean;
+    /**
+     * ADR-239 — admin opt-in: also correct eligibility inputs on Completed /
+     * mid-workflow rows (routed through an audited SECURITY DEFINER RPC).
+     */
+    allowEligibilityCorrections?: boolean;
   } = {},
 ): Promise<DryRunReport> {
   const allowCompletedUpgrades = !!opts.allowCompletedUpgrades;
   const allowMidWorkflowUpgrades = !!opts.allowMidWorkflowUpgrades;
   const allowDowngrades = !!opts.allowDowngrades;
+  const allowEligibilityCorrections = !!opts.allowEligibilityCorrections;
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf);
   const ws = wb.Sheets[wb.SheetNames[0]];
@@ -478,6 +494,9 @@ export async function parseAndDryRun(
 
   const rows: DryRunRow[] = [];
   let apply = 0, skip = 0, err = 0, changes = 0, downgrades = 0;
+  // ADR-239 — cells discarded because the column is not in the row's template.
+  const ignoredByColumn = new Map<string, number>();
+  let ignoredCells = 0;
 
   for (const rec of records) {
     const code = String(rec['Employee Code'] ?? '').trim();
@@ -514,8 +533,21 @@ export async function parseAndDryRun(
     for (const col of plan.columns) {
       const raw = rec[col.name];
       if (raw === null || raw === undefined || raw === '') continue;
+      // ADR-239: a literal "n/a" marker written by downloadBulkTemplate means
+      // "this column does not apply to this row" — treat it as untouched.
+      if (typeof raw === 'string' && raw.trim().toLowerCase() === 'n/a') continue;
       const slot = inst.slotByCanonical.get(`${col.kind}::${norm(col.name)}`);
-      if (!slot) continue; // column not applicable to this employee's template
+      if (!slot) {
+        // ADR-239 / POLICY §AR-BULK-UPLOAD-NO-SILENT-DROP: never drop a filled
+        // cell in silence. The value can never be stored for this employee
+        // because the column belongs to a different template.
+        ignoredCells++;
+        ignoredByColumn.set(col.name, (ignoredByColumn.get(col.name) ?? 0) + 1);
+        rowWarnings.push(
+          `"${col.name}" ignored — not part of this employee's template (${inst.templateName || 'unassigned'})`,
+        );
+        continue;
+      }
       if (col.kind === 'system_scores') {
         const tSlot = slot.slot as TemplateSystemScore | undefined;
         const coerced = coercePercentRaw(raw, tSlot?.uom_type, col.name);
@@ -569,8 +601,9 @@ export async function parseAndDryRun(
         if (before === after) continue;
         // Eligibility text/flags are non-numeric — cannot be classified as
         // an upgrade. Skip on completed rows.
-        if (rowMode === 'admin_upgrade') {
-          rowWarnings.push(`"${col.name}" skipped — eligibility inputs cannot be modified on completed reviews`);
+        // ADR-239: unless the admin opted into audited eligibility corrections.
+        if (rowMode === 'admin_upgrade' && !allowEligibilityCorrections) {
+          rowWarnings.push(`"${col.name}" skipped — eligibility inputs cannot be modified on completed reviews (enable "Also correct eligibility inputs" to include it)`);
           continue;
         }
         rowChanges.push({ column: col.name, kind: 'eligibility_inputs', before, after });
@@ -615,6 +648,10 @@ export async function parseAndDryRun(
     totalChanges: changes,
     skipsByStatus: summariseSkipsByStatus(rows),
     downgradeCount: downgrades,
+    ignoredCellCount: ignoredCells,
+    ignoredByColumn: [...ignoredByColumn.entries()]
+      .map(([column, count]) => ({ column, count }))
+      .sort((a, b) => b.count - a.count || a.column.localeCompare(b.column)),
   };
 }
 
@@ -625,6 +662,8 @@ export interface CommitResult {
   upgradedCompleted: number;
   /** ADR-225: rows committed through the bi-directional correction RPC. */
   correctedRows: number;
+  /** ADR-239: rows whose eligibility inputs were corrected on locked stages. */
+  eligibilityCorrectedRows: number;
 }
 
 export async function commitDryRun(
@@ -632,7 +671,10 @@ export async function commitDryRun(
   plan: CycleBulkPlan,
   opts: { reason?: string } = {},
 ): Promise<CommitResult> {
-  const out: CommitResult = { updated: 0, failed: 0, errors: [], upgradedCompleted: 0, correctedRows: 0 };
+  const out: CommitResult = {
+    updated: 0, failed: 0, errors: [], upgradedCompleted: 0, correctedRows: 0,
+    eligibilityCorrectedRows: 0,
+  };
   const instByCode = new Map(plan.instances.map((i) => [i.employeeCode.trim(), i]));
   for (const row of report.rows) {
     if (row.verdict !== 'apply') continue;
@@ -643,6 +685,7 @@ export async function commitDryRun(
     const nextElig: Record<string, string | number | boolean> = { ...inst.eligibilityInputs };
     const patchSys: Record<string, number> = {};
     const patchSysRaw: Record<string, number> = {};
+    const patchElig: Record<string, string | number | boolean> = {};
     for (const ch of row.changes) {
       const col = plan.columns.find((c) => c.name === ch.column);
       if (!col) continue;
@@ -655,11 +698,14 @@ export async function commitDryRun(
         patchSys[slot.id] = typeof ch.afterPoints === 'number' ? ch.afterPoints : Number(ch.after);
       } else {
         nextElig[slot.id] = ch.after as string | number | boolean;
+        patchElig[slot.id] = ch.after as string | number | boolean;
       }
     }
     try {
       const hasDowngrade = row.changes.some((c) => c.direction === 'down');
-      if (row.mode === 'admin_upgrade' && hasDowngrade) {
+      const hasSystemPatch = Object.keys(patchSysRaw).length > 0;
+      const hasEligPatch = Object.keys(patchElig).length > 0;
+      if (row.mode === 'admin_upgrade' && hasSystemPatch && hasDowngrade) {
         // ADR-225: bi-directional admin correction. Requires a reason (>=10
         // chars, enforced server-side) and is fully audit-logged.
         const { error } = await supabase.rpc('admin_apply_system_scores_correction' as never, {
@@ -673,7 +719,7 @@ export async function commitDryRun(
         if (error) throw error;
         out.updated++;
         out.correctedRows++;
-      } else if (row.mode === 'admin_upgrade') {
+      } else if (row.mode === 'admin_upgrade' && hasSystemPatch) {
         // ADR-171: route through the SECURITY DEFINER RPC which enforces
         // per-cell monotonic upgrades and writes an audit trail. Only
         // system_score cells are supplied (eligibility is filtered upstream).
@@ -688,13 +734,25 @@ export async function commitDryRun(
         if (error) throw error;
         out.updated++;
         out.upgradedCompleted++;
-      } else {
+      } else if (row.mode !== 'admin_upgrade') {
         await svc.updateInstance(inst.instanceId, {
           system_scores: nextSys,
           system_scores_raw: nextSysRaw,
           eligibility_inputs: nextElig,
         });
         out.updated++;
+      }
+      // ADR-239: eligibility corrections on locked stages go through their own
+      // audited SECURITY DEFINER RPC — never a raw table write.
+      if (row.mode === 'admin_upgrade' && hasEligPatch) {
+        const { error } = await supabase.rpc('admin_apply_eligibility_inputs_correction' as never, {
+          p_instance_id: inst.instanceId,
+          p_eligibility_inputs: patchElig as never,
+          p_reason: (opts.reason ?? 'bulk eligibility correction (admin override)') as never,
+        } as never);
+        if (error) throw error;
+        if (!hasSystemPatch) out.updated++;
+        out.eligibilityCorrectedRows++;
       }
     } catch (e) {
       out.failed++;

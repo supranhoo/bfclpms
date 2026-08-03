@@ -8048,3 +8048,21 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - `src/components/annual-review/AdminFinalOutcomeCard.tsx` — read-only panel on the review detail page.
 - `src/hooks/useAnnualReviewInstanceChangeLog.ts` — paginated change log + per-instance exemptions.
 - `src/lib/annualReview/instanceChangeLog.ts` (+ tests) — pure labelling/sorting helpers.
+
+### ADR-239 — Bulk upload cell-level transparency + eligibility correction path
+
+RCA (employee 101715): the "Generic M - (With KRA)" template declares a single
+`carry_kra` system slot, so the eight safety/production columns in the uploaded sheet
+had no target slot and were dropped by a bare `if (!slot) continue;`. Eligibility
+answers were additionally suppressed because the row was `completed`.
+
+- `src/services/annualReview/cycleBulkDataUpload.ts`
+  - per-cell warning + `ignoredCellCount` / `ignoredByColumn` on `DryRunReport`;
+  - `downloadBulkTemplate` writes `n/a` in non-applicable cells, import ignores `n/a`;
+  - `parseAndDryRun({ allowEligibilityCorrections })` and commit routing to the new RPC;
+  - `CommitResult.eligibilityCorrectedRows`.
+- `src/components/annual-review/CycleBulkDataUploadDialog.tsx` — amber "N values ignored"
+  badge, per-column breakdown, and the eligibility-correction opt-in with shared
+  correction-reason validation.
+- `public.admin_apply_eligibility_inputs_correction` — admin/hr_pms only, reason ≥ 10
+  chars, audited to `annual_review_access_audit` (`eligibility_inputs.admin_correction`).

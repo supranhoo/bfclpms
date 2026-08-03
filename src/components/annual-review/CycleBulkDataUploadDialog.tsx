@@ -37,10 +37,14 @@ export function CycleBulkDataUploadDialog({
   const [allowMidWorkflowUpgrades, setAllowMidWorkflowUpgrades] = useState(false);
   // ADR-225: opt-in admin correction mode — allows LOWERING stored scores.
   const [allowDowngrades, setAllowDowngrades] = useState(false);
+  // ADR-239: opt-in admin correction of eligibility inputs on locked rows.
+  const [allowEligibilityCorrections, setAllowEligibilityCorrections] = useState(false);
   const [correctionReason, setCorrectionReason] = useState('');
   const lockedModeOn = allowCompletedUpgrades || allowMidWorkflowUpgrades;
   const downgradesActive = lockedModeOn && allowDowngrades;
+  const eligCorrectionsActive = lockedModeOn && allowEligibilityCorrections;
   const reasonValid = correctionReason.trim().length >= 10;
+  const reasonRequired = downgradesActive || eligCorrectionsActive;
 
   const { data: plan, isLoading, refetch } = useQuery<CycleBulkPlan>({
     queryKey: ['annual-review', 'bulk-data-plan', cycle?.id],
@@ -62,6 +66,7 @@ export function CycleBulkDataUploadDialog({
     try {
       const r = await parseAndDryRun(f, plan, {
         allowCompletedUpgrades, allowMidWorkflowUpgrades, allowDowngrades: downgradesActive,
+        allowEligibilityCorrections: eligCorrectionsActive,
       });
       setReport(r);
       setFile(f);
@@ -77,7 +82,7 @@ export function CycleBulkDataUploadDialog({
     setBusy(true);
     try {
       const res = await commitDryRun(report, plan, {
-        reason: downgradesActive
+        reason: reasonRequired
           ? correctionReason.trim()
           : lockedModeOn
             ? 'Bulk system-score upgrade (admin override)'
@@ -89,13 +94,16 @@ export function CycleBulkDataUploadDialog({
       const correctionNote = res.correctedRows
         ? ` (${res.correctedRows} row${res.correctedRows === 1 ? '' : 's'} corrected downward)`
         : '';
+      const eligNote = res.eligibilityCorrectedRows
+        ? ` (${res.eligibilityCorrectedRows} eligibility correction${res.eligibilityCorrectedRows === 1 ? '' : 's'})`
+        : '';
       if (res.failed) {
         // ADR-225a: a server-side RPC exception must never look like a silent
         // no-op. Surface the first failures verbatim and keep the preview open.
         const sample = res.errors.slice(0, 3).join(' | ');
         const more = res.errors.length > 3 ? ` (+${res.errors.length - 3} more)` : '';
         toast.error(
-          `Committed ${res.updated}, ${res.failed} FAILED${upgradeNote}${correctionNote}. ${sample}${more}`,
+          `Committed ${res.updated}, ${res.failed} FAILED${upgradeNote}${correctionNote}${eligNote}. ${sample}${more}`,
           { duration: 20000 },
         );
         // eslint-disable-next-line no-console
@@ -104,7 +112,7 @@ export function CycleBulkDataUploadDialog({
         await refetch();
         return;
       }
-      toast.success(`Committed ${res.updated} instance${res.updated === 1 ? '' : 's'}${upgradeNote}${correctionNote}.`);
+      toast.success(`Committed ${res.updated} instance${res.updated === 1 ? '' : 's'}${upgradeNote}${correctionNote}${eligNote}.`);
       setReport(null); setFile(null);
       onDone?.();
       await refetch();
@@ -232,6 +240,44 @@ export function CycleBulkDataUploadDialog({
               </label>
             </div>
 
+            {/* ADR-239 — eligibility correction opt-in on locked rows */}
+            <div className={`flex items-start gap-3 rounded-md border px-3 py-2 ${lockedModeOn ? 'border-amber-500/40 bg-amber-500/5' : 'border-muted bg-muted/30 opacity-60'}`}>
+              <Checkbox
+                id="allow-elig-corrections"
+                disabled={!lockedModeOn}
+                checked={eligCorrectionsActive}
+                onCheckedChange={(v) => {
+                  setAllowEligibilityCorrections(!!v);
+                  setReport(null);
+                  setFile(null);
+                }}
+                className="mt-0.5"
+              />
+              <label htmlFor="allow-elig-corrections" className="text-sm cursor-pointer space-y-1 w-full">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <ShieldAlert className="h-4 w-4 text-amber-600" />
+                  Also correct eligibility inputs on locked reviews
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {lockedModeOn
+                    ? <>Applies Absent Days / LWP / Disciplinary / 6-Month answers to Completed and mid-workflow rows through an audited admin RPC. The review stage is never changed; a correction reason is required.</>
+                    : <>Enable “Apply to Completed reviews” or “Apply to mid-workflow reviews” first.</>}
+                </div>
+                {eligCorrectionsActive && !downgradesActive && (
+                  <Textarea
+                    value={correctionReason}
+                    onChange={(e) => setCorrectionReason(e.target.value)}
+                    placeholder="Correction reason (required, min 10 characters) — e.g. HR attendance restatement for AY 25-26 issued 01-Aug-2026"
+                    className="mt-1 text-xs"
+                    rows={2}
+                  />
+                )}
+                {eligCorrectionsActive && !reasonValid && (
+                  <div className="text-xs text-destructive">A correction reason of at least 10 characters is required before committing.</div>
+                )}
+              </label>
+            </div>
+
             {/* Scoring health strip — v2.66.91, POLICY §AR-SYSTEM-KPI-LIBRARY-LINK */}
             {(() => {
               const totalSystem = plan.columns.filter((c) => c.kind === 'system_scores').length;
@@ -326,6 +372,11 @@ export function CycleBulkDataUploadDialog({
                         <TrendingDown className="h-3 w-3" /> {report.downgradeCount} downgrade{report.downgradeCount === 1 ? '' : 's'}
                       </Badge>
                     )}
+                    {report.ignoredCellCount > 0 && (
+                      <Badge variant="outline" className="gap-1 border-amber-500/60 text-amber-700 dark:text-amber-400">
+                        <AlertTriangle className="h-3 w-3" /> {report.ignoredCellCount} value{report.ignoredCellCount === 1 ? '' : 's'} ignored (not in template)
+                      </Badge>
+                    )}
                     <span className="text-muted-foreground">
                       {report.totalChanges} cell change{report.totalChanges === 1 ? '' : 's'}
                     </span>
@@ -337,6 +388,17 @@ export function CycleBulkDataUploadDialog({
                       {report.skipsByStatus.map((s) => (
                         <Badge key={s.status} variant="outline" className="text-[10px]">
                           {s.status}: {s.count}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  {/* ADR-239 — no silent drops: show which columns were ignored */}
+                  {report.ignoredByColumn?.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      <span className="text-muted-foreground">Ignored (column not in employee&apos;s template):</span>
+                      {report.ignoredByColumn.map((c) => (
+                        <Badge key={c.column} variant="outline" className="text-[10px] border-amber-500/60">
+                          {c.column}: {c.count}
                         </Badge>
                       ))}
                     </div>
@@ -416,7 +478,7 @@ export function CycleBulkDataUploadDialog({
                     <Button
                       onClick={handleCommit}
                       variant={report.downgradeCount > 0 ? 'destructive' : 'default'}
-                      disabled={busy || report.applyCount === 0 || (downgradesActive && !reasonValid)}
+                      disabled={busy || report.applyCount === 0 || (reasonRequired && !reasonValid)}
                     >
                       {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                       Commit {report.applyCount} row{report.applyCount === 1 ? '' : 's'}
