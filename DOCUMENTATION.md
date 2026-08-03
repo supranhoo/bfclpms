@@ -7984,3 +7984,25 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - **Fix (app).** `src/lib/annualReview/systemScoreScope.ts` (+7 tests),
   `OrphanSystemScoreCard` mounted on the Orphaned Reviews admin tab.
 - **Policy.** POLICY.md §AR-SYSTEM-SCORE-TEMPLATE-SCOPE.
+
+### v2.66.235 — ADR-235: Annual Review final-score audit and single writer (2026-08-03)
+
+- **Audit.** Recomputed the SSOT for all 2,086 completed, non-excluded instances in cycle
+  2025-2026. Clean: 0 missing scores, 0 out-of-range scores, 0 blank bands, 0 orphan slots,
+  0 duplicates, 27 valid calibrations.
+- **Defect.** 104 completed reviews stored a final score below the recomputation
+  (avg −1.65, max −17.00; 6 banded one band too low, e.g. 102011 53.00/"Poor" → 70.00/"Good").
+  All 104 matched a `system_scores.admin_override` audit entry from the 30 Jul / 01 Aug bulk
+  system-score upload.
+- **Root cause.** `admin_apply_system_scores_upgrade` wrote system scores but set
+  `total_score` from a client-supplied value under a monotonic guard, bypassing
+  `annual_review_apply_final_summary`.
+- **Fix (DB).** Upgrade and correction RPCs now always recompute through the sanctioned
+  writer; new read-only `annual_review_final_score_drift(cycle_id)` RPC.
+- **Data repair.** 104 instances recomputed (audit source `adr235_audit_repair`,
+  reversible); `finalized_at` backfilled on 2 instances; scores cleared on 1 excluded and
+  1 non-completed instance; 1 NULL `criteria_weighted_score` normalised.
+  Post-repair verification: drift 0 across the cycle.
+- **Fix (app).** `src/lib/annualReview/finalScoreDrift.ts` (+6 tests) and
+  `FinalScoreDriftCard` on Annual Review Admin → Orphaned Reviews with an admin recompute action.
+- **Policy.** POLICY.md §AR-FINAL-SCORE-SINGLE-WRITER.
