@@ -8066,3 +8066,19 @@ answers were additionally suppressed because the row was `completed`.
   correction-reason validation.
 - `public.admin_apply_eligibility_inputs_correction` — admin/hr_pms only, reason ≥ 10
   chars, audited to `annual_review_access_audit` (`eligibility_inputs.admin_correction`).
+
+### v2.66.240 — Eligibility pending-state parity and typed bulk correction (2026-08-03)
+
+- RCA follow-up for employee 101715: the governed correction path existed, but the live
+  completed instance still had an empty `eligibility_inputs` object. The Final Outcome
+  resolver also interpreted every missing answer as a failure, contradicting the neutral
+  pending state already shown by `SystemScoresPanel`.
+- `resolveEligibility()` now tracks `missing` criteria separately. Missing-only and
+  otherwise-passing incomplete records are `Not assessed`; supplied failing answers
+  remain `Ineligible`.
+- The Final Outcome card lists pending criterion names, and detail-page evaluation merges
+  deterministic tenure auto-inputs under persisted manual answers.
+- Bulk eligibility values are criterion-typed: `7 Months` parses to `7`, while
+  `0/No/false` parses to boolean false. Unparseable values receive a named cell warning.
+- Regression coverage: `effectiveEligibility.test.ts`,
+  `bulkUploadNoSilentDrop.test.ts`, and the existing System Scores pending-state tests.

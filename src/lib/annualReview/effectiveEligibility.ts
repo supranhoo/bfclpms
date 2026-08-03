@@ -124,6 +124,8 @@ export interface EligibilityFailure {
 
 export interface EffectiveEligibility {
   status: EligibilityStatus;
+  /** Required criteria with no supplied answer. Missing is pending, not failed. */
+  missing: EligibilityCriterion[];
   /** Every criterion that failed the raw evaluation. */
   failures: EligibilityFailure[];
   /** Failures waived by an approved exemption. */
@@ -150,7 +152,7 @@ export function resolveEligibility(args: {
 }): EffectiveEligibility {
   const { criteria, inputs, exemptions = [], policy = [] } = args;
   const empty: EffectiveEligibility = {
-    status: 'unknown', failures: [], waived: [], blocking: [], hasPendingExemption: false,
+    status: 'unknown', missing: [], failures: [], waived: [], blocking: [], hasPendingExemption: false,
   };
   if (!criteria || criteria.length === 0) return empty;
 
@@ -159,10 +161,16 @@ export function resolveEligibility(args: {
   for (const e of exemptions) byCriterion.set(e.criterion_id, e);
 
   const failures: EligibilityFailure[] = [];
+  const missing: EligibilityCriterion[] = [];
   let pending = false;
 
   for (const c of criteria) {
-    const actual = coerce(src[c.id] ?? src[c.name], c.type);
+    const sourceValue = src[c.id] ?? src[c.name];
+    if (sourceValue === null || sourceValue === undefined || sourceValue === '') {
+      missing.push(c);
+      continue;
+    }
+    const actual = coerce(sourceValue, c.type);
     if (evaluate(c.operator, actual, c.expected_value)) continue;
     const exemption = byCriterion.get(c.id);
     const exemptable = isExemptable(c.name, policy);
@@ -180,10 +188,11 @@ export function resolveEligibility(args: {
   const blocking = failures.filter((f) => !f.waived);
   const status: EligibilityStatus =
     blocking.length > 0 ? 'ineligible'
+      : missing.length > 0 ? 'unknown'
       : waived.length > 0 ? 'exempted'
         : 'eligible';
 
-  return { status, failures, waived, blocking, hasPendingExemption: pending };
+  return { status, missing, failures, waived, blocking, hasPendingExemption: pending };
 }
 
 /** Short summary such as `Ineligible (Absent Days)` for grids and exports. */

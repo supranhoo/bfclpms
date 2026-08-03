@@ -25,7 +25,7 @@ import { useAnnualReviewCalibrations } from '@/hooks/useAnnualReviewCalibrations
 import { CalibrateRatingDialog } from '@/components/annual-review/CalibrateRatingDialog';
 import { toRatingOutOf5, formatRating5 } from '@/lib/annualReview/ratingSlab';
 import { editableSystemScoreSlots } from '@/services/annualReview/adminSystemScores';
-import { deriveAutoInputs } from '@/lib/annualReview/eligibilityAutoFill';
+import { deriveAutoInputs, mergeInputs } from '@/lib/annualReview/eligibilityAutoFill';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -374,6 +374,10 @@ function TeamReviewDetailInner(props: any) {
     () => deriveAutoInputs(eligibilityCriteria, instance.employee?.doj ?? null, reviewYear ?? null),
     [eligibilityCriteria, instance.employee?.doj, reviewYear],
   );
+  const effectiveEligibilityInputs = useMemo(
+    () => mergeInputs(instance.eligibility_inputs, autoEligibilityInputs),
+    [instance.eligibility_inputs, autoEligibilityInputs],
+  );
   const selfReviewFields = template?.sections?.self_review_fields ?? [];
   const selfEditable = role === 'self' && !locked;
   const selfResponse = (responses ?? []).find((r: any) => r.reviewer_role === 'self') ?? null;
@@ -495,7 +499,7 @@ function TeamReviewDetailInner(props: any) {
           totalScore={instance.total_score ?? null}
           finalRating={instance.final_rating ?? null}
           eligibilityCriteria={eligibilityCriteria}
-          eligibilityInputs={instance.eligibility_inputs ?? null}
+          eligibilityInputs={effectiveEligibilityInputs}
           calibration={calibration}
         />
       )}

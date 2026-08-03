@@ -2,7 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import * as XLSX from 'xlsx';
 import * as svc from '@/services/annualReview/annualReviewService';
 import { resolveTemplateId } from '@/services/annualReview/annualReviewService';
-import type { AnnualReviewTemplate, TemplateSystemScore } from '@/types/annualReview';
+import type { AnnualReviewTemplate, EligibilityCriterion, TemplateSystemScore } from '@/types/annualReview';
 import { scoreFromRaw, type ScoringRules } from '@/lib/annualReview/systemKpiScoring';
 import { resolveLibraryKeyByName, normalizeSlotName } from '@/lib/annualReview/systemKpiAliases';
 import {
@@ -43,7 +43,7 @@ export interface InstanceCtx {
   templateName: string;
   overallStatus: string;
   /** Per-canonical-name resolution back to the template's slot id. */
-  slotByCanonical: Map<string, { kind: CellKind; id: string; slot?: TemplateSystemScore }>;
+  slotByCanonical: Map<string, { kind: CellKind; id: string; slot?: TemplateSystemScore; criterion?: EligibilityCriterion }>;
   systemScores: Record<string, number>;
   systemScoresRaw: Record<string, number>;
   eligibilityInputs: Record<string, string | number | boolean>;
@@ -282,14 +282,14 @@ export async function buildCycleBulkPlan(cycleId: string): Promise<CycleBulkPlan
   const instanceCtx: InstanceCtx[] = instances.map((i) => {
     const tId = resolveTemplateId(i);
     const t = tId ? templateById.get(tId) : null;
-    const slotByCanonical = new Map<string, { kind: CellKind; id: string; slot?: TemplateSystemScore }>();
+    const slotByCanonical = new Map<string, { kind: CellKind; id: string; slot?: TemplateSystemScore; criterion?: EligibilityCriterion }>();
     for (const s of t?.sections.system_scores ?? []) {
       const src = (s as unknown as { source?: string }).source;
       if (src === 'carry_kra') continue;
       slotByCanonical.set(`system_scores::${norm(s.name)}`, { kind: 'system_scores', id: s.id, slot: s });
     }
     for (const c of t?.sections.eligibility_criteria ?? []) {
-      slotByCanonical.set(`eligibility_inputs::${norm(c.name)}`, { kind: 'eligibility_inputs', id: c.id });
+      slotByCanonical.set(`eligibility_inputs::${norm(c.name)}`, { kind: 'eligibility_inputs', id: c.id, criterion: c });
     }
     const emp = i.employee as (svc.InstanceWithEmployee['employee'] & { doj?: string | null; department_id?: string | null; company_id?: string | null }) | undefined;
     const dept = emp?.department_id ? deptById.get(emp.department_id) : null;
@@ -464,6 +464,28 @@ function coercePercentRaw(
   return { value: n };
 }
 
+export function coerceEligibilityValue(
+  raw: unknown,
+  criterion: EligibilityCriterion | undefined,
+): { value?: string | number | boolean; error?: string } {
+  if (!criterion) return { error: 'eligibility criterion metadata is missing' };
+  if (criterion.type === 'number') {
+    const candidate = typeof raw === 'string'
+      ? raw.trim().match(/^[-+]?\d+(?:\.\d+)?/)?.[0]
+      : raw;
+    const value = Number(candidate);
+    return Number.isFinite(value) ? { value } : { error: 'expected a numeric value' };
+  }
+  if (criterion.type === 'boolean') {
+    if (typeof raw === 'boolean') return { value: raw };
+    const normalized = String(raw).trim().toLowerCase();
+    if (['1', 'yes', 'y', 'true'].includes(normalized)) return { value: true };
+    if (['0', 'no', 'n', 'false'].includes(normalized)) return { value: false };
+    return { error: 'expected Yes/No, true/false, or 1/0' };
+  }
+  return { value: String(raw).trim() };
+}
+
 export async function parseAndDryRun(
   file: File,
   plan: CycleBulkPlan,
@@ -597,7 +619,12 @@ export async function parseAndDryRun(
         });
       } else {
         const before = inst.eligibilityInputs[slot.id];
-        const after = typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' ? raw : String(raw);
+        const parsed = coerceEligibilityValue(raw, slot.criterion);
+        if (parsed.error || parsed.value === undefined) {
+          rowWarnings.push(`"${col.name}" skipped — ${parsed.error ?? 'invalid eligibility value'}`);
+          continue;
+        }
+        const after = parsed.value;
         if (before === after) continue;
         // Eligibility text/flags are non-numeric — cannot be classified as
         // an upgrade. Skip on completed rows.

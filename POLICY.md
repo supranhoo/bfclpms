@@ -5632,7 +5632,7 @@ Rules:
 
 ## §AR-ELIGIBILITY-EXEMPTION — Annual Review eligibility & exemption approval (ADR-221, 2026-07-31)
 
-1. **Effective eligibility.** An instance is `Eligible`, `Exempted (Eligible)`, `Ineligible` or `Not assessed`. It is resolved only by `src/lib/annualReview/effectiveEligibility.resolveEligibility()`, which evaluates the template's `sections.eligibility_criteria` against `eligibility_inputs` using the ADR-181 evaluator and then applies approved exemptions. Templates without eligibility criteria are `Not assessed` and render an em-dash.
+1. **Effective eligibility.** An instance is `Eligible`, `Exempted (Eligible)`, `Ineligible` or `Not assessed`. It is resolved only by `src/lib/annualReview/effectiveEligibility.resolveEligibility()`, which evaluates the template's `sections.eligibility_criteria` against `eligibility_inputs` using the ADR-181 evaluator and then applies approved exemptions. Templates without eligibility criteria, and configured criteria whose required answers are still missing, are `Not assessed`; missing answers are pending data, never policy failures. A supplied failing answer remains `Ineligible` even if another answer is missing.
 2. **Exemptable questions are master data.** `annual_review_eligibility_exemption_policy` decides which questions may be waived. Absent days and LWP are exemptable; disciplinary action and the 6-month / service-tenure window are never exemptable. A question with no matching master row is NOT exemptable. Never hardcode this list in the UI or the engine.
 3. **Approval workflow.** Exemptions are stored per `(instance_id, criterion_id)` in `annual_review_eligibility_exemptions` with a mandatory reason. Requesting is open to approvers and to users with assistance scope over the instance; approving, rejecting and revoking are restricted to Admin, HR PMS and Management. Self-approval is blocked for non-admins. `ar_elig_exemption_guard()` enforces both rules server-side, so a client bug can never waive a non-exemptable criterion.
 4. **Slab effect.** An `Ineligible` employee's increment slab is shown as 0% (`effectiveSlabPercent`). Ratings, bands and the bell-curve distribution are never altered by eligibility — it is a display and governance overlay only.
@@ -5823,6 +5823,9 @@ reason**. Silently discarding a filled cell is prohibited.
   counted in `ignoredCellCount`, and broken down per column in the dry-run UI.
 - The downloaded template writes the literal marker `n/a` into every non-applicable
   cell; the importer treats `n/a` as "untouched" so the marker can never be stored.
+- Applicable eligibility cells are normalized against criterion master data: numeric
+  text such as `7 Months` becomes `7`, and boolean `0/No/false` becomes `false`.
+  Ambiguous values are skipped with a named per-cell error and are never persisted.
 - Eligibility inputs on `completed` / mid-workflow rows stay read-only by default.
   An admin/HR PMS user may opt into **"Also correct eligibility inputs on locked
   reviews"**, which routes changes through the audited SECURITY DEFINER RPC

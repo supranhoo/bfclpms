@@ -202,6 +202,11 @@ export function AdminFinalOutcomeCard(props: AdminFinalOutcomeCardProps) {
               Blocking: {elig.blocking.map((f) => f.criterion.name).join(', ')}
             </p>
           )}
+          {elig.missing.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Eligibility inputs pending: {elig.missing.map((c) => c.name).join(', ')}
+            </p>
+          )}
         </div>
 
         <Separator />
