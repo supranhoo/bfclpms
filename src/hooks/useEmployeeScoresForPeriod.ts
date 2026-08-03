@@ -40,7 +40,11 @@ interface SubmissionRow {
  * loaded by `useReviewSubmissionScoresByKpiIds` to avoid duplicate
  * `review_submissions` scans, which were the dominant cause of dashboard
  * statement timeouts (Vivek 101784 regression). Returns
- * Map<employeeId, number | null> rounded to 1 decimal.
+ * Map<employeeId, number | null> rounded to 2 decimals.
+ *
+ * POLICY §UI-SCORE-PRECISION: aggregation must not round below 2 dp before
+ * display — final rounding happens once, in `fmt2()`. Rounding to 1 dp here
+ * made 4.55 render as "4.60" in the employee selector badge.
  */
 export function useEmployeeScoresForPeriod(
   periodKpis: KPI[] | undefined,
@@ -78,7 +82,7 @@ export function useEmployeeScoresForPeriod(
       });
 
       if (hasAnyScore && totalWeight > 0) {
-        map.set(empId, Math.round((weightedSum / totalWeight) * 10) / 10);
+        map.set(empId, Math.round((weightedSum / totalWeight) * 100) / 100);
       } else {
         map.set(empId, null);
       }

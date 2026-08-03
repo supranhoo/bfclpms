@@ -7942,6 +7942,12 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Unchanged: percentages, completion rates, day counts, file sizes, monetary values and all file exports.
 - Guard: `src/lib/utils.test.ts` (`fmt2` precision cases).
 
+### 2026-08-03 — Fix: employee selector badge showed 4.55 as 4.60
+- Symptom: the employee list badge read `4.60` while the scorecard donut read `4.55/5` for the same employee (200332 Shiv Prakash Rai).
+- RCA: `useEmployeeScoresForPeriod` rounded the weighted average to **one** decimal (`Math.round(x*10)/10`) before returning it; `fmt2()` then padded 4.6 to `4.60`. Presentation-only defect — no stored score was wrong.
+- Fix: the hook now rounds to 2 decimals, so aggregation no longer loses precision ahead of display. Percentage/day-count/employee-count roll-ups (`bellCurve.round1`, `safetyAnalytics`, `kpiPendingWithSummary`, KPI Employee Matrix averages) are intentionally unchanged.
+- Guard: `src/test/employeeScoresForPeriod.test.ts` (5 cases). POLICY §UI-SCORE-PRECISION item 4.
+
 ### 2026-08-03 — ADR-232: Annual Review final-score write-back integrity
 
 - **Symptom.** In the Annual Review Report (screen + workbook), `Final Rating (out of 5)`, `Computed Rating (/5)`, `Calibrated Rating`, `Slab %` and `Rating` were blank for 13 employees of "Annual Review - 2025-2026" (100264 Sajid Raza, 101148, 200301, 100367, 100012, 100856, 200271, 100894, 101773, 100513, 101902, 101967, 101896).
