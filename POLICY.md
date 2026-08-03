@@ -5777,3 +5777,27 @@ Rules:
    `annual_review_final_score_recompute_audit`.
 
 **Guard.** `src/lib/annualReview/finalScoreDrift.ts`, `src/test/annualReview/finalScoreDrift.test.ts`.
+
+## §RPT-EXPORT-EXPLICIT-HEADERS — Export columns are mapped, never inferred (ADR-236, 2026-08-03)
+
+1. Any workbook sheet that mixes fixed columns with dynamic, admin/template-authored
+   columns must be written from an **explicit ordered header list**, never from keys
+   inferred off the row objects. Annual Review comprehensive export:
+   `employeeSheetHeaders()` in `src/components/reports/annual-review/ComprehensiveExport.ts`.
+2. A dynamic column whose authored name collides with a fixed header is **renamed**
+   (`Eligibility: <name>`), never dropped and never allowed to displace the fixed column.
+3. **No cell content is ever removed, blanked, trimmed or "sanitised" on export.** A
+   recommendation that genuinely reads `18`, `18%` or `Rs 18` exports verbatim. Report
+   surfaces may not filter values for being short, numeric, or unexpected.
+4. Guard: `src/components/reports/annual-review/ComprehensiveExport.test.ts` asserts both
+   column integrity under collision and verbatim survival of a numeric recommendation.
+
+## §RPT-ACCESS-OVERRIDE-SCOPE — Report grants do not imply employee-data access (ADR-237, 2026-08-03)
+
+1. A per-user report grant (`report_access_user_overrides`) widens row access to
+   employee-level tables (`profiles`, `kpis`, `review_submissions`, `org_kpi_values`)
+   **only** when the granted report declares `report_access_config.requires_employee_data = true`.
+2. The flag is admin-configurable master data (zero-hardcoding) and **fail-closed**:
+   new reports default to `false`.
+3. `public.has_report_access_override(uuid)` is the single resolver; policies must not
+   re-implement the check.
