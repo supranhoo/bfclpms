@@ -8041,3 +8041,10 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - **Rollback.** Set `requires_employee_data = true` for the affected key, or restore the
   previous one-line function body.
 - **Policy.** POLICY.md §RPT-ACCESS-OVERRIDE-SCOPE.
+
+### ADR-238 — Admin Final Outcome panel
+
+- `annual_review_instance_change_log(p_instance_id, p_limit, p_offset)` — SECURITY DEFINER, admin/hr_pms only, server-paginated union of calibration, final-score recompute, system-score edit, exemption and stage-submission audits.
+- `src/components/annual-review/AdminFinalOutcomeCard.tsx` — read-only panel on the review detail page.
+- `src/hooks/useAnnualReviewInstanceChangeLog.ts` — paginated change log + per-instance exemptions.
+- `src/lib/annualReview/instanceChangeLog.ts` (+ tests) — pure labelling/sorting helpers.
