@@ -5756,3 +5756,24 @@ Rules:
    points must iterate template slots, never `Object.keys(system_scores)`.
 6. Monitor: "Orphan system-score slots" card on the Annual Review Admin → Orphaned
    Reviews tab must read zero.
+
+## §AR-FINAL-SCORE-SINGLE-WRITER — One sanctioned writer for the final score (ADR-235, 2026-08-03)
+
+1. `public.annual_review_apply_final_summary()` is the **only** function permitted to write
+   `annual_review_instances.total_score` / `final_rating` / `criteria_weighted_score`.
+   No RPC, import, repair script or client may pass a precomputed total.
+2. Every admin system-score edit path (`admin_apply_system_scores_upgrade`,
+   `admin_apply_system_scores_correction`, `admin_update_system_scores_raw`) must call it
+   with `allow_overwrite := true` immediately after persisting score cells. The legacy
+   `p_total_score` / `p_final_rating` arguments on the upgrade RPC are accepted for
+   signature compatibility and ignored.
+3. Monotonic ("only if greater") guards may apply to individual system-score cells — never
+   to the final score, which is a derived value and must follow its inputs in both directions.
+4. A completed, non-excluded instance must carry a 0–100 score and a rating band; an
+   excluded or not-yet-completed instance must carry **no** score and **no** band.
+5. Drift is monitored, not assumed: `annual_review_final_score_drift(cycle_id)` +
+   the "Stored vs recomputed final score" card on Annual Review Admin → Orphaned Reviews
+   must read zero. Repairs run through the ADR-232 recompute RPC and are audited in
+   `annual_review_final_score_recompute_audit`.
+
+**Guard.** `src/lib/annualReview/finalScoreDrift.ts`, `src/test/annualReview/finalScoreDrift.test.ts`.
