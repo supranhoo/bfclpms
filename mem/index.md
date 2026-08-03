@@ -176,3 +176,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Annual Review Report Effective Outcome](mem://features/reports/annual-review-effective-outcome) — ADR-230: calibrated rating + post-exemption slab % on every report surface; reportRating.ts SSOT
 - [System Score Template Scope](mem://features/annual-review/system-score-template-scope) — Orphan slot pruning; only effective-template slots score (ADR-234)
 - [Bulk Upload No Silent Drop](mem://features/annual-review/bulk-upload-no-silent-drop) — Ignored-cell transparency, "n/a" markers, audited eligibility corrections on locked rows (ADR-239)
+- [Criterion Rating Backfill](mem://features/annual-review/criterion-backfill) — Audited backfill of missing criterion ratings on locked stages (ADR-243)
