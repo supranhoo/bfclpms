@@ -1675,7 +1675,7 @@ export function UnifiedScorecard({
             <div className="text-center mt-2 pt-2 border-t border-border w-full">
               <p className="text-xs text-muted-foreground">Weighted Score</p>
               <p className="text-lg font-bold text-foreground">
-                {scoreData.totalWeightedScore.toFixed(1)} 
+                {scoreData.totalWeightedScore.toFixed(2)} 
                 <span className="text-muted-foreground font-normal"> / {(scoreData.totalWeight * 5).toFixed(0)}</span>
               </p>
             </div>

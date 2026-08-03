@@ -20,7 +20,7 @@ const COL_TEMPLATE =
 
 function fmt(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—';
-  return Number(n).toFixed(1);
+  return Number(n).toFixed(2);
 }
 
 export function BulkReviewVirtualGrid({
@@ -117,7 +117,7 @@ export function BulkReviewVirtualGrid({
                   </span>
                   {rowVar > 1.0 && (
                     <Badge variant="destructive" className="text-[10px] shrink-0">
-                      Δ {rowVar.toFixed(1)}
+                      Δ {rowVar.toFixed(2)}
                     </Badge>
                   )}
                 </div>

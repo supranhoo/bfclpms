@@ -830,7 +830,7 @@ export default function TNIReport() {
                         </TableCell>
                         <TableCell className="text-center">
                           <Badge variant={tn.score && tn.score < 2 ? 'destructive' : 'outline'}>
-                            {tn.score?.toFixed(1) || '-'}
+                            {tn.score?.toFixed(2) || '-'}
                           </Badge>
                         </TableCell>
                         <TableCell>

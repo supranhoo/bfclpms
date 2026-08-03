@@ -855,7 +855,7 @@ export function SelfReviewSheet({
                         </div>
                         {selectedKpiSubPeriods.length > 0 && (
                           <Badge variant="secondary" className="text-xs">
-                            {selectedKpiSubPeriods.length} entries | Avg: {aggregatedSubPeriodScore?.toFixed(1) ?? '—'}
+                            {selectedKpiSubPeriods.length} entries | Avg: {aggregatedSubPeriodScore?.toFixed(2) ?? '—'}
                           </Badge>
                         )}
                       </div>

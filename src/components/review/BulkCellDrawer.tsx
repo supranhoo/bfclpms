@@ -226,7 +226,7 @@ export function BulkCellDrawer({ row, viewerStage, open, onOpenChange, canReopen
           {/* Status badges strip */}
           <div className="flex items-center gap-2 flex-wrap">
             {variance > 1.0 && (
-              <Badge variant="destructive" className="text-[10px]">Variance {variance.toFixed(1)}</Badge>
+              <Badge variant="destructive" className="text-[10px]">Variance {variance.toFixed(2)}</Badge>
             )}
             {isFinal && <Badge className="text-[10px]">Final · rev {row.final_revision_no ?? 0}</Badge>}
             {row.is_na && <Badge variant="outline" className="text-[10px]">N/A</Badge>}

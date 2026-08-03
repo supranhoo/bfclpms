@@ -5703,3 +5703,10 @@ Rules:
 7. **Exports.** Exports from a filtered view must state the active selection per axis in the header.
 
 **Guard.** `src/test/annualReview/bellCurveFilters.test.ts`.
+
+
+## §UI-SCORE-PRECISION — Out-of-5 scores display with two decimals (2026-08-03)
+
+1. **Two decimals.** Any score rendered on a scale of 0..5 (badges, grid cells, stage `/5` columns, averages of /5 scores, variance deltas between /5 scores) displays with exactly two decimals: `4.75`, `4.80`, `0.00`.
+2. **Scope.** On-screen dashboards, review surfaces and report tables. Percentages, day counts, file sizes, completion rates and monetary values keep their existing precision. Excel/PDF/CSV exports are unchanged.
+3. **No silent truncation.** Never render a /5 score with `toFixed(1)`; prefer `fmt2()` from `src/lib/utils.ts` for nullable values (it returns `—` for null/NaN and preserves `0.00`).

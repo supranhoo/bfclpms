@@ -176,7 +176,7 @@ export function OrgKpiImpactSheet({
                           <TableCell className="text-center text-sm">{emp.weightage}%</TableCell>
                           <TableCell className="text-center">
                             {emp.currentScore !== null ? (
-                              <Badge variant="outline">{emp.currentScore.toFixed(1)}</Badge>
+                              <Badge variant="outline">{emp.currentScore.toFixed(2)}</Badge>
                             ) : (
                               <span className="text-muted-foreground text-xs">—</span>
                             )}
@@ -185,7 +185,7 @@ export function OrgKpiImpactSheet({
                             <>
                               <TableCell className="text-center">
                                 {emp.simulatedScore !== null ? (
-                                  <Badge variant="secondary">{emp.simulatedScore.toFixed(1)}</Badge>
+                                  <Badge variant="secondary">{emp.simulatedScore.toFixed(2)}</Badge>
                                 ) : (
                                   <span className="text-muted-foreground text-xs">—</span>
                                 )}
@@ -196,7 +196,7 @@ export function OrgKpiImpactSheet({
                                     emp.scoreChange > 0 ? 'text-primary' : 
                                     emp.scoreChange < 0 ? 'text-destructive' : 'text-muted-foreground'
                                   }`}>
-                                    {emp.scoreChange > 0 ? '+' : ''}{emp.scoreChange.toFixed(1)}
+                                    {emp.scoreChange > 0 ? '+' : ''}{emp.scoreChange.toFixed(2)}
                                   </span>
                                 ) : (
                                   <span className="text-muted-foreground text-xs">—</span>

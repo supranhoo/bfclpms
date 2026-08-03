@@ -224,7 +224,7 @@ export function EmployeeResultsView({
                       const v = byRole.get(role)?.criteria_scores?.[c.id];
                       return (
                         <td key={role} className="p-3 text-right tabular-nums text-muted-foreground">
-                          {typeof v === 'number' ? v.toFixed(1) : '—'}
+                          {typeof v === 'number' ? v.toFixed(2) : '—'}
                         </td>
                       );
                     })}
@@ -308,7 +308,7 @@ export function EmployeeResultsView({
                             <tr key={c.id} className="border-t">
                               <td className="p-3">{c.name}</td>
                               <td className="p-3 text-right tabular-nums text-muted-foreground">
-                                {typeof v === 'number' ? v.toFixed(1) : '—'}
+                                {typeof v === 'number' ? v.toFixed(2) : '—'}
                               </td>
                             </tr>
                           );

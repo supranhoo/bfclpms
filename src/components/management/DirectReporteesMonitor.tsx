@@ -279,7 +279,7 @@ export function DirectReporteesMonitor({ fiscalStartYear, selectedMonths }: Dire
                               onClick={() => handleRowClick(rep.id, m, calYear)}
                               className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all ${getScoreBg(score)}`}
                             >
-                              {score.toFixed(1)}
+                              {score.toFixed(2)}
                               <ExternalLink className="h-3 w-3 opacity-50" />
                             </button>
                           ) : (

@@ -155,7 +155,7 @@ export function MobileKpiCard({
             <p className="font-medium">
               {score != null ? (
                 <Badge className={`${getScoreBadgeClass(score)} text-xs px-1.5 py-0`}>
-                  {score.toFixed(1)}
+                  {score.toFixed(2)}
                 </Badge>
               ) : (
                 '-'
