@@ -17907,6 +17907,10 @@ export type Database = {
       }
       normalize_kpi_text: { Args: { p: string }; Returns: string }
       normalize_kpi_text_value: { Args: { txt: string }; Returns: string }
+      notification_recipient_is_active: {
+        Args: { p_user_id: string }
+        Returns: boolean
+      }
       open_self_review_for_pending: {
         Args: { _cycle_id: string }
         Returns: number
@@ -17953,6 +17957,10 @@ export type Database = {
       override_annual_review_rating: {
         Args: { p_instance_id: string; p_new_rating: string; p_reason: string }
         Returns: undefined
+      }
+      password_reset_allowed: {
+        Args: { p_client_ip?: string; p_email: string }
+        Returns: boolean
       }
       pip_acknowledge: {
         Args: { p_comments?: string; p_pip_id: string }
