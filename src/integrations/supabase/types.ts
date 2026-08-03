@@ -11020,6 +11020,7 @@ export type Database = {
           id: string
           report_key: string
           report_name: string
+          requires_employee_data: boolean
           updated_at: string
           view_roles: Database["public"]["Enums"]["app_role"][]
         }
@@ -11029,6 +11030,7 @@ export type Database = {
           id?: string
           report_key: string
           report_name: string
+          requires_employee_data?: boolean
           updated_at?: string
           view_roles?: Database["public"]["Enums"]["app_role"][]
         }
@@ -11038,6 +11040,7 @@ export type Database = {
           id?: string
           report_key?: string
           report_name?: string
+          requires_employee_data?: boolean
           updated_at?: string
           view_roles?: Database["public"]["Enums"]["app_role"][]
         }
