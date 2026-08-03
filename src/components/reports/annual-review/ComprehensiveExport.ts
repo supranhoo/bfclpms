@@ -330,12 +330,25 @@ export async function downloadComprehensiveWorkbook(input: ExportInput) {
     if (!data || data.length === 0) return;
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data as any), name);
   };
+  // ADR-236 — the Employees sheet uses an explicit ordered header list.
+  const appendWithHeaders = (name: string, data: unknown[], header: string[]) => {
+    if (!data || data.length === 0) return;
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.json_to_sheet(data as any, { header }),
+      name,
+    );
+  };
   append('Executive Summary', summaryToSheet(input.summary, input.cycleName, input.penaltyNote));
-  append('Employees', toEmployeeSheet(
-    input.rows, labelMaps, eligMaps, eligColumns, kra,
-    input.ratingSlabs ?? DEFAULT_RATING_SLABS,
-    input.ratingContext,
-  ));
+  appendWithHeaders(
+    'Employees',
+    toEmployeeSheet(
+      input.rows, labelMaps, eligMaps, eligColumns, kra,
+      input.ratingSlabs ?? DEFAULT_RATING_SLABS,
+      input.ratingContext,
+    ),
+    employeeSheetHeaders(eligColumns.map((c) => c.header)),
+  );
   // ADR-188 — month-by-month KRA detail for KRA-template employees only.
   append('Monthly KRA Scores', buildMonthlyKraSheet(kra));
   append('Rating Distribution', ratingDistribution(
