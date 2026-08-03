@@ -1320,6 +1320,10 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       .select("setting_value")
       .eq("setting_key", "email_notification_events")
       .single();
+      .from("system_settings")
+      .select("setting_value")
+      .eq("setting_key", "email_notification_events")
+      .single();
 
     let enabledEvents: string[] = [];
     try {
