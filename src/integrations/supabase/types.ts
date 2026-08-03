@@ -15811,6 +15811,18 @@ export type Database = {
         Args: { p_employee_id: string }
         Returns: boolean
       }
+      annual_review_final_score_drift: {
+        Args: { p_cycle_id?: string }
+        Returns: {
+          computed_rating: string
+          computed_total: number
+          employee_code: string
+          employee_name: string
+          instance_id: string
+          stored_rating: string
+          stored_total: number
+        }[]
+      }
       annual_review_first_pending_status: {
         Args: { p_enabled: Json }
         Returns: Database["public"]["Enums"]["annual_review_status"]
