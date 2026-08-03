@@ -1314,12 +1314,25 @@ Sender Email: ${senderEmail}`, { logoUrl, footerText });
       });
     }
 
+    // ── INACTIVE RECIPIENT GATE (ADR-241 / POLICY §SEC-INACTIVE-SUPPRESSION):
+    // deactivated employees must never receive system emails.
+    const { data: recipientProfile } = await supabase
+      .from("profiles")
+      .select("id, is_active")
+      .ilike("email", recipient_email.trim())
+      .maybeSingle();
+
+    if (recipientProfile && recipientProfile.is_active === false) {
+      console.log(`Dispatch gate: skipping ${event_type} for inactive recipient ${recipient_email}`);
+      await logEmail({ event_type, recipient_email, recipient_name, status: 'skipped', metadata: { reason: 'recipient_inactive' } });
+      return new Response(JSON.stringify({ skipped: true, reason: 'recipient_inactive' }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+
     // Check if this event type is enabled
     const { data: eventsSetting } = await supabase
-      .from("system_settings")
-      .select("setting_value")
-      .eq("setting_key", "email_notification_events")
-      .single();
       .from("system_settings")
       .select("setting_value")
       .eq("setting_key", "email_notification_events")

@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
 
       const { data: profileData, error: profileError } = await adminClient
         .from('profiles')
-        .select('id')
+        .select('id, is_active')
         .ilike('email', email.trim())
         .maybeSingle();
 
@@ -77,6 +77,14 @@ Deno.serve(async (req) => {
         return new Response(
           JSON.stringify({ error: 'User not found' }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // ADR-241: inactive employees may not have their password reset.
+      if (profileData.is_active === false) {
+        return new Response(
+          JSON.stringify({ error: 'Employee is inactive — reactivate the account before resetting the password' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
@@ -103,6 +111,20 @@ Deno.serve(async (req) => {
 
     // Default: Generate password reset link
     console.log(`Admin ${adminUserId} requesting password reset link for: ${email}`);
+
+    // ADR-241: never generate a recovery link for a deactivated employee.
+    const { data: linkProfile } = await adminClient
+      .from('profiles')
+      .select('id, is_active')
+      .ilike('email', email.trim())
+      .maybeSingle();
+
+    if (linkProfile && linkProfile.is_active === false) {
+      return new Response(
+        JSON.stringify({ error: 'Employee is inactive — reactivate the account before resetting the password' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     const { data, error } = await adminClient.auth.admin.generateLink({
       type: 'recovery',
