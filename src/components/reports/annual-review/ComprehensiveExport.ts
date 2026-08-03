@@ -52,6 +52,68 @@ interface KraContext {
   kraRows: ComprehensiveRow[];
 }
 
+/**
+ * ADR-236 / POLICY §RPT-EXPORT-EXPLICIT-HEADERS
+ *
+ * The Employees sheet is written from an EXPLICIT, ordered header list instead
+ * of keys inferred from the row objects, so a dynamic (template-authored)
+ * eligibility question can never displace a fixed column such as
+ * "BU Head Recommendation".
+ *
+ * Nothing is ever filtered or scrubbed from a cell: a recommendation that
+ * genuinely reads "18" exports as "18".
+ */
+export const EMPLOYEE_HEADERS_BEFORE_ELIGIBILITY: readonly string[] = [
+  'Employee Code', 'Name', 'Designation', 'Department', 'Business Unit', 'Division',
+  'Grade', 'Date of Joining', 'Eligibility', 'Eligibility Status', 'Eligibility Result',
+];
+
+export const EMPLOYEE_HEADERS_AFTER_ELIGIBILITY: readonly string[] = [
+  'Self Score', 'Self Rating', 'Self Rating (/5)', 'Self Comment',
+  'HOD Score', 'HOD Rating', 'HOD Rating (/5)', 'HOD Comment', 'Dept Head Recommendation',
+  'BU Head Score', 'BU Head Rating', 'BU Head Rating (/5)', 'BU Head Comment',
+  'BU Head Recommendation',
+  'HR Score', 'HR Rating', 'HR Rating (/5)',
+  'Management Rating (/5)', 'Management Recommendation', 'HR Comment',
+  'Final Score', 'Rating', 'Final Rating (out of 5)', 'Computed Rating (/5)',
+  'Calibrated Rating', 'Calibration Reason', 'Slab %', 'Raw Slab %',
+  'Exemption Cap Applied', 'Rating Derived From', 'Stage Rating Source', 'Template',
+  'KRA Weight', 'KRA Points', 'KRA Months Counted', 'Criteria Weight', 'System Weight',
+  'System Scores', 'Criteria Scores (final reviewer)',
+  'Current Stage', 'Pending With', 'Completion Status', 'Days Since Update',
+  'HR Data Available', 'HR Data Visible in Report',
+  'Root Cause', 'Evidence', 'Impact', 'Recommended Fix',
+];
+
+const RESERVED_EMPLOYEE_HEADERS = new Set<string>([
+  ...EMPLOYEE_HEADERS_BEFORE_ELIGIBILITY,
+  ...EMPLOYEE_HEADERS_AFTER_ELIGIBILITY,
+]);
+
+/**
+ * A template-authored question whose name collides with a fixed column is
+ * renamed (never dropped), so both values survive in their own column.
+ */
+export function safeEligibilityHeader(header: string): string {
+  return RESERVED_EMPLOYEE_HEADERS.has(header) ? `Eligibility: ${header}` : header;
+}
+
+/** Full ordered header list for the Employees sheet. */
+export function employeeSheetHeaders(eligHeaders: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const h of [
+    ...EMPLOYEE_HEADERS_BEFORE_ELIGIBILITY,
+    ...eligHeaders.map(safeEligibilityHeader),
+    ...EMPLOYEE_HEADERS_AFTER_ELIGIBILITY,
+  ]) {
+    if (seen.has(h)) continue;
+    seen.add(h);
+    out.push(h);
+  }
+  return out;
+}
+
 function toEmployeeSheet(
   rows: ComprehensiveRow[],
   labelMaps: TemplateLabelMaps,
@@ -63,10 +125,15 @@ function toEmployeeSheet(
 ) {
   // ADR-181 — stable column set: every question, blank when not on the template.
   const blankElig: Record<string, string> = {};
-  for (const c of eligColumns) blankElig[c.header] = '';
+  for (const c of eligColumns) blankElig[safeEligibilityHeader(c.header)] = '';
   return rows.map((r) => {
     const diag = diagnoseHr(r);
     const elig = buildEligibilityRow(r.template_id, r.eligibility_inputs, eligMaps);
+    // ADR-236 — collision-safe header for the per-employee answers too, so a
+    // question named like a fixed column keeps its own column instead of
+    // overwriting (or being overwritten by) that column.
+    const eligCells: Record<string, string> = {};
+    for (const [k, v] of Object.entries(elig.cells)) eligCells[safeEligibilityHeader(k)] = v;
     // ADR-230 — effective rating (calibration) + effective slab % (exemption).
     const rr = resolveReportRating(r, { slabs, ...(ratingContext ?? {}) });
     const hodScore = r.dept_head_score ?? r.manager_score ?? null;
@@ -90,7 +157,7 @@ function toEmployeeSheet(
     // ADR-181 — eligibility questions: value, expected condition and verdict.
     'Eligibility Result': elig.summary,
     ...blankElig,
-    ...elig.cells,
+    ...eligCells,
     'Self Score': r.self_score ?? '',
     'Self Rating': stageRatingDisplay(r.self_score, r.self_comment),
     'Self Rating (/5)': r.self_rating_5 ?? '',
