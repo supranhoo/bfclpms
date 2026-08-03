@@ -5710,3 +5710,16 @@ Rules:
 1. **Two decimals.** Any score rendered on a scale of 0..5 (badges, grid cells, stage `/5` columns, averages of /5 scores, variance deltas between /5 scores) displays with exactly two decimals: `4.75`, `4.80`, `0.00`.
 2. **Scope.** On-screen dashboards, review surfaces and report tables. Percentages, day counts, file sizes, completion rates and monetary values keep their existing precision. Excel/PDF/CSV exports are unchanged.
 3. **No silent truncation.** Never render a /5 score with `toFixed(1)`; prefer `fmt2()` from `src/lib/utils.ts` for nullable values (it returns `—` for null/NaN and preserves `0.00`).
+
+
+## §AR-FINAL-SCORE-WRITE-BACK — A completed Annual Review must carry a final score (ADR-232, 2026-08-03)
+
+1. **Invariant.** An `annual_review_instances` row with `overall_status = 'completed'` (and not `excluded`) must hold a non-null `total_score` and `final_rating`. A blank final score blanks Final Rating (/5), Computed Rating, Calibrated Rating, Slab % and the rating band in every report.
+2. **Single scoring source.** `public.annual_review_compute_final_summary(instance_id)` is the only scoring authority. No completion, repair or backfill path may compute a score of its own.
+3. **Write-back is automatic.** `trg_ar_backfill_final_score` (AFTER INSERT/UPDATE OF `overall_status`, `system_scores`) calls `public.annual_review_apply_final_summary()` whenever an instance becomes `completed`, or when `system_scores` change on an already-completed instance. Auto-finalise, stage-skip, terminal-mismatch rollback and KRA/system-score correction paths therefore cannot leave the score blank.
+4. **No manufactured zeros.** If an instance has no score source at all (no criteria scores and no system scores), the score stays blank and the instance is reported, never written as `0`.
+5. **Manual repair is admin-scoped and audited.** `admin_recompute_annual_review_final_score(p_instance_ids, p_reason, p_allow_overwrite)` is restricted to `admin` / `hr_pms`, requires a reason of ≥ 10 characters, caps at 1000 instances per call, and **fills only blank scores** by default. Overwriting an existing final score requires `p_allow_overwrite = true` and the `admin` role.
+6. **Immutable trail.** Every write-back inserts an `annual_review_final_score_recompute_audit` row (old/new score, old/new rating, overwrite flag, source, reason, actor). The table is read-only to `admin` / `hr_pms` and has no update/delete policy.
+7. **Visibility.** The Annual Review Report surfaces any remaining offenders as an amber banner with a "Recompute final scores" action, and marks the offending row with a "No final score" badge instead of a silent blank.
+
+**Guard.** `src/services/annualReview/__tests__/finalScoreIntegrity.test.ts`.

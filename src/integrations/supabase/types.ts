@@ -1412,6 +1412,62 @@ export type Database = {
         }
         Relationships: []
       }
+      annual_review_final_score_recompute_audit: {
+        Row: {
+          created_at: string
+          id: string
+          instance_id: string
+          new_criteria_weighted_score: number | null
+          new_final_rating: string | null
+          new_total_score: number | null
+          old_criteria_weighted_score: number | null
+          old_final_rating: string | null
+          old_total_score: number | null
+          performed_by: string | null
+          reason: string | null
+          source: string
+          was_overwrite: boolean
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instance_id: string
+          new_criteria_weighted_score?: number | null
+          new_final_rating?: string | null
+          new_total_score?: number | null
+          old_criteria_weighted_score?: number | null
+          old_final_rating?: string | null
+          old_total_score?: number | null
+          performed_by?: string | null
+          reason?: string | null
+          source?: string
+          was_overwrite?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instance_id?: string
+          new_criteria_weighted_score?: number | null
+          new_final_rating?: string | null
+          new_total_score?: number | null
+          old_criteria_weighted_score?: number | null
+          old_final_rating?: string | null
+          old_total_score?: number | null
+          performed_by?: string | null
+          reason?: string | null
+          source?: string
+          was_overwrite?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annual_review_final_score_recompute_audit_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "annual_review_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       annual_review_final_score_repair_2026_07: {
         Row: {
           created_at: string
@@ -15594,6 +15650,14 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_recompute_annual_review_final_score: {
+        Args: {
+          p_allow_overwrite?: boolean
+          p_instance_ids: string[]
+          p_reason: string
+        }
+        Returns: Json
+      }
       admin_rescale_dust_emission_june_2026: {
         Args: { p_dry_run?: boolean }
         Returns: {
@@ -15661,6 +15725,16 @@ export type Database = {
           p_instance_id: string
         }
         Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
+      annual_review_apply_final_summary: {
+        Args: {
+          p_actor?: string
+          p_allow_overwrite?: boolean
+          p_instance_id: string
+          p_reason?: string
+          p_source?: string
+        }
+        Returns: string
       }
       annual_review_bu_head_terminal_diagnostic: {
         Args: { p_cycle_id: string }

@@ -23,6 +23,8 @@ import {
 } from '@/services/annualReview/comprehensiveReport';
 import { RatingDistributionChart } from './RatingDistributionChart';
 import { HighlightsPanel } from './HighlightsPanel';
+import { MissingFinalScoreBanner } from './MissingFinalScoreBanner';
+import { isMissingFinalScore } from '@/services/annualReview/finalScoreIntegrity';
 import { downloadComprehensiveWorkbook } from './ComprehensiveExport';
 import { useAnnualReviewRatingSlabs } from '@/hooks/useAnnualReviewRatingSlabs';
 import {
@@ -375,6 +377,10 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
         </CardContent>
       </Card>
 
+      {/* ADR-232 — completed reviews with no stored final score render blank
+          rating cells; surface and repair them instead of failing silently. */}
+      <MissingFinalScoreBanner rows={rows} cycleId={cycleId} />
+
       {/* Executive Summary */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-muted-foreground">
@@ -475,7 +481,13 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
                   <TableCell className="text-right tabular-nums">{(r.dept_head_rating_5 ?? r.manager_rating_5)?.toFixed(2) ?? (r.dept_head_score ?? r.manager_score)?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.bu_head_rating_5?.toFixed(2) ?? r.bu_head_score?.toFixed(2) ?? '—'}</TableCell>
                   <TableCell className="text-right tabular-nums">{r.hr_rating_5?.toFixed(2) ?? r.hr_score?.toFixed(2) ?? '—'}</TableCell>
-                  <TableCell className="text-right tabular-nums font-medium">{r.total_score?.toFixed(2) ?? '—'}</TableCell>
+                  <TableCell className="text-right tabular-nums font-medium">
+                    {r.total_score?.toFixed(2) ?? (
+                      isMissingFinalScore(r)
+                        ? <Badge variant="destructive" className="px-1 py-0 text-[10px]" title="Completed review with no stored final score (ADR-232) — use “Recompute final scores”.">No final score</Badge>
+                        : '—'
+                    )}
+                  </TableCell>
                   <TableCell className="text-sm">{effectiveBandLabel(r) ?? '—'}</TableCell>
                   <TableCell className="text-right tabular-nums">
                     <span className="inline-flex items-center justify-end gap-1">
