@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -24,14 +25,16 @@ import {
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { RefreshCw, Undo2 } from 'lucide-react';
+import { RefreshCw, Undo2, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import {
   startKraRehydrate, rollbackKraRehydrateRun,
   listKraRehydrateRuns, listKraRehydrateItems,
+  getKraDriftSummary,
   type KraRehydrateRun,
 } from '@/services/annualReview/kraRehydrate';
+import { describeDrift } from '@/lib/annualReview/kraDrift';
 
 interface CycleOption { id: string; name: string; }
 
@@ -68,6 +71,15 @@ function useItems(runId: string | undefined, page: number) {
   });
 }
 
+function useDrift(cycleId: string | undefined) {
+  return useQuery({
+    queryKey: ['kra-drift-summary', cycleId],
+    queryFn: () => getKraDriftSummary(cycleId!),
+    enabled: !!cycleId,
+    staleTime: 60_000,
+  });
+}
+
 function StatusBadge({ status }: { status: KraRehydrateRun['status'] }) {
   const variant = status === 'failed' ? 'destructive' : status === 'running' ? 'secondary' : 'default';
   return <Badge variant={variant as any}>{status}</Badge>;
@@ -83,6 +95,7 @@ export function KraRehydrateCard() {
   const activeCycleId = cycleId ?? cycles[0]?.id;
 
   const [reason, setReason] = useState('');
+  const [includeInFlight, setIncludeInFlight] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | undefined>();
   const [page, setPage] = useState(0);
 
@@ -95,17 +108,19 @@ export function KraRehydrateCard() {
 
   const { data: runs = [], isLoading: runsLoading } = useRuns(activeCycleId);
   const { data: itemsData, isLoading: itemsLoading } = useItems(selectedRunId, page);
+  const { data: drift, isLoading: driftLoading, refetch: refetchDrift } = useDrift(activeCycleId);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['kra-rehydrate-runs'] });
     qc.invalidateQueries({ queryKey: ['kra-rehydrate-items'] });
+    qc.invalidateQueries({ queryKey: ['kra-drift-summary'] });
   };
 
   const dryRun = useMutation({
     mutationFn: async () => {
       if (!activeCycleId) throw new Error('Select a cycle');
       if (reason.trim().length < 10) throw new Error('Reason must be at least 10 characters');
-      return startKraRehydrate({ cycleId: activeCycleId, mode: 'dry_run', reason: reason.trim() });
+      return startKraRehydrate({ cycleId: activeCycleId, mode: 'dry_run', reason: reason.trim(), includeInFlight });
     },
     onSuccess: (runId) => {
       toast.success('Preview generated');
@@ -120,7 +135,7 @@ export function KraRehydrateCard() {
     mutationFn: async () => {
       if (!activeCycleId) throw new Error('Select a cycle');
       if (reason.trim().length < 10) throw new Error('Reason must be at least 10 characters');
-      return startKraRehydrate({ cycleId: activeCycleId, mode: 'apply', reason: reason.trim() });
+      return startKraRehydrate({ cycleId: activeCycleId, mode: 'apply', reason: reason.trim(), includeInFlight });
     },
     onSuccess: (runId) => {
       toast.success('KRA scores rehydrated');
@@ -175,11 +190,46 @@ export function KraRehydrateCard() {
         </CardTitle>
         <CardDescription>
           For KRA-based templates only. Recomputes each Carry-KRA slot from the latest monthly
-          KPI scores and updates the completed review's total &amp; rating. Non-KRA reviews and
-          in-progress reviews are skipped. Every apply run is fully reversible.
+          KPI scores and updates the completed review's total &amp; rating. Non-KRA reviews are always
+          skipped; in-progress reviews are included only when the option below is ticked (their
+          KRA inputs refresh, the total stays workflow-derived). Every apply run is fully reversible.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* ADR-233 — drift indicator */}
+        <div
+          className={
+            driftLoading || !drift
+              ? 'rounded-lg border bg-muted/30 p-3'
+              : drift.drifted > 0
+              ? 'rounded-lg border border-amber-500/40 bg-amber-500/5 p-3'
+              : 'rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3'
+          }
+        >
+          {driftLoading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-start gap-2">
+                {drift && drift.drifted > 0
+                  ? <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-600" />
+                  : <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />}
+                <div className="text-sm">
+                  <div className="font-medium">{describeDrift(drift)}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Last applied sync:{' '}
+                    {drift?.last_applied_at ? new Date(drift.last_applied_at).toLocaleString() : 'never'}
+                    {drift ? ` · ${drift.in_flight} still in progress` : ''}
+                  </div>
+                </div>
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => refetchDrift()}>
+                <RefreshCw className="mr-1 h-4 w-4" /> Recheck
+              </Button>
+            </div>
+          )}
+        </div>
+
         <div className="grid gap-3 md:grid-cols-2">
           <div>
             <Label className="text-xs">Cycle</Label>
@@ -202,6 +252,13 @@ export function KraRehydrateCard() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-sm mr-2">
+            <Checkbox
+              checked={includeInFlight}
+              onCheckedChange={(v) => setIncludeInFlight(v === true)}
+            />
+            Include in-progress reviews
+          </label>
           <Button
             variant="outline"
             onClick={() => dryRun.mutate()}

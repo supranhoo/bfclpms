@@ -9,6 +9,7 @@
  * instances are skipped server-side. See POLICY §AR-KRA-REHYDRATE.
  */
 import { supabase } from '@/integrations/supabase/client';
+import type { KraDriftSummary } from '@/lib/annualReview/kraDrift';
 
 export type KraRehydrateMode = 'dry_run' | 'apply';
 
@@ -51,6 +52,8 @@ export async function startKraRehydrate(input: {
   mode: KraRehydrateMode;
   reason: string;
   instanceIds?: string[];
+  /** ADR-233 — also refresh reviews that are still in progress. */
+  includeInFlight?: boolean;
 }): Promise<string> {
   const { data, error } = await (supabase as any).rpc(
     'annual_review_rehydrate_kra_for_cycle',
@@ -59,10 +62,38 @@ export async function startKraRehydrate(input: {
       p_mode: input.mode,
       p_reason: input.reason,
       p_instance_ids: input.instanceIds ?? null,
+      p_include_in_flight: input.includeInFlight ?? false,
     },
   );
   if (error) throw error;
   return data as string;
+}
+
+/**
+ * ADR-233 — how many KRA-based reviews in a cycle no longer match the latest
+ * monthly KPI data, plus when the last apply run happened.
+ */
+export async function getKraDriftSummary(cycleId: string): Promise<KraDriftSummary> {
+  const { data, error } = await (supabase as any).rpc('annual_review_kra_drift_summary', {
+    p_cycle_id: cycleId,
+  });
+  if (error) throw error;
+  return data as KraDriftSummary;
+}
+
+export interface InstanceKraDrift {
+  found: boolean;
+  drifted: boolean;
+  slots: Array<{ slot_id: string; label: string | null; stored: number | null; computed: number | null }>;
+}
+
+/** ADR-233 — per-instance drift, used by the review form's System Scores card. */
+export async function getInstanceKraDrift(instanceId: string): Promise<InstanceKraDrift> {
+  const { data, error } = await (supabase as any).rpc('annual_review_kra_instance_drift', {
+    p_instance_id: instanceId,
+  });
+  if (error) throw error;
+  return data as InstanceKraDrift;
 }
 
 export async function rollbackKraRehydrateRun(runId: string, reason: string): Promise<string> {

@@ -14,6 +14,7 @@ import { KPI_SCALE_MAX, fyLabel } from '@/lib/annualReview/fiscalYear';
 import { scoreFromRaw } from '@/lib/annualReview/systemKpiScoring';
 import { useAnnualReviewI18n } from '@/components/annual-review/AnnualReviewI18nContext';
 import { formatExpected, formatActual } from '@/lib/annualReview/eligibilityFormat';
+import { isCarryValueDrifted } from '@/lib/annualReview/kraDrift';
 
 /**
  * Format a raw HR-entered achievement value for display based on the KPI
@@ -372,6 +373,10 @@ function CarryKraScoreCard({
   const value = data?.value ?? storedValue ?? 0;
   const maxValue = data?.maxValue ?? (Number(score.weight) || 0);
   const rating = data?.rating ?? 0;
+  // ADR-233 — a finalised (read-only) review keeps a frozen snapshot. When the
+  // monthly KPI data has since changed, surface it instead of silently
+  // recomputing; HR re-syncs from Admin → KRA Sync.
+  const snapshotDrifted = !onChangeValue && isCarryValueDrifted(storedValue, data?.value);
   const pct = maxValue > 0 ? Math.min(100, (Number(value) / maxValue) * 100) : 0;
   const selected = data ? selectMonths(data.monthly, cfg) : [];
   const selectedSet = new Set(selected.map((m) => m.month));
@@ -392,6 +397,19 @@ function CarryKraScoreCard({
           <p className="text-xs text-muted-foreground">
             {typeof fiscalYear === 'number' ? fyLabel(fiscalYear) : 'FY —'} · {labelForCfg(cfg)}
           </p>
+          {snapshotDrifted && (
+            <p className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                {t(
+                  'carry.drift_hint',
+                  'Monthly KPI data changed since this was finalised — stored {stored}, latest {latest}. HR can re-sync from Admin → KRA Sync.',
+                )
+                  .replace('{stored}', Number(storedValue ?? 0).toFixed(2))
+                  .replace('{latest}', Number(data?.value ?? 0).toFixed(2))}
+              </span>
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
           {isLoading ? (

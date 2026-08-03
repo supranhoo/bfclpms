@@ -5724,3 +5724,15 @@ Rules:
 7. **Visibility.** The Annual Review Report surfaces any remaining offenders as an amber banner with a "Recompute final scores" action, and marks the offending row with a "No final score" badge instead of a silent blank.
 
 **Guard.** `src/services/annualReview/__tests__/finalScoreIntegrity.test.ts`.
+
+## §AR-KRA-REHYDRATE — Monthly KPI changes reach the Annual Review only through an audited sync (ADR-161, extended ADR-233, 2026-08-03)
+
+1. **Snapshot, not live lookup.** A Carry-KRA system score stored on an `annual_review_instances` row is a frozen snapshot (POLICY §88). Later corrections to the monthly KPI scorecard MUST NOT mutate a finalised review implicitly.
+2. **One sync authority.** `public.annual_review_rehydrate_kra_for_cycle(p_cycle_id, p_mode, p_reason, p_instance_ids, p_include_in_flight)` is the only path that re-pulls Carry-KRA values. Admin / HR PMS only, reason ≥ 10 characters, `dry_run` before `apply`.
+3. **Scope.** Only templates carrying a `system_scores` slot with `source = 'carry_kra'` are touched. Criteria-scored templates are never affected by monthly KPI data.
+4. **In-flight coverage.** With `p_include_in_flight = true`, non-completed (and non-excluded) instances refresh their `system_scores` only; `total_score` / `final_rating` stay workflow-derived until completion. Completed instances get score, total and rating rewritten.
+5. **Reversible.** Every run stores a per-instance pre-image in `annual_review_kra_rehydrate_items`; `annual_review_rollback_kra_rehydrate_run(run_id, reason)` restores it exactly.
+6. **Drift must be visible, never silent.** `annual_review_kra_drift_summary(cycle_id)` powers the admin indicator (drifted count, in-flight count, last applied sync). `annual_review_kra_instance_drift(instance_id)` and the client mirror `isCarryValueDrifted()` (`src/lib/annualReview/kraDrift.ts`) power the per-review hint on the System Scores card. Both sides round to 2 dp so they cannot disagree.
+7. **Placement.** The tool lives at Annual Review Admin → **KRA Sync**, not buried inside Access Control.
+
+**Guard.** `src/lib/annualReview/__tests__/kraDrift.test.ts`.
