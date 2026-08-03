@@ -1,5 +1,19 @@
 # "18" in the BU Head Recommendation column — verification and fix
 
+## Non-negotiable constraint (added on your instruction)
+
+**Nothing is ever removed, blanked, cleaned or "sanitised" from recommendation text.**
+If a reviewer genuinely typed `18`, or a recommendation of `18%` / `Rs 18` / "18 percent hike",
+that value must survive untouched in the review form, the on-screen report, the Excel export and
+the recommendations queue. This plan therefore contains:
+
+- no `UPDATE` or `DELETE` against `annual_review_responses` or `annual_review_recommendations`;
+- no filter, regex scrub, or numeric-value suppression anywhere in the export or report path;
+- no rule such as "hide short/numeric recommendations".
+
+The only permitted change is making sure each value lands under **its own** column header. A
+correct `18` stays a visible `18`; a misplaced `18` moves back to the column it belongs to.
+
 ## What the data says (confirmed by direct queries)
 
 No BU Head ever entered "18".
@@ -44,6 +58,9 @@ The fix would then be:
 - Add a unit test asserting that a row carrying dynamic eligibility questions (including one whose
   text matches a fixed header) still writes every fixed column with its own value.
 
+Explicitly **not** part of the fix: dropping numeric values, trimming short strings, or filtering
+any recommendation content. The change is purely about header-to-value mapping.
+
 If the workbook turns out to be correct, no code change is made and I report which column actually
 holds the 18.
 
@@ -52,9 +69,14 @@ holds the 18.
 Add a regression test asserting that `BU Head Recommendation` in the export always equals the BU
 head recommendation field for a fixture row set, so future column drift fails the build.
 
+Second test, covering your constraint directly: a fixture whose BU Head recommendation really is
+`18` (and another that is `18% hike`) must export as `18` and `18% hike` — proving the fix cannot
+swallow a legitimate value.
+
 ## Risk and impact
 
-- **Data**: read-only investigation. No migration; no row is modified.
+- **Data**: read-only investigation. No migration; no row is modified; no recommendation text is
+  deleted or rewritten under any branch of this plan.
 - **Workflow**: none.
 - **UI/UX**: at most, export column headers are hardened; the on-screen report is unchanged.
 - **Regression risk**: low, confined to the export builder and covered by the new test.
