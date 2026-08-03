@@ -15815,6 +15815,14 @@ export type Database = {
         Args: { p_enabled: Json }
         Returns: Database["public"]["Enums"]["annual_review_status"]
       }
+      annual_review_kra_drift_summary: {
+        Args: { p_cycle_id: string }
+        Returns: Json
+      }
+      annual_review_kra_instance_drift: {
+        Args: { p_instance_id: string }
+        Returns: Json
+      }
       annual_review_last_send_back: {
         Args: { p_instance_id: string }
         Returns: {
@@ -15857,6 +15865,7 @@ export type Database = {
       annual_review_rehydrate_kra_for_cycle: {
         Args: {
           p_cycle_id: string
+          p_include_in_flight?: boolean
           p_instance_ids?: string[]
           p_mode: string
           p_reason: string
