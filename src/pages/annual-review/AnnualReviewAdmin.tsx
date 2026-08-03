@@ -33,6 +33,7 @@ import {
 import { usePmsGrades, useLevels } from '@/hooks/useOrganization';
 import { Check, ChevronsUpDown, X } from 'lucide-react';
 import { AccessControlTab } from '@/components/annual-review/AccessControlTab';
+import { KraRehydrateCard } from '@/components/annual-review/KraRehydrateCard';
 import { OrphanedReviewsTab } from '@/components/annual-review/OrphanedReviewsTab';
 import { AssistedSubmissionsTab } from '@/components/annual-review/AssistedSubmissionsTab';
 import { UnscoredStagesTab } from '@/components/annual-review/UnscoredStagesTab';
@@ -136,6 +137,7 @@ export default function AnnualReviewAdmin() {
           <TabsTrigger value="bulk" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><Upload className="h-4 w-4" />Bulk Actions</TabsTrigger>
           <TabsTrigger value="settings" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><Settings2 className="h-4 w-4" />Settings</TabsTrigger>
           <TabsTrigger value="access" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><ShieldCheck className="h-4 w-4" />Access Control</TabsTrigger>
+          <TabsTrigger value="kra-sync" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><Layers className="h-4 w-4" />KRA Sync</TabsTrigger>
           <TabsTrigger value="orphans" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><ShieldCheck className="h-4 w-4" />Orphaned Reviews</TabsTrigger>
           <TabsTrigger value="unscored" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><ShieldCheck className="h-4 w-4" />Unscored Stages</TabsTrigger>
           <TabsTrigger value="assisted" className="gap-1.5 flex-1 md:flex-none whitespace-nowrap px-3"><ShieldCheck className="h-4 w-4" />Assisted Submissions</TabsTrigger>
@@ -158,6 +160,17 @@ export default function AnnualReviewAdmin() {
         <TabsContent value="bulk" className="mt-4"><BulkActionsTab /></TabsContent>
         <TabsContent value="settings" className="mt-4"><SettingsTab /></TabsContent>
         <TabsContent value="access" className="mt-4"><AccessControlTab /></TabsContent>
+        <TabsContent value="kra-sync" className="mt-4">
+          <div className="space-y-4">
+            <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+              Annual review scores are a <b>snapshot</b> taken when the review was finalised — later
+              corrections to the monthly KPI scorecard do not flow in automatically. Use this tool to
+              re-pull the Carry-KRA slot from the latest monthly data. Preview first, then apply;
+              every apply run is fully reversible.
+            </div>
+            <KraRehydrateCard />
+          </div>
+        </TabsContent>
         <TabsContent value="orphans" className="mt-4"><OrphanedReviewsTab /></TabsContent>
         <TabsContent value="unscored" className="mt-4"><UnscoredStagesTab /></TabsContent>
         <TabsContent value="assisted" className="mt-4"><AssistedSubmissionsTab /></TabsContent>
