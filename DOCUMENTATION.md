@@ -8006,3 +8006,38 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - **Fix (app).** `src/lib/annualReview/finalScoreDrift.ts` (+6 tests) and
   `FinalScoreDriftCard` on Annual Review Admin → Orphaned Reviews with an admin recompute action.
 - **Policy.** POLICY.md §AR-FINAL-SCORE-SINGLE-WRITER.
+
+### ADR-236 — Annual Review export column integrity (2026-08-03)
+
+- **Report.** "18" appearing in the *BU Head Recommendation* column of the Excel download.
+- **Verification (no assumptions).** Direct queries found **zero** stored recommendations
+  matching `18` — in `annual_review_responses.qualitative_responses -> __overall_recommendation`
+  (all reviewer roles) and in `annual_review_recommendations` (`amount_value`, `narrative`).
+  `get_annual_review_recommendations` returns the BU-head field in its own typed column.
+  So no BU Head entered 18 and no stored value is wrong.
+- **Latent defect found.** The Employees sheet merged template-authored eligibility
+  question headers into the same row objects as the fixed columns and let `json_to_sheet`
+  infer headers. A question named like a fixed column (e.g. "BU Head Recommendation")
+  silently displaced that column's value; header order was data-dependent.
+- **Fix.** Explicit ordered header list (`employeeSheetHeaders`), collision-safe renaming
+  of dynamic headers (`safeEligibilityHeader`), sheet written with `{ header }`.
+- **Non-removal invariant (explicit user requirement).** No export path filters, blanks or
+  scrubs recommendation content; a genuine `18` / `18% hike` exports verbatim. Covered by test.
+- **Tests.** `src/components/reports/annual-review/ComprehensiveExport.test.ts` (5 tests, passing).
+- **Policy.** POLICY.md §RPT-EXPORT-EXPLICIT-HEADERS.
+
+### ADR-237 — Report-access override scoped to employee-data reports (2026-08-03)
+
+- **Finding.** `has_report_access_override(uid)` returned true for *any* report grant, and is
+  used by RLS on `profiles`, `review_submissions`, `can_view_kpi_row()` and
+  `can_view_org_kpi_value()`. Granting one low-sensitivity report leaked org-wide PII,
+  KPIs and review submissions.
+- **Fix.** New admin-configurable `report_access_config.requires_employee_data` (default
+  `false`, fail-closed). The resolver now joins the config and only honours grants on
+  reports that declare they need employee-level data.
+- **No access regression.** The 5 currently granted report keys (employee-summary,
+  kpi-status-tracker, manager-team-kpi, team-vs-manager-score, variance) were marked
+  `true`; all 6 existing grantees verified to retain their current access.
+- **Rollback.** Set `requires_employee_data = true` for the affected key, or restore the
+  previous one-line function body.
+- **Policy.** POLICY.md §RPT-ACCESS-OVERRIDE-SCOPE.
