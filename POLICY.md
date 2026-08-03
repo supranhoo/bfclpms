@@ -5801,3 +5801,13 @@ Rules:
    new reports default to `false`.
 3. `public.has_report_access_override(uuid)` is the single resolver; policies must not
    re-implement the check.
+
+## ADR-238 — §AR-ADMIN-FINAL-OUTCOME-VISIBILITY
+
+Admin and HR PMS (and no other role) may view the Final Outcome panel on an Annual
+Review detail page. The panel is read-only: final score, computed/calibrated/effective
+rating, increment slab (with caps and exemption penalties) and the audited change log.
+Effective values must come from the shared resolvers (`effectiveRating`,
+`resolveEligibility`, `ratingSlab`) — never recomputed locally. Change-log access is
+enforced server-side inside `annual_review_instance_change_log`; automated events
+(`performed_by = NULL`) display as "System".
