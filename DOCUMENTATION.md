@@ -7941,3 +7941,20 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - Surfaces: employee selector grid badge, mobile KPI card, KPI tracker modal, cumulative summary card, direct reportees monitor, unified scorecard, bulk review matrix/virtual grid/signoff preview/cell drawer, self-review sub-period average, annual review admin `<Stage> /5` grid + employee results view, Org KPI audit/impact/propagation dialogs, KPI Detail/TNI/Employee Performance Summary report tables, Comprehensive tab KRA points.
 - Unchanged: percentages, completion rates, day counts, file sizes, monetary values and all file exports.
 - Guard: `src/lib/utils.test.ts` (`fmt2` precision cases).
+
+### 2026-08-03 — ADR-232: Annual Review final-score write-back integrity
+
+- **Symptom.** In the Annual Review Report (screen + workbook), `Final Rating (out of 5)`, `Computed Rating (/5)`, `Calibrated Rating`, `Slab %` and `Rating` were blank for 13 employees of "Annual Review - 2025-2026" (100264 Sajid Raza, 101148, 200301, 100367, 100012, 100856, 200271, 100894, 101773, 100513, 101902, 101967, 101896).
+- **RCA.** The export was correct: `annual_review_instances.total_score` and `final_rating` were NULL for those rows even though `overall_status = 'completed'`. The instances were completed by repair / auto paths (`annual_review.terminal_auto_finalized`, `rollback_terminal_stage_mismatch`, `stage_auto_skipped`) which set `overall_status` without ever calling `annual_review_compute_final_summary`. 12 of 13 sit on the KRA template "Generic M - (With KRA)", where the whole score lives in `system_scores` — present and correct, just never rolled into `total_score`.
+- **5-Why.** Blank column → no `total_score` → completion path never wrote it → write-back lived only inside `advance_annual_review_status` → no invariant/trigger guaranteed it at the row level → the report had no detector, so the gap stayed invisible until export.
+- **Corrective action (data).** All 12 computable instances repaired via `annual_review_apply_final_summary` (e.g. 100012 = 91.74 Outstanding, 100264 = 40.93, 200301 = 35.00), each audited in `annual_review_final_score_recompute_audit` with source `adr_232_repair`. 101896 (Love Sahrawat) has no criteria and no system scores; deliberately left blank rather than written as 0, and reported for review.
+- **Preventive action (code/DB).**
+  - `public.annual_review_apply_final_summary(instance_id, allow_overwrite, source, reason, actor)` — shared, audited write-back over the existing scoring SSOT.
+  - `public.admin_recompute_annual_review_final_score(uuid[], reason, allow_overwrite)` — admin/hr_pms batch repair; fill-only by default, ≥10-char reason, max 1000 ids, idempotent, audited.
+  - `trg_ar_backfill_final_score` on `annual_review_instances` — self-healing write-back on completion and on system-score change of a completed instance.
+  - `annual_review_final_score_recompute_audit` — immutable trail (RLS: read for admin/hr_pms only).
+  - `src/services/annualReview/finalScoreIntegrity.ts`, `MissingFinalScoreBanner.tsx`, "No final score" badge in `ComprehensiveTab.tsx`.
+- **Related finding (no data change).** 106 completed instances of the same cycle show a difference between the stored and recomputed score (largest: 102011 +17.00, 100002 −15.00; a large CPP/DRI group at exactly ±2.00). Exported for review as `annual-review-final-score-drift-2025-26.csv`; not modified, because the stored value may be the deliberate finalised snapshot.
+- **Rollback.** Each audit row carries the previous score/rating, so any instance can be restored to its pre-repair value.
+- **Tests.** `src/services/annualReview/__tests__/finalScoreIntegrity.test.ts` (9).
+- **Policy.** POLICY.md §AR-FINAL-SCORE-WRITE-BACK.
