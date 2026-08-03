@@ -20,6 +20,7 @@ import { stageScoreGuardMessage } from '@/lib/annualReview/stageScoreGuard';
 import { SystemScoresPanel } from '@/components/annual-review/SystemScoresPanel';
 import { EligibilityInputsEditor } from '@/components/annual-review/EligibilityInputsEditor';
 import { AdminSystemScoresDialog } from '@/components/annual-review/AdminSystemScoresDialog';
+import { AdminFinalOutcomeCard } from '@/components/annual-review/AdminFinalOutcomeCard';
 import { useAnnualReviewCalibrations } from '@/hooks/useAnnualReviewCalibrations';
 import { CalibrateRatingDialog } from '@/components/annual-review/CalibrateRatingDialog';
 import { toRatingOutOf5, formatRating5 } from '@/lib/annualReview/ratingSlab';
@@ -357,6 +358,8 @@ function TeamReviewDetailInner(props: any) {
   const calibration = calibrations[instance.id] ?? null;
   const computedFinalRating = toRatingOutOf5(instance.total_score ?? null);
   const canEditEligibility = effectiveRole === 'admin' || effectiveRole === 'hr_pms';
+  // ADR-238 — the Final Outcome panel is admin / HR PMS only.
+  const canViewFinalOutcome = effectiveRole === 'admin' || effectiveRole === 'hr_pms';
   // ADR-217 — System Score corrections are admin-only (HR PMS keeps eligibility only).
   const canEditSystemScores = effectiveRole === 'admin';
   const editableSysSlots = editableSystemScoreSlots(template?.sections?.system_scores ?? []);
@@ -483,6 +486,18 @@ function TeamReviewDetailInner(props: any) {
             <p className="text-xs text-muted-foreground">Reason: {calibration.calibration_reason}</p>
           )}
         </div>
+      )}
+
+      {canViewFinalOutcome && (
+        <AdminFinalOutcomeCard
+          instanceId={instance.id}
+          cycleId={instance.cycle_id ?? null}
+          totalScore={instance.total_score ?? null}
+          finalRating={instance.final_rating ?? null}
+          eligibilityCriteria={eligibilityCriteria}
+          eligibilityInputs={instance.eligibility_inputs ?? null}
+          calibration={calibration}
+        />
       )}
 
       {canEditSystemScores && (
