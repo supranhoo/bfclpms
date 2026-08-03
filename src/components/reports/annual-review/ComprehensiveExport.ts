@@ -114,7 +114,7 @@ export function employeeSheetHeaders(eligHeaders: readonly string[]): string[] {
   return out;
 }
 
-function toEmployeeSheet(
+export function toEmployeeSheet(
   rows: ComprehensiveRow[],
   labelMaps: TemplateLabelMaps,
   eligMaps: EligibilityMaps,
