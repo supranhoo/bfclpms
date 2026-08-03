@@ -5811,3 +5811,21 @@ Effective values must come from the shared resolvers (`effectiveRating`,
 `resolveEligibility`, `ratingSlab`) — never recomputed locally. Change-log access is
 enforced server-side inside `annual_review_instance_change_log`; automated events
 (`performed_by = NULL`) display as "System".
+
+## ADR-239 — §AR-BULK-UPLOAD-NO-SILENT-DROP
+
+A Bulk Data Upload cell that carries a value MUST resolve to one of three visible
+outcomes: **applied**, **skipped with a named reason**, or **ignored with a named
+reason**. Silently discarding a filled cell is prohibited.
+
+- A column that does not exist in the employee's effective template is reported per
+  cell as `"<column>" ignored — not part of this employee's template (<template>)`,
+  counted in `ignoredCellCount`, and broken down per column in the dry-run UI.
+- The downloaded template writes the literal marker `n/a` into every non-applicable
+  cell; the importer treats `n/a` as "untouched" so the marker can never be stored.
+- Eligibility inputs on `completed` / mid-workflow rows stay read-only by default.
+  An admin/HR PMS user may opt into **"Also correct eligibility inputs on locked
+  reviews"**, which routes changes through the audited SECURITY DEFINER RPC
+  `admin_apply_eligibility_inputs_correction(p_instance_id, p_eligibility_inputs,
+  p_reason)`. A reason of at least 10 characters is mandatory, the full before/after
+  map is written to `annual_review_access_audit`, and `overall_status` is never touched.
