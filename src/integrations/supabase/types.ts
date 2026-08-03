@@ -890,6 +890,72 @@ export type Database = {
           },
         ]
       }
+      annual_review_criteria_backfill_2026_08: {
+        Row: {
+          created_at: string
+          criterion_id: string
+          criterion_name: string | null
+          criterion_weight: number | null
+          id: string
+          instance_id: string
+          new_final_rating: string | null
+          new_score: number
+          new_total_score: number | null
+          new_weighted_score: number | null
+          old_final_rating: string | null
+          old_score: number | null
+          old_total_score: number | null
+          old_weighted_score: number | null
+          performed_by: string | null
+          reason: string
+          response_id: string
+          reviewer_role: string
+          value_source: string
+        }
+        Insert: {
+          created_at?: string
+          criterion_id: string
+          criterion_name?: string | null
+          criterion_weight?: number | null
+          id?: string
+          instance_id: string
+          new_final_rating?: string | null
+          new_score: number
+          new_total_score?: number | null
+          new_weighted_score?: number | null
+          old_final_rating?: string | null
+          old_score?: number | null
+          old_total_score?: number | null
+          old_weighted_score?: number | null
+          performed_by?: string | null
+          reason: string
+          response_id: string
+          reviewer_role: string
+          value_source: string
+        }
+        Update: {
+          created_at?: string
+          criterion_id?: string
+          criterion_name?: string | null
+          criterion_weight?: number | null
+          id?: string
+          instance_id?: string
+          new_final_rating?: string | null
+          new_score?: number
+          new_total_score?: number | null
+          new_weighted_score?: number | null
+          old_final_rating?: string | null
+          old_score?: number | null
+          old_total_score?: number | null
+          old_weighted_score?: number | null
+          performed_by?: string | null
+          reason?: string
+          response_id?: string
+          reviewer_role?: string
+          value_source?: string
+        }
+        Relationships: []
+      }
       annual_review_criteria_library: {
         Row: {
           created_at: string
@@ -15638,6 +15704,10 @@ export type Database = {
           p_system_scores_raw: Json
           p_total_score?: number
         }
+        Returns: Json
+      }
+      admin_backfill_annual_review_criteria: {
+        Args: { p_reason: string; p_rows: Json }
         Returns: Json
       }
       admin_bulk_calibrate_final_rating: {
