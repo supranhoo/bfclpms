@@ -8090,3 +8090,21 @@ answers were additionally suppressed because the row was `completed`.
   employee from selecting a higher incentive/increment grade or eligibility category.
 - Regression coverage: `effectiveEligibility.test.ts`,
   `bulkUploadNoSilentDrop.test.ts`, and the existing System Scores pending-state tests.
+
+### v2.66.241 — Inactive employee suppression (ADR-241)
+
+Deactivated employees no longer receive system notifications and can no longer obtain a
+password reset.
+
+- **Database:** added `public.notification_recipient_is_active(uuid)` and the
+  `trg_notifications_skip_inactive` BEFORE INSERT trigger on `public.notifications`
+  (silent skip, never raises, so business transactions are unaffected). The
+  notifications INSERT policy now also requires an active recipient. Added the
+  rate-limited `public.password_reset_allowed(text, text)` gate.
+- **Edge functions:** `send-email-notification` skips inactive recipients with
+  `reason: 'recipient_inactive'` and logs it; `reset-password` returns 403 for inactive
+  profiles on both the link-generation and direct set-password paths.
+- **UI:** `src/pages/Auth.tsx` calls the gate before `resetPasswordForEmail` and keeps
+  the same generic success screen either way (anti-enumeration).
+- **Coverage:** `src/test/inactiveSuppression.test.ts` (7 assertions across the
+  migration, the auth page, and both edge functions).
