@@ -15830,6 +15830,20 @@ export type Database = {
         Args: { p_enabled: Json }
         Returns: Database["public"]["Enums"]["annual_review_status"]
       }
+      annual_review_instance_change_log: {
+        Args: { p_instance_id: string; p_limit?: number; p_offset?: number }
+        Returns: {
+          actor_id: string
+          actor_name: string
+          event_type: string
+          field_label: string
+          new_value: string
+          occurred_at: string
+          old_value: string
+          reason: string
+          total_count: number
+        }[]
+      }
       annual_review_kra_drift_summary: {
         Args: { p_cycle_id: string }
         Returns: Json
