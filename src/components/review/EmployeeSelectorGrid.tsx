@@ -2706,7 +2706,7 @@ function EmployeeScoreBadge({ score }: { score: number | null | undefined }) {
       className={`inline-flex items-center justify-center h-7 min-w-[2rem] px-1.5 rounded-md text-xs font-bold ${badgeClass}`}
       title={`Overall Score: ${score}`}
     >
-      {score.toFixed(1)}
+      {score.toFixed(2)}
     </span>
   );
 }

@@ -844,8 +844,8 @@ export default function EmployeePerformanceSummary() {
                               </div>
                             );
                           }
-                          case 'total_score':    return row.totalScore.toFixed(1);
-                          case 'out_of_score':   return row.outOfScore.toFixed(1);
+                          case 'total_score':    return row.totalScore.toFixed(2);
+                          case 'out_of_score':   return row.outOfScore.toFixed(2);
                           case 'overall_rating': return rating.toFixed(2);
                           case 'percentage':
                             return (
@@ -1056,8 +1056,8 @@ export default function EmployeePerformanceSummary() {
                         return (
                           <TableRow key={row.period}>
                             <TableCell className="font-medium">{row.period}</TableCell>
-                            <TableCell className="text-right">{row.score.toFixed(1)}</TableCell>
-                            <TableCell className="text-right">{row.outOf.toFixed(1)}</TableCell>
+                            <TableCell className="text-right">{row.score.toFixed(2)}</TableCell>
+                            <TableCell className="text-right">{row.outOf.toFixed(2)}</TableCell>
                             <TableCell className="text-right">
                               <span className={
                                 row.percentage >= 80 ? 'text-green-600 dark:text-green-400' :

@@ -580,7 +580,7 @@ export function BulkReviewMatrixGrid({
                                     {(displayMode === 'score' || displayMode === 'both') && (
                                       score != null ? (
                                         <span className="text-sm font-bold tabular-nums text-foreground">
-                                          {Number(score).toFixed(1)}
+                                          {Number(score).toFixed(2)}
                                         </span>
                                       ) : (
                                         <span className="text-[10px] font-medium text-muted-foreground/60 uppercase tracking-wide border border-dashed border-border rounded px-1.5 py-0.5">

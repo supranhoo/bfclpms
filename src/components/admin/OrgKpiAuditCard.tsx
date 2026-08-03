@@ -399,8 +399,8 @@ function DepartmentGroup({
             )}
           </td>
           <td className="py-1.5 px-1.5 text-muted-foreground text-xs font-mono">{emp.employeeCode || '-'}</td>
-          <td className="py-1.5 px-0.5 text-center text-xs">{emp.selfScore?.toFixed(1) ?? '-'}</td>
-          <td className="py-1.5 px-0.5 text-center text-xs">{emp.managerScore?.toFixed(1) ?? '-'}</td>
+          <td className="py-1.5 px-0.5 text-center text-xs">{emp.selfScore?.toFixed(2) ?? '-'}</td>
+          <td className="py-1.5 px-0.5 text-center text-xs">{emp.managerScore?.toFixed(2) ?? '-'}</td>
           <td className="py-1.5 px-0.5 text-center">
             {emp.isAuditPending ? (
               <Input
@@ -415,7 +415,7 @@ function DepartmentGroup({
                 disabled={isSubmitting}
               />
             ) : (
-              <span className="font-medium text-xs">{emp.auditorScore?.toFixed(1) ?? '-'}</span>
+              <span className="font-medium text-xs">{emp.auditorScore?.toFixed(2) ?? '-'}</span>
             )}
           </td>
           <td className="py-1.5 px-1.5 min-w-[200px]">

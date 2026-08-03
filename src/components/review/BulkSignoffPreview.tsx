@@ -305,7 +305,7 @@ function StageCell({
         ? (isNa
             ? <span className="text-muted-foreground italic">N/A</span>
             : '—')
-        : value.toFixed(1)}
+        : value.toFixed(2)}
     </td>
   );
 }
@@ -504,7 +504,7 @@ function CellTable({
                       ? <span className="text-muted-foreground italic">N/A</span>
                       : c.score == null
                         ? <span className="inline-flex items-center gap-1 text-destructive">● —</span>
-                        : c.score.toFixed(1)}
+                        : c.score.toFixed(2)}
                   </td>
                   <td className="p-2">
                     {naMarked || c.source === 'na'
@@ -567,7 +567,7 @@ function CellTable({
                             ? ((c.isNa === true || naMarked)
                                 ? <span className="italic">N/A</span>
                                 : '—')
-                            : stages[s.key]!.toFixed(1)}
+                            : stages[s.key]!.toFixed(2)}
                         </span>
                       </div>
                     ))}
@@ -596,7 +596,7 @@ function CellTable({
                       ? <span className="text-muted-foreground italic">N/A</span>
                       : c.score == null
                         ? <span className="text-destructive">● —</span>
-                        : c.score.toFixed(1)}
+                        : c.score.toFixed(2)}
                   </span>
                   <span className={cn(
                     'tabular-nums',

@@ -101,20 +101,20 @@ export function PropagationSummaryDialog({ open, onOpenChange, result }: Props) 
                       <TableCell className="text-sm text-muted-foreground">{d.departmentName || '—'}</TableCell>
                       <TableCell className="text-center">
                         {d.oldScore !== null ? (
-                          <Badge variant="outline">{d.oldScore.toFixed(1)}</Badge>
+                          <Badge variant="outline">{d.oldScore.toFixed(2)}</Badge>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </TableCell>
                       <TableCell className="text-center">
-                        <Badge variant="secondary">{d.newScore?.toFixed(1) || '—'}</Badge>
+                        <Badge variant="secondary">{d.newScore?.toFixed(2) || '—'}</Badge>
                       </TableCell>
                       <TableCell className="text-center">
                         {d.change !== null ? (
                           <span className={`text-sm font-medium ${
                             d.change > 0 ? 'text-primary' : d.change < 0 ? 'text-destructive' : 'text-muted-foreground'
                           }`}>
-                            {d.change > 0 ? '+' : ''}{d.change.toFixed(1)}
+                            {d.change > 0 ? '+' : ''}{d.change.toFixed(2)}
                           </span>
                         ) : (
                           <Badge variant="outline" className="text-xs">New</Badge>

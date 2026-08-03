@@ -69,7 +69,7 @@ export function CumulativeSummaryCard({
             </div>
             <div className="flex items-center gap-2">
               <span className="text-2xl font-bold">
-                {avgScore !== null ? avgScore.toFixed(1) : '-'}
+                {avgScore !== null ? avgScore.toFixed(2) : '-'}
               </span>
               <span className="text-sm text-muted-foreground">/5</span>
             </div>

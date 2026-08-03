@@ -119,7 +119,7 @@ const getRatingColor = (score: number) => {
 function ScoreBadge({ score, isNa }: { score: number | null; isNa: boolean }) {
   if (isNa) return <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200 text-[10px]">N/A</Badge>;
   if (score == null) return <span className="text-muted-foreground">-</span>;
-  return <Badge className={`${getRatingColor(score)} text-[10px]`}>{score.toFixed(1)}</Badge>;
+  return <Badge className={`${getRatingColor(score)} text-[10px]`}>{score.toFixed(2)}</Badge>;
 }
 
 const DEFAULT_STAGES = ['self_review', 'manager_check', 'skip_level_check', 'hr_pms_review', 'audit', 'management_review'];

@@ -510,7 +510,7 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
                     {r.scoring_mode ?? '—'}
                     {(r.kra_weight ?? 0) > 0 && (
                       <span className="text-muted-foreground">
-                        {' '}({(r.kra_points ?? 0).toFixed(1)}/{(r.kra_weight ?? 0).toFixed(0)})
+                        {' '}({(r.kra_points ?? 0).toFixed(2)}/{(r.kra_weight ?? 0).toFixed(0)})
                       </span>
                     )}
                   </TableCell>

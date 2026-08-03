@@ -1051,11 +1051,11 @@ function ProgressTab() {
                   if (source === 'kra') {
                     return (
                       <span title="Derived from KRA achievement (POLICY §AR-KRA-GRID-DISPLAY)">
-                        {value.toFixed(1)}
+                        {value.toFixed(2)}
                       </span>
                     );
                   }
-                  return value.toFixed(1);
+                  return value.toFixed(2);
                 };
                 const finalDisplay = i.total_score != null
                   ? i.total_score.toFixed(2)
