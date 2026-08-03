@@ -5736,3 +5736,23 @@ Rules:
 7. **Placement.** The tool lives at Annual Review Admin → **KRA Sync**, not buried inside Access Control.
 
 **Guard.** `src/lib/annualReview/__tests__/kraDrift.test.ts`.
+
+## §AR-SYSTEM-SCORE-TEMPLATE-SCOPE — Only the effective template's slots may score (ADR-234, 2026-08-03)
+
+1. An Annual Review's `system_scores` / `system_scores_raw` may only contain slot ids
+   declared by the **effective template** (`COALESCE(template_override_id, template_id)`).
+2. `annual_review_compute_final_summary()` — the sole sanctioned writer of
+   `total_score` / `final_rating` (§AR-FINAL-SCORE-SCALE-INVARIANT) — sums system points
+   for declared slot ids only. Keys left behind by a template swap ("orphans") never
+   contribute points.
+3. Changing an instance's template (or override) auto-prunes orphan keys via
+   `trg_ar_prune_orphan_system_scores`; every pruned key is written to
+   `annual_review_system_score_edits` with its old value, score and rating, so the change
+   is auditable and reversible.
+4. Admin repair path: `annual_review_prune_orphan_system_scores(cycle_id, reason, dry_run)`
+   (admin only, reason mandatory, dry-run by default). Diagnostic:
+   `annual_review_orphan_system_scores(cycle_id)` (admin / HR PMS).
+5. Client mirror: `src/lib/annualReview/systemScoreScope.ts`. Any UI that sums system
+   points must iterate template slots, never `Object.keys(system_scores)`.
+6. Monitor: "Orphan system-score slots" card on the Annual Review Admin → Orphaned
+   Reviews tab must read zero.

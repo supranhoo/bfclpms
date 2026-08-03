@@ -7965,3 +7965,22 @@ PIP Management now surfaces *who* needs a plan, and enforces the structural requ
 - **Rollback.** Each audit row carries the previous score/rating, so any instance can be restored to its pre-repair value.
 - **Tests.** `src/services/annualReview/__tests__/finalScoreIntegrity.test.ts` (9).
 - **Policy.** POLICY.md §AR-FINAL-SCORE-WRITE-BACK.
+
+### v2.66.11 — ADR-234: system scores are template-scoped (2026-08-03)
+- **Reported.** Anil Kumar Pathak (200301): front-end Self 2.49/5 vs report rating ~4.2/5.
+- **Root cause.** His override template ("Generic M - (With KRA)") declares a single
+  `carry_kra` slot (49.8 pts), but `system_scores` still held 35 pts from his previous
+  template ("CLU - M - Operation"). `annual_review_compute_final_summary()` summed the
+  whole JSONB, producing 84.80 / "Good" while the KRA-derived Self rating stayed 2.49.
+- **Fix (DB).** Computation now sums declared slot ids only; new
+  `annual_review_orphan_system_scores()` diagnostic,
+  `annual_review_prune_orphan_system_scores()` audited repair, and
+  `trg_ar_prune_orphan_system_scores` auto-prune on template change.
+- **Data repair.** 10 instances in cycle 2025-26 pruned and recomputed via the sanctioned
+  writer; every removed slot logged in `annual_review_system_score_edits`
+  (reason `ADR-234 repair…`). 200301 → 49.80 / "Poor" (2.49/5), consistent with the
+  front-end. Others: 100601 70.00, 101018 92.00, 200862 65.00, 100432 86.00, 200098 71.00,
+  100002 72.00, 101755 90.00, 100429 80.00, 101798 75.00.
+- **Fix (app).** `src/lib/annualReview/systemScoreScope.ts` (+7 tests),
+  `OrphanSystemScoreCard` mounted on the Orphaned Reviews admin tab.
+- **Policy.** POLICY.md §AR-SYSTEM-SCORE-TEMPLATE-SCOPE.

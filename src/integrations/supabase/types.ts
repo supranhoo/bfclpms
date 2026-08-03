@@ -15841,6 +15841,21 @@ export type Database = {
         }
         Returns: Database["public"]["Enums"]["annual_review_status"]
       }
+      annual_review_orphan_system_scores: {
+        Args: { p_cycle_id?: string }
+        Returns: {
+          employee_code: string
+          employee_id: string
+          employee_name: string
+          expected_total_score: number
+          instance_id: string
+          orphan_keys: string[]
+          orphan_points: number
+          overall_status: string
+          template_name: string
+          total_score: number
+        }[]
+      }
       annual_review_prev_role: {
         Args: {
           p_enabled: Json
@@ -15854,6 +15869,19 @@ export type Database = {
           p_role: Database["public"]["Enums"]["annual_reviewer_role"]
         }
         Returns: Database["public"]["Enums"]["annual_review_status"]
+      }
+      annual_review_prune_orphan_system_scores: {
+        Args: { p_cycle_id: string; p_dry_run?: boolean; p_reason: string }
+        Returns: {
+          employee_code: string
+          instance_id: string
+          new_final_rating: string
+          new_total_score: number
+          old_final_rating: string
+          old_total_score: number
+          removed_keys: string[]
+          removed_points: number
+        }[]
       }
       annual_review_reanchor_status: {
         Args: {
