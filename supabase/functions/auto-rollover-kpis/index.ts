@@ -816,9 +816,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Log successful rollover
-    await supabase.from('kra_rollover_logs').insert({
-
     // ── ADR-248: record deliberate issuance of the target period ──
     if (markIssued && rolledOver.length > 0) {
       const issuanceRows = rolledOver.map((r) => ({
