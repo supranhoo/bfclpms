@@ -89,6 +89,45 @@ interface RolloverDialogProps {
 
 type Step = 'config' | 'preview' | 'results';
 
+/** Folds one response per target period into a single results payload. */
+function mergeResponses(responses: RolloverResponse[], targets: RolloverTarget[]): RolloverResponse {
+  const base = responses[responses.length - 1];
+  const byEmployee = new Map<string, EmployeeResult>();
+  for (const res of responses) {
+    for (const r of res.rolled_over ?? []) {
+      const prev = byEmployee.get(r.employee_id);
+      byEmployee.set(
+        r.employee_id,
+        prev ? { ...prev, kpis_copied: prev.kpis_copied + r.kpis_copied } : { ...r },
+      );
+    }
+  }
+  const skipped = new Map<string, EmployeeResult>();
+  for (const res of responses) {
+    for (const s of res.skipped_employees ?? []) {
+      if (!byEmployee.has(s.employee_id)) skipped.set(s.employee_id, s);
+    }
+  }
+  return {
+    ...base,
+    rolled_over: Array.from(byEmployee.values()),
+    skipped_employees: Array.from(skipped.values()),
+    conflicts: [],
+    total_kpis_copied: responses.reduce((s, r) => s + (r.total_kpis_copied ?? 0), 0),
+    duplicates_skipped: responses.reduce((s, r) => s + (r.duplicates_skipped ?? 0), 0),
+    total_employees_affected: byEmployee.size,
+    audit_assignments_cloned: responses.reduce((s, r) => s + (r.audit_assignments_cloned ?? 0), 0),
+    audit_assignments_skipped_already_assigned: responses.reduce(
+      (s, r) => s + (r.audit_assignments_skipped_already_assigned ?? 0),
+      0,
+    ),
+    audit_clone_errors: responses.flatMap((r) => r.audit_clone_errors ?? []),
+    weightage_warnings: responses.flatMap((r) => r.weightage_warnings ?? []),
+    target_period: targets[0]?.month ?? base.target_period,
+    target_year: targets[0]?.year ?? base.target_year,
+  };
+}
+
 export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTargetMonth, defaultTargetYear }: RolloverDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
