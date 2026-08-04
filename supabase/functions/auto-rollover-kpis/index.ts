@@ -818,6 +818,63 @@ Deno.serve(async (req) => {
 
     // Log successful rollover
     await supabase.from('kra_rollover_logs').insert({
+
+    // ── ADR-248: record deliberate issuance of the target period ──
+    if (markIssued && rolledOver.length > 0) {
+      const issuanceRows = rolledOver.map((r) => ({
+        employee_id: r.employee_id,
+        review_period: targetMonth,
+        review_year: targetYear,
+        status: 'issued',
+        source: `rollover:${triggered_by}`,
+        issued_by: issued_by ?? null,
+        note: `Rolled over from ${sourceMonth} ${sourceYear}`,
+      }));
+      for (let i = 0; i < issuanceRows.length; i += 200) {
+        const { error: issErr } = await supabase
+          .from('kra_period_issuance')
+          .upsert(issuanceRows.slice(i, i + 200), {
+            onConflict: 'employee_id,review_period,review_year',
+          });
+        if (issErr) console.error('[Rollover] issuance upsert failed:', issErr.message);
+      }
+    }
+
+    // ── ADR-248: weightage guard — surface, never silently inflate ──
+    const weightageWarnings: Array<{ employee_id: string; employee_name: string; total_weightage: number }> = [];
+    {
+      const affected = rolledOver.map((r) => r.employee_id);
+      for (let i = 0; i < affected.length; i += 50) {
+        const chunk = affected.slice(i, i + 50);
+        const { data: wRows } = await supabase
+          .from('kpis')
+          .select('employee_id, weightage')
+          .eq('review_period', targetMonth)
+          .eq('review_year', targetYear)
+          .in('employee_id', chunk);
+        const totals: Record<string, number> = {};
+        for (const w of wRows ?? []) {
+          totals[w.employee_id] = (totals[w.employee_id] ?? 0) + Number(w.weightage ?? 0);
+        }
+        for (const [empId, total] of Object.entries(totals)) {
+          if (total > 100.5) {
+            weightageWarnings.push({
+              employee_id: empId,
+              employee_name: rolledOver.find((r) => r.employee_id === empId)?.employee_name ?? 'Unknown',
+              total_weightage: Math.round(total * 100) / 100,
+            });
+          }
+        }
+      }
+      if (weightageWarnings.length > 0) {
+        console.warn(
+          `[Rollover] ${weightageWarnings.length} employee(s) exceed 100 total weightage in ${targetMonth} ${targetYear}.`,
+        );
+      }
+    }
+
+    // Log successful rollover
+    await supabase.from('kra_rollover_logs').insert({
       source_period: sourceMonth,
       source_year: sourceYear,
       target_period: targetMonth,
@@ -829,18 +886,26 @@ Deno.serve(async (req) => {
       error_message: duplicatesSkipped > 0
         ? `Skipped ${duplicatesSkipped} pre-existing duplicate KPI(s).`
         : null,
-      details: { rolled_over: rolledOver, skipped: skippedEmployees, duplicates_skipped: duplicatesSkipped },
+      details: {
+        rolled_over: rolledOver,
+        skipped: skippedEmployees,
+        skipped_already_issued: skippedAlreadyIssued,
+        duplicates_skipped: duplicatesSkipped,
+        weightage_warnings: weightageWarnings,
+      },
     });
 
     return new Response(
       JSON.stringify({
         success: true,
         rolled_over: rolledOver,
-        skipped_employees: skippedEmployees,
+        skipped_employees: [...skippedEmployees, ...skippedAlreadyIssued],
         conflicts: [],
         total_kpis_copied: totalInserted,
         duplicates_skipped: duplicatesSkipped,
         total_employees_affected: rolledOver.length,
+        employees_skipped_already_issued: skippedAlreadyIssued.length,
+        weightage_warnings: weightageWarnings,
         source_period: sourceMonth,
         source_year: sourceYear,
         target_period: targetMonth,
