@@ -62,6 +62,7 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
   const { data: rates = [], isLoading: ratesLoading, error: ratesError } = useProductionRates(programId);
   const { data: entries = [], isLoading: entriesLoading } = useProductionDailyEntries(programId, month, year);
   const mergeEntries = useMergeDailyEntries();
+  const { toast } = useToast();
 
   // Read-only company metadata for the parity badge (own selectedCompanyId state is
   // unused — we rely on the prop from the parent so toggles stay in sync).
@@ -632,8 +633,13 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
                     </span>
                   )}
                 </div>
-                <Button onClick={handleSave} disabled={bulkUpsert.isPending} title="Saves all mapped employees, not just the visible page.">
-                  <Save className="h-4 w-4 mr-1" /> Save All
+                <Button
+                  onClick={handleSave}
+                  disabled={mergeEntries.isPending || isLoading}
+                  title="Saves the currently selected day range for all mapped employees. Days outside the selected range are never modified."
+                >
+                  <Save className="h-4 w-4 mr-1" />
+                  {isLoading ? 'Loading…' : `Save${rangeLabel || ' All'}`}
                 </Button>
               </div>
             </div>
