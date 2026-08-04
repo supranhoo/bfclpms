@@ -313,22 +313,47 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localData, pagedEmployees, employeeRates, visibleDays]);
 
+  // ADR-245 / POLICY §INC-DAILY-ENTRY-NO-SILENT-LOSS.
+  // Saves merge ONLY the loaded days server-side; days outside the visible
+  // window (and employees whose rows never hydrated) can no longer be wiped.
+  const dbValuesByEmployee = useMemo(() => {
+    const map: Record<string, Record<string, number>> = {};
+    for (const e of (entries as any[]) ?? []) {
+      map[e.employee_id] = (e.daily_values || {}) as Record<string, number>;
+    }
+    return map;
+  }, [entries]);
+
+  const [pendingSave, setPendingSave] = useState<{ rows: MergeRow[]; warnings: ShrinkWarning[] } | null>(null);
+
+  const commitSave = (rows: MergeRow[]) => {
+    mergeEntries.mutate(
+      { rows, days: visibleDays },
+      { onSuccess: () => { dirtyCellsRef.current.clear(); } },
+    );
+  };
+
   const handleSave = () => {
-    const payload = gridEmployees.map((emp: any) => ({
-      program_id: programId,
-      employee_id: emp.id,
+    // Never write from a partially hydrated grid.
+    if (isLoading) return;
+    const rows = buildMergePayload({
+      programId,
       month,
       year,
-      daily_values: localData[emp.id] || {},
-      updated_by: user?.id,
-    }));
-    bulkUpsert.mutate(payload, {
-      onSuccess: () => {
-        // Saved successfully — clear the dirty marker so the next snapshot
-        // refresh can adopt the server's canonical view.
-        dirtyCellsRef.current.clear();
-      },
+      employeeIds: gridEmployees.map((emp: any) => emp.id),
+      localData,
+      visibleDays,
     });
+    if (rows.length === 0) {
+      toast({ title: 'Nothing to save', description: 'No values entered for the selected day range.' });
+      return;
+    }
+    const warnings = detectShrink({ rows, dbValues: dbValuesByEmployee, visibleDays });
+    if (warnings.length > 0) {
+      setPendingSave({ rows, warnings });
+      return;
+    }
+    commitSave(rows);
   };
 
   const isLoading = ratesLoading || entriesLoading || mappedLoading;
