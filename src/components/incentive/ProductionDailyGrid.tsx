@@ -9,7 +9,12 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { Save, Search, Filter, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Info, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { useProductionRates, useProductionDailyEntries, useBulkUpsertDailyEntries } from '@/hooks/useProductionDailyEntries';
+import { useProductionRates, useProductionDailyEntries, useMergeDailyEntries } from '@/hooks/useProductionDailyEntries';
+import { buildMergePayload, detectShrink, type MergeRow, type ShrinkWarning } from '@/lib/incentiveDailySave';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { resolveEmployeeRate, resolveEmployeeCompanyId } from '@/lib/incentiveRateResolver';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -55,7 +60,7 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
 
   const { data: rates = [], isLoading: ratesLoading, error: ratesError } = useProductionRates(programId);
   const { data: entries = [], isLoading: entriesLoading } = useProductionDailyEntries(programId, month, year);
-  const bulkUpsert = useBulkUpsertDailyEntries();
+  const mergeEntries = useMergeDailyEntries();
 
   // Read-only company metadata for the parity badge (own selectedCompanyId state is
   // unused — we rely on the prop from the parent so toggles stay in sync).
