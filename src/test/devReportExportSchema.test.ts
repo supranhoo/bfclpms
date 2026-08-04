@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildDevReportWorkbook,
   DEV_REPORT_DEFAULT_COLUMNS,
+  DEV_REPORT_DETAIL_COLUMNS,
 } from '@/lib/devReportExport';
 import * as XLSX from 'xlsx';
 
@@ -31,18 +32,21 @@ describe('Development Report XLSX export', () => {
       {
         id: '1', entry_type: 'feature', entry_date: '2026-06-01', period_label: null,
         title: 'F', module_area: 'M', description: 'D', status: 'Shipped',
+        rationale: 'Why F', usage_notes: 'How F',
         severity: null, timeline_type: null, adr_refs: [], linked_commit: null,
         created_by: null, created_at: '', updated_at: '',
       },
       {
         id: '2', entry_type: 'bug', entry_date: null, period_label: '2026 Jun W1',
         title: 'B', module_area: null, description: 'Fix', status: null,
+        rationale: null, usage_notes: null,
         severity: 'High', timeline_type: null, adr_refs: [], linked_commit: null,
         created_by: null, created_at: '', updated_at: '',
       },
       {
         id: '3', entry_type: 'timeline', entry_date: '2026-06-04', period_label: null,
         title: 'T', module_area: null, description: 'Summary', status: null,
+        rationale: null, usage_notes: null,
         severity: null, timeline_type: 'Feature', adr_refs: [], linked_commit: null,
         created_by: null, created_at: '', updated_at: '',
       },
@@ -55,17 +59,33 @@ describe('Development Report XLSX export', () => {
 
   it('locks the Features header row to the evidence schema', () => {
     const rows = XLSX.utils.sheet_to_json<string[]>(wb.Sheets['Features'], { header: 1 });
-    expect(rows[2]).toEqual([...DEV_REPORT_DEFAULT_COLUMNS.feature]);
+    expect(rows[2].slice(0, DEV_REPORT_DEFAULT_COLUMNS.feature.length)).toEqual([
+      ...DEV_REPORT_DEFAULT_COLUMNS.feature,
+    ]);
+  });
+
+  it('appends the What / Why / How detail columns after the locked schema', () => {
+    const rows = XLSX.utils.sheet_to_json<string[]>(wb.Sheets['Features'], { header: 1 });
+    expect(rows[2]).toEqual([
+      ...DEV_REPORT_DEFAULT_COLUMNS.feature,
+      ...DEV_REPORT_DETAIL_COLUMNS,
+    ]);
+    expect(rows[3][5]).toBe('Why F');
+    expect(rows[3][6]).toBe('How F');
   });
 
   it('locks the Bugs Fixed header row to the evidence schema', () => {
     const rows = XLSX.utils.sheet_to_json<string[]>(wb.Sheets['Bugs Fixed'], { header: 1 });
-    expect(rows[2]).toEqual([...DEV_REPORT_DEFAULT_COLUMNS.bug]);
+    expect(rows[2].slice(0, DEV_REPORT_DEFAULT_COLUMNS.bug.length)).toEqual([
+      ...DEV_REPORT_DEFAULT_COLUMNS.bug,
+    ]);
   });
 
   it('locks the Timeline header row to the evidence schema', () => {
     const rows = XLSX.utils.sheet_to_json<string[]>(wb.Sheets['Timeline'], { header: 1 });
-    expect(rows[2]).toEqual([...DEV_REPORT_DEFAULT_COLUMNS.timeline]);
+    expect(rows[2].slice(0, DEV_REPORT_DEFAULT_COLUMNS.timeline.length)).toEqual([
+      ...DEV_REPORT_DEFAULT_COLUMNS.timeline,
+    ]);
   });
 
   it('uses period_label when entry_date is null', () => {
