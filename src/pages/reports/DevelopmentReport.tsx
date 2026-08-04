@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Download, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Download, Plus, Pencil, Trash2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import {
@@ -45,6 +45,11 @@ import {
 import { DevReportEntryDialog } from '@/components/reports/DevReportEntryDialog';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { downloadDevReportWorkbook } from '@/lib/devReportExport';
+import {
+  useSyncDevReport,
+  devReportCapture,
+  isDevReportStale,
+} from '@/hooks/useSyncDevReport';
 
 /**
  * Lazily fetched only for the XLSX export — the in-app Cover tab has been removed
@@ -124,6 +129,7 @@ export default function DevelopmentReport() {
   const [exportRequested, setExportRequested] = useState(false);
   const coverQ = useDevReportCoverMeta(exportRequested);
   const del = useDeleteDevReportEntry();
+  const sync = useSyncDevReport();
 
   const allEntries = entriesQ.data ?? [];
   const filteredByTab = useMemo(() => {
@@ -142,6 +148,10 @@ export default function DevelopmentReport() {
 
   const summary = summaryQ.data;
   const cover = coverQ.data;
+
+  // ADR-246 — staleness is measured against the artefacts bundled at build time.
+  const capturedMax = devReportCapture.newestDate;
+  const stale = isDevReportStale(summary?.max_entry_date, capturedMax);
 
   // Reporting Period reflects the active month filter, not the global min/max.
   const reportingPeriod = month
@@ -216,6 +226,17 @@ export default function DevelopmentReport() {
         </div>
         <div className="flex gap-2">
           {isAdmin && (
+            <Button
+              onClick={() => sync.mutate({})}
+              size="sm"
+              variant="secondary"
+              disabled={sync.isPending}
+            >
+              <RefreshCw className={`h-4 w-4 mr-1 ${sync.isPending ? 'animate-spin' : ''}`} />
+              {sync.isPending ? 'Syncing…' : 'Sync from repo'}
+            </Button>
+          )}
+          {isAdmin && (
             <Button onClick={() => setAdding(tab)} size="sm">
               <Plus className="h-4 w-4 mr-1" /> Add entry
             </Button>
@@ -230,6 +251,24 @@ export default function DevelopmentReport() {
           </Button>
         </div>
       </div>
+
+      {stale && (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardContent className="flex flex-wrap items-center gap-2 py-3 text-sm">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <span>
+              Report is out of date — newest logged entry is{' '}
+              <strong>{summary?.max_entry_date ?? 'none'}</strong>, but repo artefacts exist up to{' '}
+              <strong>{capturedMax}</strong>.
+            </span>
+            {isAdmin && (
+              <Button size="sm" variant="outline" onClick={() => sync.mutate({})} disabled={sync.isPending}>
+                Sync now
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
         <TabsList>
