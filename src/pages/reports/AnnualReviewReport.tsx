@@ -25,7 +25,7 @@ import {
   formatSlabPercent,
 } from '@/lib/annualReview/ratingSlab';
 import { useEmployeeFilterOptions } from '@/hooks/useEmployeeFilterOptions';
-import { useAnnualReviewCalibrations } from '@/hooks/useAnnualReviewCalibrations';
+import { useAnnualReviewCycleCalibrations } from '@/hooks/useAnnualReviewCalibrations';
 import { useBellCurveConfig } from '@/hooks/useBellCurveConfig';
 import {
   useEligibilityExemptionPolicy, useEligibilityExemptions,
@@ -79,7 +79,9 @@ export default function AnnualReviewReport() {
     [rows, ratingBand],
   );
 
-  const { data: calibrations = {} } = useAnnualReviewCalibrations(filtered.map((r) => r.id));
+  // ADR-244 — cycle-scoped: a page-scoped id list hid calibrations on every
+  // page that happened not to contain a calibrated employee.
+  const { data: calibrations = {}, error: calibrationError } = useAnnualReviewCycleCalibrations(cycleId);
 
   // ADR-222 — eligibility-aware slab %, identical to the Bell Curve drill-down.
   const templateIds = useMemo(
@@ -220,6 +222,12 @@ export default function AnnualReviewReport() {
           </div>
         </CardContent>
       </Card>
+
+      {calibrationError && (
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          Calibration data could not be loaded — ratings shown are uncalibrated.
+        </p>
+      )}
 
       {cycleId && counts && (
         <div className="grid gap-3 md:grid-cols-4">

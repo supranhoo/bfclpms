@@ -5533,8 +5533,10 @@ Rules:
 5. **Distributions follow placement.** Any rating-band distribution (chart or sheet) buckets on the effective band, consistent with §AR-BELL-CURVE / ADR-228.
 6. **Stored data is untouched.** This is a presentation-layer rule. `annual_review_instances.total_score` and `final_rating` remain the raw computed values; calibrations and exemptions stay in their own audited tables.
 7. **Template override wins.** Eligibility questions resolve against `template_override_id ?? template_id` (§AR-TEMPLATE-OVERRIDE / ADR-117).
+8. **Context is cycle-scoped, never row-scoped (ADR-244, 2026-08-04).** Calibrations and other outcome context MUST be loaded for the whole cycle (`useAnnualReviewCycleCalibrations(cycleId)`), never from a per-row or per-page instance-id list: a page-scoped list hides calibrations that exist on other pages, and a full-set list overflows the request URL and fails.
+9. **No silent degradation.** If outcome context fails to load, the surface renders an explicit warning that ratings are uncalibrated. Falling back to an empty map — which reads as "no calibrations exist" — is a defect.
 
-**Guard.** `src/test/annualReview/reportRating.test.ts`.
+**Guard.** `src/test/annualReview/reportRating.test.ts`, `src/test/annualReview/calibrationContextScope.test.ts`.
 
 ---
 
