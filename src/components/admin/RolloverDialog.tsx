@@ -701,7 +701,19 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
 
               <div className="text-sm text-muted-foreground text-center">
                 Total: {results.total_kpis_copied} KPIs copied for {results.total_employees_affected} employees
+                {rolloutTargets.length > 1 && <> across {rolloutTargets.length} periods ({describeTargets(rolloutTargets)})</>}
               </div>
+
+              {(results.weightage_warnings?.length ?? 0) > 0 && (
+                <Alert variant="default" className="border-amber-500/50 bg-amber-500/5">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <AlertDescription className="text-sm">
+                    {results.weightage_warnings!.length} employee(s) now exceed 100 total weightage in a target
+                    period: {results.weightage_warnings!.slice(0, 5).map((w) => `${w.employee_name} (${w.total_weightage})`).join(', ')}
+                    {results.weightage_warnings!.length > 5 ? '…' : ''}. Review their KRA set.
+                  </AlertDescription>
+                </Alert>
+              )}
 
               {(results.audit_assignments_cloned ?? 0) +
                 (results.audit_assignments_skipped_already_assigned ?? 0) >
@@ -772,9 +784,10 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
               className="flex-1"
             >
               {executeMutation.isPending ? (
-                <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Rolling Over...</>
+                <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />{progress ?? 'Rolling Over...'}</>
               ) : (
-                <><RefreshCw className="h-4 w-4 mr-2" />Proceed with Rollover</>
+                <><RefreshCw className="h-4 w-4 mr-2" />
+                  {rolloutTargets.length > 1 ? `Proceed for ${rolloutTargets.length} periods` : 'Proceed with Rollover'}</>
               )}
             </Button>
           </div>
