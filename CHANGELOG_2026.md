@@ -394,3 +394,8 @@ The Create User dialog's **Access** tab is renamed **Access & Login** and now mi
   - `ensure_org_kpi_scope_rows` GRANT — **stale test**. Postgres `CREATE OR REPLACE FUNCTION` preserves existing grants; the GRANT EXECUTE was issued in the 2026-05-19 migration and remains active (`has_function_privilege('authenticated', …) = true`). Test now accepts the GRANT on any historical migration for this signature.
   - `bulk_write_stage_scores` evidence merge — **stale literal**. Latest body uses the per-cell `v_cell_attach_count` (lets per-cell `p_evidence_urls` override the shared payload). Merge semantics preserved; test relaxed to `v_(cell_)?attach_count`.
 - Constraints honored: no Menu Setting / Custom Tabs change · `menu_overrides_enabled` still false in prod · no new runtime routes/RPCs/edge functions/MVs · no roadmap stage skipped · deferred dead-column cleanup and deferred release-readiness page still tracked in `docs/safety/phase8-release-readiness.md` (not silently shipped or dropped) · no PMS workflow/scoring/RLS/enforcement behavior change beyond the single surgical `kpi_cell_detail` restoration.
+
+## 2026-08-04 — Development Report auto-capture delivery (ADR-246)
+- SSOT parser + build-time capture plugin; admin "Sync from repo" with batched, idempotent ingest.
+- Staleness banner when the report lags repo artefacts by >14 days; backfilled 395 entries (793 → 1,188).
+- Security: employee UPDATE policy on review_submissions now blocks writing manager/auditor/management/final scores during self-review.

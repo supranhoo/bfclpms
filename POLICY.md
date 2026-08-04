@@ -5889,3 +5889,31 @@ Production daily incentive entries may never be lost by omission.
 6. **Coverage diagnostic.** `incentive_daily_coverage_diagnostic` flags any
    sub-period whose employee coverage falls below 70% of the best sub-period of
    the same program/month, so a partial wipe is detected before invoicing.
+
+---
+
+## §131a — Development Report auto-capture delivery (ADR-246)
+
+1. **Single parser.** All artefact→entry parsing lives in
+   `src/lib/devReport/capture.ts`. The build-time Vite plugin
+   (`plugins/devReportCapture.ts`) and `scripts/devReportReseed.ts` MUST both
+   call it; forking the logic is forbidden.
+2. **Genuine-entry rule stands.** Every captured row carries a `linked_commit`
+   that traces to a migration filename, an `ADR-xxx` id, or a
+   `CHANGELOG_2026.md#YYYY-MM-DD` anchor. Floor date remains `2026-02-01`.
+3. **Delivery.** Admins sync from the report UI ("Sync from repo"), which posts
+   the captured rows to the idempotent `dev-report-ingest` edge function in
+   batches of 100. Re-running never duplicates rows
+   (`uq_dev_report_entries_ingest_key`).
+4. **Staleness is visible.** When the newest stored entry lags the newest
+   bundled artefact by more than 14 days, the report shows an amber banner. A
+   silent stall is treated as a defect.
+5. **Automated capture keeps `created_by = NULL`** (system attribution).
+
+## §SEC-SELF-REVIEW-COLUMN-GUARD (ADR-246)
+
+The employee `UPDATE` policy on `public.review_submissions` MUST carry the same
+column-nullity `WITH CHECK` as the corresponding `INSERT` policy: manager,
+auditor, management and final score/rating/remarks/evidence columns stay `NULL`
+while the KPI is in `self_review`. Any new self-stage write path must be
+re-checked against this rule.

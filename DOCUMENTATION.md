@@ -8140,3 +8140,39 @@ password reset.
 **Recovery status.** The oldest system backup (2026-07-05) post-dates the 2026-06-17 loss, so
 the wiped June 1-10 values cannot be recovered from backups. The audited restore RPC is ready
 to re-enter them from the invoice-time Excel download once provided.
+
+## ADR-246 — Development Report auto-capture delivery (2026-08-04)
+
+**Problem.** `dev_report_entries` was frozen at 2026-06-15 (793 rows). Capture
+existed only as a local one-off script, so ~336 migrations and 30+ ADRs never
+reached the report.
+
+**5 Why.** No rows after 15 Jun → nothing wrote since the seed → the manual
+script was never re-run → capture was designed as a local one-off → POLICY §131
+had no delivery mechanism.
+
+**CAPA.**
+- `src/lib/devReport/capture.ts` — SSOT parser (migrations, ADRs, changelog).
+- `plugins/devReportCapture.ts` — Vite plugin bundling parsed rows into
+  `virtual:dev-report-capture` (parsed rows only; no raw SQL ships to clients).
+- `src/hooks/useSyncDevReport.ts` — batched (100/req) sync through the
+  idempotent `dev-report-ingest` function, plus staleness helpers.
+- `src/pages/reports/DevelopmentReport.tsx` — admin "Sync from repo" button and
+  amber staleness banner (>14 days behind newest artefact).
+- `scripts/devReportReseed.ts` reduced to a thin CLI wrapper over the SSOT.
+
+**Backfill executed.** 395 new rows ingested (793 → 1,188), coverage now
+2026-02-03 → 2026-08-04.
+
+**Security (same change).** The employee `UPDATE` policy on
+`review_submissions` lacked the column guard its `INSERT` twin has, letting an
+employee write manager/auditor/management/final scores onto their own record
+during self-review. The policy now enforces the same nullity checks
+(POLICY §SEC-SELF-REVIEW-COLUMN-GUARD).
+
+**Tests.** `src/test/devReportCapture.test.ts` (11 cases: parsing, floor,
+idempotency, batching, staleness).
+
+**Rollback.** Drop the plugin from `vite.config.ts` (report reverts to
+manual entries); delete synced rows by `linked_commit`; the previous RLS policy
+can be restored from this migration's inverse.
