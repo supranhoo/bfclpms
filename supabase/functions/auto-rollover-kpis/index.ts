@@ -41,6 +41,15 @@ interface RolloverRequest {
    * (UNIQUE kpi_id → ON CONFLICT DO NOTHING). Opt-in, audit-logged.
    */
   carry_audit_assignments?: boolean;
+  /**
+   * ADR-248 — when true (default for admin/manual runs) the function records a
+   * `kra_period_issuance` row for every employee whose target period was
+   * deliberately prepared through this run. The monthly cron then leaves those
+   * periods alone instead of re-adding KPIs that were intentionally removed.
+   */
+  mark_issued?: boolean;
+  /** Profile id of the admin who triggered a manual run (audit trail). */
+  issued_by?: string;
 }
 
 // --- Frequency resolution helpers ---
