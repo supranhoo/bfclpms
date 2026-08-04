@@ -20,6 +20,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { useToast } from '@/hooks/use-toast';
 import { useIncentiveReportParity } from '@/hooks/useIncentiveReportParity';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 // Mapped-employee roster is resolved server-side via SECURITY DEFINER RPC.
