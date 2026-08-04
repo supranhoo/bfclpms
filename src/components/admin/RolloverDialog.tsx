@@ -173,24 +173,45 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
     return employees.filter((e: any) => e.name.toLowerCase().includes(q) || e.code.toLowerCase().includes(q) || e.department.toLowerCase().includes(q));
   }, [employees, empSearch]);
 
-  // Preview mutation (dry run)
+  // Preview mutation (dry run). For a multi-month rollout every target period
+  // is dry-run sequentially; the first period drives the conflict UI and the
+  // rest are summarised per-period (ADR-248).
   const previewMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('auto-rollover-kpis', {
-        body: {
-          triggered_by: 'admin_manual',
-          source_month: sourceMonth,
-          source_year: sourceYear,
-          target_month: targetMonth,
-          target_year: targetYear,
-          employee_ids: allEmployees ? undefined : selectedEmployeeIds,
-          dry_run: true,
-        },
-      });
-      if (error) throw error;
-      return data as RolloverResponse;
+      const summaries: PeriodSummary[] = [];
+      let first: RolloverResponse | null = null;
+      for (const t of rolloutTargets) {
+        setProgress(`Checking ${t.month} ${t.year}…`);
+        const { data, error } = await supabase.functions.invoke('auto-rollover-kpis', {
+          body: {
+            triggered_by: 'admin_manual',
+            source_month: sourceMonth,
+            source_year: sourceYear,
+            target_month: t.month,
+            target_year: t.year,
+            employee_ids: allEmployees ? undefined : selectedEmployeeIds,
+            dry_run: true,
+          },
+        });
+        if (error) throw error;
+        const res = data as RolloverResponse;
+        summaries.push({
+          month: t.month,
+          year: t.year,
+          new_kpis:
+            (res.rolled_over ?? []).reduce((s, r) => s + r.kpis_copied, 0) +
+            (res.conflicts ?? []).reduce((s, r) => s + r.kpis_copied, 0),
+          employees: (res.rolled_over ?? []).length + (res.conflicts ?? []).length,
+          conflicts: (res.conflicts ?? []).length,
+        });
+        if (!first) first = res;
+      }
+      setProgress(null);
+      return { first: first!, summaries };
     },
-    onSuccess: (data) => {
+    onSuccess: ({ first, summaries }) => {
+      const data = first;
+      setPeriodSummaries(summaries);
       if (data.skipped) {
         toast({ title: 'No KPIs Found', description: data.reason });
         return;
@@ -201,6 +222,7 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
       setStep('preview');
     },
     onError: (err: Error) => {
+      setProgress(null);
       toast({ title: 'Preview Failed', description: err.message, variant: 'destructive' });
     },
   });
@@ -212,22 +234,36 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
         .filter((c: EmployeeResult) => !balanceIds.has(c.employee_id))
         .map((c: EmployeeResult) => c.employee_id) || [];
 
-      const { data, error } = await supabase.functions.invoke('auto-rollover-kpis', {
-        body: {
-          triggered_by: 'admin_manual',
-          source_month: sourceMonth,
-          source_year: sourceYear,
-          target_month: targetMonth,
-          target_year: targetYear,
-          employee_ids: allEmployees ? undefined : selectedEmployeeIds,
-          dry_run: false,
-          rollover_balance_only: true,
-          skip_employee_ids: skipIds,
-          carry_audit_assignments: carryAuditAssignments,
-        },
-      });
-      if (error) throw error;
-      return data as RolloverResponse;
+      const { data: auth } = await supabase.auth.getUser();
+      const responses: RolloverResponse[] = [];
+      for (const t of rolloutTargets) {
+        setProgress(`Rolling over ${t.month} ${t.year}…`);
+        const { data, error } = await supabase.functions.invoke('auto-rollover-kpis', {
+          body: {
+            triggered_by: 'admin_manual',
+            source_month: sourceMonth,
+            source_year: sourceYear,
+            target_month: t.month,
+            target_year: t.year,
+            employee_ids: allEmployees ? undefined : selectedEmployeeIds,
+            dry_run: false,
+            rollover_balance_only: true,
+            skip_employee_ids: skipIds,
+            carry_audit_assignments: carryAuditAssignments,
+            mark_issued: true,
+            issued_by: auth?.user?.id,
+          },
+        });
+        if (error) {
+          throw new Error(
+            `${t.month} ${t.year}: ${error.message}` +
+              (responses.length ? ` (${responses.length} earlier period(s) already applied)` : ''),
+          );
+        }
+        responses.push(data as RolloverResponse);
+      }
+      setProgress(null);
+      return mergeResponses(responses, rolloutTargets);
     },
     onSuccess: (data) => {
       setResults(data);
@@ -244,6 +280,7 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
       }
     },
     onError: (err: Error) => {
+      setProgress(null);
       toast({ title: 'Rollover Failed', description: err.message, variant: 'destructive' });
     },
   });
