@@ -27,6 +27,10 @@ export const DEV_REPORT_DEFAULT_COLUMNS = {
   timeline: ['Date / Period', 'Item', 'Summary', 'Type'] as const,
 };
 
+// ADR-249 — What / Why / How. Appended AFTER the locked schema columns so
+// prior evidence submissions keep their column positions.
+export const DEV_REPORT_DETAIL_COLUMNS = ['Why It Was Built', 'How It Is Used'] as const;
+
 function label(key: string, overrides?: Record<string, string>) {
   return overrides?.[key] ?? key;
 }
@@ -58,7 +62,7 @@ export function buildDevReportWorkbook(input: DevReportExportInput): XLSX.WorkBo
   // Sheet 2 — Features
   const featureHeader = DEV_REPORT_DEFAULT_COLUMNS.feature.map((c) =>
     label(c, labelOverrides),
-  );
+  ).concat(DEV_REPORT_DETAIL_COLUMNS.map((c) => label(c, labelOverrides)));
   const featureRows = entries
     .filter((e) => e.entry_type === 'feature')
     .map((e) => [
@@ -67,18 +71,22 @@ export function buildDevReportWorkbook(input: DevReportExportInput): XLSX.WorkBo
       e.module_area ?? '',
       e.description,
       e.status ?? '',
+      e.rationale ?? '',
+      e.usage_notes ?? '',
     ]);
   const featureWs = XLSX.utils.aoa_to_sheet([
-    ['New Features Built — BFCL PMS', '', '', '', ''],
-    ['', '', '', '', ''],
+    ['New Features Built — BFCL PMS', '', '', '', '', '', ''],
+    ['', '', '', '', '', '', ''],
     featureHeader,
     ...featureRows,
   ]);
-  featureWs['!cols'] = [{ wch: 16 }, { wch: 50 }, { wch: 24 }, { wch: 110 }, { wch: 14 }];
+  featureWs['!cols'] = [{ wch: 16 }, { wch: 50 }, { wch: 24 }, { wch: 110 }, { wch: 14 }, { wch: 80 }, { wch: 80 }];
   XLSX.utils.book_append_sheet(wb, featureWs, 'Features');
 
   // Sheet 3 — Bugs Fixed
-  const bugHeader = DEV_REPORT_DEFAULT_COLUMNS.bug.map((c) => label(c, labelOverrides));
+  const bugHeader = DEV_REPORT_DEFAULT_COLUMNS.bug
+    .map((c) => label(c, labelOverrides))
+    .concat(DEV_REPORT_DETAIL_COLUMNS.map((c) => label(c, labelOverrides)));
   const bugRows = entries
     .filter((e) => e.entry_type === 'bug')
     .map((e) => [
@@ -86,18 +94,22 @@ export function buildDevReportWorkbook(input: DevReportExportInput): XLSX.WorkBo
       e.title,
       e.description,
       e.severity ?? '',
+      e.rationale ?? '',
+      e.usage_notes ?? '',
     ]);
   const bugWs = XLSX.utils.aoa_to_sheet([
-    ['Bugs Fixed — BFCL PMS', '', '', ''],
-    ['', '', '', ''],
+    ['Bugs Fixed — BFCL PMS', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
     bugHeader,
     ...bugRows,
   ]);
-  bugWs['!cols'] = [{ wch: 16 }, { wch: 50 }, { wch: 110 }, { wch: 14 }];
+  bugWs['!cols'] = [{ wch: 16 }, { wch: 50 }, { wch: 110 }, { wch: 14 }, { wch: 80 }, { wch: 80 }];
   XLSX.utils.book_append_sheet(wb, bugWs, 'Bugs Fixed');
 
   // Sheet 4 — Timeline
-  const tlHeader = DEV_REPORT_DEFAULT_COLUMNS.timeline.map((c) => label(c, labelOverrides));
+  const tlHeader = DEV_REPORT_DEFAULT_COLUMNS.timeline
+    .map((c) => label(c, labelOverrides))
+    .concat(DEV_REPORT_DETAIL_COLUMNS.map((c) => label(c, labelOverrides)));
   const tlRows = entries
     .filter((e) => e.entry_type === 'timeline')
     .map((e) => [
@@ -105,14 +117,16 @@ export function buildDevReportWorkbook(input: DevReportExportInput): XLSX.WorkBo
       e.title,
       e.description,
       e.timeline_type ?? '',
+      e.rationale ?? '',
+      e.usage_notes ?? '',
     ]);
   const tlWs = XLSX.utils.aoa_to_sheet([
-    ['Full Development Timeline — BFCL PMS (chronological)', '', '', ''],
-    ['', '', '', ''],
+    ['Full Development Timeline — BFCL PMS (chronological)', '', '', '', '', ''],
+    ['', '', '', '', '', ''],
     tlHeader,
     ...tlRows,
   ]);
-  tlWs['!cols'] = [{ wch: 16 }, { wch: 50 }, { wch: 110 }, { wch: 18 }];
+  tlWs['!cols'] = [{ wch: 16 }, { wch: 50 }, { wch: 110 }, { wch: 18 }, { wch: 80 }, { wch: 80 }];
   XLSX.utils.book_append_sheet(wb, tlWs, 'Timeline');
 
   return wb;

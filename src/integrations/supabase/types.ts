@@ -5095,11 +5095,13 @@ export type Database = {
           linked_commit: string | null
           module_area: string | null
           period_label: string | null
+          rationale: string | null
           severity: string | null
           status: string | null
           timeline_type: string | null
           title: string
           updated_at: string
+          usage_notes: string | null
         }
         Insert: {
           adr_refs?: string[]
@@ -5112,11 +5114,13 @@ export type Database = {
           linked_commit?: string | null
           module_area?: string | null
           period_label?: string | null
+          rationale?: string | null
           severity?: string | null
           status?: string | null
           timeline_type?: string | null
           title: string
           updated_at?: string
+          usage_notes?: string | null
         }
         Update: {
           adr_refs?: string[]
@@ -5129,11 +5133,13 @@ export type Database = {
           linked_commit?: string | null
           module_area?: string | null
           period_label?: string | null
+          rationale?: string | null
           severity?: string | null
           status?: string | null
           timeline_type?: string | null
           title?: string
           updated_at?: string
+          usage_notes?: string | null
         }
         Relationships: []
       }

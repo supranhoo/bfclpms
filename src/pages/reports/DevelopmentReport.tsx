@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -29,7 +29,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Download, Plus, Pencil, Trash2, RefreshCw, AlertTriangle } from 'lucide-react';
+import {
+  Download,
+  Plus,
+  Pencil,
+  Trash2,
+  RefreshCw,
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import {
@@ -140,11 +149,32 @@ export default function DevelopmentReport() {
     const q = search.trim().toLowerCase();
     if (!q) return filteredByTab;
     return filteredByTab.filter((e) =>
-      [e.title, e.description, e.module_area, e.period_label, e.severity, e.status, e.timeline_type]
+      [
+        e.title,
+        e.description,
+        e.rationale,
+        e.usage_notes,
+        e.module_area,
+        e.period_label,
+        e.severity,
+        e.status,
+        e.timeline_type,
+      ]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(q)),
     );
   }, [filteredByTab, search]);
+
+  // ADR-249 — What / Why / How coverage across the entries currently loaded.
+  const detailCoverage = useMemo(() => {
+    if (!allEntries.length) return { pct: 0, complete: 0, total: 0 };
+    const complete = allEntries.filter((e) => !!e.rationale && !!e.usage_notes).length;
+    return {
+      pct: Math.round((complete / allEntries.length) * 100),
+      complete,
+      total: allEntries.length,
+    };
+  }, [allEntries]);
 
   const summary = summaryQ.data;
   const cover = coverQ.data;
@@ -195,11 +225,16 @@ export default function DevelopmentReport() {
         backTo="/reports"
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <SummaryCard label="Features" value={summary?.feature_count ?? 0} loading={summaryQ.isLoading} />
         <SummaryCard label="Bug Fixes" value={summary?.bug_count ?? 0} loading={summaryQ.isLoading} />
         <SummaryCard label="Timeline Entries" value={summary?.timeline_count ?? 0} loading={summaryQ.isLoading} />
         <SummaryCard label="Reporting Period" value={reportingPeriod} loading={summaryQ.isLoading} />
+        <SummaryCard
+          label="Detail coverage (Why + How)"
+          value={`${detailCoverage.pct}% (${detailCoverage.complete}/${detailCoverage.total})`}
+          loading={entriesQ.isLoading}
+        />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -361,6 +396,14 @@ function EntriesTable({
   onEdit: (e: DevReportEntry) => void;
   onDelete: (id: string) => void;
 }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   if (loading) return <Skeleton className="h-64 w-full" />;
   if (!entries.length) {
     return (
@@ -373,6 +416,7 @@ function EntriesTable({
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[36px]" />
               <TableHead className="w-[140px]">Date / Period</TableHead>
               <TableHead>{type === 'feature' ? 'Feature' : type === 'bug' ? 'Bug / Issue' : 'Item'}</TableHead>
               {type !== 'timeline' && <TableHead className="w-[180px]">Module / Area</TableHead>}
@@ -384,8 +428,24 @@ function EntriesTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {entries.map((e) => (
-              <TableRow key={e.id}>
+            {entries.map((e) => {
+              const open = expanded.has(e.id);
+              const cols = (type !== 'timeline' ? 6 : 5) + (isAdmin ? 1 : 0);
+              return (
+              <Fragment key={e.id}>
+              <TableRow>
+                <TableCell className="align-top">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    aria-label={open ? 'Hide details' : 'Show details'}
+                    aria-expanded={open}
+                    onClick={() => toggle(e.id)}
+                  >
+                    {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </Button>
+                </TableCell>
                 <TableCell className="font-mono text-xs whitespace-nowrap">
                   {formatEntryDateCell(e)}
                 </TableCell>
@@ -412,7 +472,41 @@ function EntriesTable({
                   </TableCell>
                 )}
               </TableRow>
-            ))}
+              {open && (
+                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                  <TableCell colSpan={cols} className="py-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Why it was built
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-sm">
+                          {e.rationale ?? 'Not captured yet.'}
+                        </p>
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          How it is used
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-sm">
+                          {e.usage_notes ?? 'Not captured yet.'}
+                        </p>
+                      </div>
+                    </div>
+                    {(e.adr_refs?.length || e.linked_commit) && (
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        {(e.adr_refs ?? []).map((r) => (
+                          <Badge key={r} variant="secondary">{r}</Badge>
+                        ))}
+                        {e.linked_commit && <span className="font-mono">{e.linked_commit}</span>}
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+              )}
+              </Fragment>
+              );
+            })}
           </TableBody>
         </Table>
       </CardContent>

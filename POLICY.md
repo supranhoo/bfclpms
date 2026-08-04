@@ -5910,6 +5910,25 @@ Production daily incentive entries may never be lost by omission.
    silent stall is treated as a defect.
 5. **Automated capture keeps `created_by = NULL`** (system attribution).
 
+## §131b — Development Report What / Why / How (ADR-249)
+
+1. **Three questions per entry.** Every `public.dev_report_entries` row answers
+   *What* (`title` + `description`), *Why* (`rationale`), and *How it is used*
+   (`usage_notes`).
+2. **Genuine sources only.** `rationale` and `usage_notes` are captured from ADR
+   `## Context` / `## Consequences`, changelog bullets labelled `**Why:**` /
+   `**How:**` (and equivalents), or migration header comments and the objects a
+   migration creates. When no such source exists the field stays NULL — inventing
+   narrative text is forbidden.
+3. **Manual detail wins.** `dev-report-ingest` may fill `rationale` /
+   `usage_notes` only when the stored value is empty. A resync MUST never
+   overwrite or NULL out admin-authored detail.
+4. **Export compatibility.** `Why It Was Built` and `How It Is Used` are appended
+   AFTER the locked 101785 evidence columns on every sheet; existing column
+   positions are immutable.
+5. **Coverage is visible.** The report shows a "Detail coverage (Why + How)" KPI
+   card so gaps are auditable.
+
 ## §SEC-SELF-REVIEW-COLUMN-GUARD (ADR-246)
 
 The employee `UPDATE` policy on `public.review_submissions` MUST carry the same

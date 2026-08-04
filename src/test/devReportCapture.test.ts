@@ -17,13 +17,15 @@ CREATE OR REPLACE FUNCTION public.safety_capa_touch() RETURNS trigger AS $$ BEGI
 
 const ADR = {
   file: 'ADR-246.md',
-  body: `# ADR-246 — Development Report auto-capture\n\n## Date\n2026-08-05\n\n## Decision\nCapture artefacts at build time and sync via the ingest function.\n`,
+  body: `# ADR-246 — Development Report auto-capture\n\n## Date\n2026-08-05\n\n## Context\nThe report stalled because capture was manual.\n\n## Decision\nCapture artefacts at build time and sync via the ingest function.\n\n## Consequences\n- Admins click "Sync from repo" to refresh the report.\n`,
 };
 
 const CHANGELOG = `# Changelog
 
 ## 2026-08-04 — Fix calibration visibility regression (ADR-244)
 - **What:** cycle-scoped calibration fetch.
+- **Why:** long URLs silently truncated the calibration query.
+- **How:** reviewers see calibrated ratings in the Annual Review Report.
 
 ## 2026-01-05 — Legacy pre-floor entry
 - Should be excluded.
@@ -72,6 +74,24 @@ describe('Development Report capture (ADR-246)', () => {
 
   it('reports the newest captured date', () => {
     expect(newestCaptureDate(rows)).toBe('2026-08-05');
+  });
+
+  it('captures Why / How from ADR Context and Consequences (ADR-249)', () => {
+    const adr = rows.find((r) => r.linked_commit === 'ADR-246');
+    expect(adr?.rationale).toContain('stalled');
+    expect(adr?.usage_notes).toContain('Sync from repo');
+  });
+
+  it('captures Why / How from labelled changelog bullets (ADR-249)', () => {
+    const bug = rows.find((r) => r.linked_commit === 'CHANGELOG_2026.md#2026-08-04');
+    expect(bug?.rationale).toContain('truncated');
+    expect(bug?.usage_notes).toContain('Annual Review Report');
+  });
+
+  it('derives Why / How for migrations from the header comment and objects', () => {
+    const tl = rows.find((r) => r.linked_commit === MIGRATION.file);
+    expect(tl?.rationale).toContain('ADR-246');
+    expect(tl?.usage_notes).toContain('public.safety_capa');
   });
 
   it('returns nothing for empty sources', () => {

@@ -42,6 +42,8 @@ export function DevReportEntryDialog({ open, onOpenChange, entryType, initial }:
     title: '',
     module_area: '',
     description: '',
+    rationale: '',
+    usage_notes: '',
     status: 'Shipped',
     severity: 'Medium',
     timeline_type: 'Feature',
@@ -57,6 +59,8 @@ export function DevReportEntryDialog({ open, onOpenChange, entryType, initial }:
       title: initial?.title ?? '',
       module_area: initial?.module_area ?? '',
       description: initial?.description ?? '',
+      rationale: initial?.rationale ?? '',
+      usage_notes: initial?.usage_notes ?? '',
       status: initial?.status ?? 'Shipped',
       severity: initial?.severity ?? 'Medium',
       timeline_type: initial?.timeline_type ?? 'Feature',
@@ -76,6 +80,8 @@ export function DevReportEntryDialog({ open, onOpenChange, entryType, initial }:
       title: form.title.trim(),
       module_area: form.module_area.trim() || null,
       description: form.description.trim(),
+      rationale: form.rationale.trim() || null,
+      usage_notes: form.usage_notes.trim() || null,
       status: entryType === 'feature' ? form.status : null,
       severity: entryType === 'bug' ? form.severity : null,
       timeline_type: entryType === 'timeline' ? form.timeline_type : null,
@@ -141,6 +147,26 @@ export function DevReportEntryDialog({ open, onOpenChange, entryType, initial }:
               rows={5}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label>Why it was built (rationale)</Label>
+            <Textarea
+              rows={3}
+              placeholder="Problem, gap or request that triggered this work"
+              value={form.rationale}
+              onChange={(e) => setForm({ ...form, rationale: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label>How it is used</Label>
+            <Textarea
+              rows={3}
+              placeholder="Who uses it, where in the app, and what it enables"
+              value={form.usage_notes}
+              onChange={(e) => setForm({ ...form, usage_notes: e.target.value })}
             />
           </div>
 
