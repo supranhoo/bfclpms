@@ -16561,6 +16561,7 @@ export type Database = {
         Args: { _instance_id: string; _proxy_user_id: string }
         Returns: boolean
       }
+      can_read_kpi_evidence: { Args: { p_kpi_id: string }; Returns: boolean }
       can_send_notification_to:
         | { Args: { sender: string; target: string }; Returns: boolean }
         | {
@@ -16923,6 +16924,46 @@ export type Database = {
         }[]
       }
       get_admin_dashboard_stats: { Args: never; Returns: Json }
+      get_all_kpis_slim: {
+        Args: never
+        Returns: {
+          category_id: string
+          created_at: string
+          criteria: string
+          day_count_type: string
+          employee_id: string
+          frequency: string
+          frequency_cycle_start: string
+          id: string
+          is_frequency_locked: boolean
+          is_issued: boolean
+          is_org_level: boolean
+          kpi_name: string
+          kra_name: string
+          org_level_scope: string
+          qualitative_options: Json
+          r0: string
+          r1: string
+          r2: string
+          r3: string
+          r4: string
+          r5: string
+          ref_code: string
+          require_resubmit_reason: boolean
+          review_period: string
+          review_year: number
+          source_of_data: string
+          source_template_id: string
+          status: string
+          sub_frequency: string
+          target_value: number
+          threshold_mode: string
+          uom: string
+          uom_type: string
+          updated_at: string
+          weightage: number
+        }[]
+      }
       get_annual_review_access_explain: {
         Args: { v_uid: string }
         Returns: Json
