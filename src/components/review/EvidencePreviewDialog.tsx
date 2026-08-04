@@ -3,11 +3,20 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, Maximize2, Minimize2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, Maximize2, Minimize2, RotateCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { isPreviewableEvidence } from '@/lib/storageDownload';
-import { normalizeEvidenceError } from '@/lib/review/evidenceError';
+import { normalizeEvidenceError, EVIDENCE_SERVER_BUSY_MESSAGE } from '@/lib/review/evidenceError';
 import { toast } from 'sonner';
+
+/**
+ * ADR-250. A preview must never hang indefinitely: when Storage is queued
+ * behind a saturated database the request can sit open far longer than a
+ * reviewer will wait. Fail fast at 20s and offer an explicit retry.
+ */
+const PREVIEW_TIMEOUT_MS = 20_000;
+/** Signed-URL lifetime for streamed previews (seconds). */
+const SIGNED_URL_TTL = 600;
 
 type EvidenceGroupItem = { url: string; fileName?: string | null };
 type EvidencePreviewDetail = {
@@ -61,6 +70,7 @@ export function EvidencePreviewProvider() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [group, setGroup] = useState<EvidenceGroupItem[] | null>(null);
   const [groupIndex, setGroupIndex] = useState(0);
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -86,6 +96,7 @@ export function EvidencePreviewProvider() {
     if (!open || !detail) return;
     let cancelled = false;
     let createdUrl: string | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     setLoading(true);
     setError(null);
     setBlobUrl(null);
@@ -94,28 +105,24 @@ export function EvidencePreviewProvider() {
       try {
         const match = detail.url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
         const kindNow = isPreviewableEvidence(detail.fileName ?? detail.url);
-        if (kindNow === 'office') {
-          // Office files render via Microsoft's public Office viewer, which
-          // needs an externally reachable URL — blob URLs won't work. Use a
-          // short-lived signed URL when the source is a private bucket,
-          // otherwise pass the public URL through unchanged.
-          if (match) {
-            const [, bucket, path] = match;
-            const { data, error: sErr } = await supabase.storage
-              .from(bucket)
-              .createSignedUrl(decodeURIComponent(path), 600);
-            if (sErr || !data?.signedUrl) throw new Error(normalizeEvidenceError(sErr));
-            createdUrl = data.signedUrl;
-          } else {
-            createdUrl = detail.url;
-          }
-        } else if (match) {
+        if (match) {
+          // ADR-250: mint a signed URL and let the browser stream the object
+          // progressively (<img>/<iframe> render as bytes arrive). The old
+          // path buffered the WHOLE file into a Blob before painting a single
+          // pixel, so a queued Storage request looked like a frozen dialog.
           const [, bucket, path] = match;
-          const { data, error: dlErr } = await supabase.storage
+          const signPromise = supabase.storage
             .from(bucket)
-            .download(decodeURIComponent(path));
-          if (dlErr || !data) throw new Error(normalizeEvidenceError(dlErr));
-          createdUrl = URL.createObjectURL(data);
+            .createSignedUrl(decodeURIComponent(path), SIGNED_URL_TTL);
+          const timeout = new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error(EVIDENCE_SERVER_BUSY_MESSAGE)),
+              PREVIEW_TIMEOUT_MS,
+            );
+          });
+          const { data, error: sErr } = await Promise.race([signPromise, timeout]);
+          if (sErr || !data?.signedUrl) throw new Error(normalizeEvidenceError(sErr));
+          createdUrl = data.signedUrl;
         } else {
           // Non-storage URL — use directly
           createdUrl = detail.url;
@@ -124,17 +131,19 @@ export function EvidencePreviewProvider() {
       } catch (err) {
         if (!cancelled) setError(normalizeEvidenceError(err));
       } finally {
+        if (timer) clearTimeout(timer);
         if (!cancelled) setLoading(false);
       }
     })();
 
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
       if (createdUrl && createdUrl.startsWith('blob:')) {
         setTimeout(() => URL.revokeObjectURL(createdUrl!), 60_000);
       }
     };
-  }, [open, detail]);
+  }, [open, detail, retryToken]);
 
   const kind = detail ? isPreviewableEvidence(detail.fileName ?? detail.url) : null;
   const displayName = detail?.fileName || detail?.url.split('/').pop()?.split('?')[0] || 'Evidence';
@@ -249,7 +258,10 @@ export function EvidencePreviewProvider() {
         {!loading && error && (
           <div className="text-sm text-destructive p-8 text-center">
             {error}
-            <div className="mt-3">
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setRetryToken((v) => v + 1)}>
+                <RotateCw className="h-4 w-4 mr-1" /> Retry
+              </Button>
               <Button variant="outline" size="sm" onClick={handleDownload}>
                 <Download className="h-4 w-4 mr-1" /> Download instead
               </Button>

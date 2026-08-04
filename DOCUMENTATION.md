@@ -8198,3 +8198,24 @@ Custom-field uploads merge into the employee's existing values.
 Files: `src/lib/employeeMasterColumns.ts`, `src/hooks/useEmployeeMasterRowExtras.ts`,
 `src/pages/admin/UserManagement.tsx`, `src/pages/admin/ImportData.tsx`.
 Tests: `src/test/employeeMasterColumnParity.test.ts`.
+
+### v2.67.0 — ADR-250: Storage performance & preview resilience (2026-08-04)
+
+**What:** Full-table KPI reads now use the `get_all_kpis_slim()` SECURITY
+DEFINER RPC; evidence previews stream from signed URLs with a 20 s timeout and
+Retry; `review-evidence` storage policies use the cached
+`can_read_kpi_evidence()` helper; transient failures are no longer reported as
+permission denials.
+
+**Why:** The unfiltered `kpis` read was the #1 database query by total time
+(267k calls, 7.95 s max vs an 8 s statement timeout) and saturated Postgres,
+which queued Storage requests and made evidence previews slow or fail.
+
+**How:** Reviewers open evidence as before — images and PDFs now appear
+progressively instead of after a full download, and a stuck preview shows
+"The file server is busy right now" with a Retry button rather than a false
+access error.
+
+Files: `src/hooks/useKpis.ts`, `src/components/review/EvidencePreviewDialog.tsx`,
+`src/lib/review/evidenceError.ts`, `docs/adr/ADR-250.md`, POLICY
+§PERF-EVIDENCE-PREVIEW. Removed dead `src/hooks/useReviewPageState.ts`.

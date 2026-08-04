@@ -250,33 +250,17 @@ export function useAllKpis(options?: { enabled?: boolean }) {
     gcTime: KPI_LIST_GC_MS,
     refetchOnWindowFocus: PERF_REFETCH_ON_FOCUS,
     queryFn: async () => {
-      // Fetch all KPIs by paginating through results (Supabase default limit is 1000)
-      const allKpis: any[] = [];
-      let from = 0;
-      const pageSize = 1000;
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('kpis')
-          .select(SLIM_KPI_SELECT)
-          // v2.66.13 (perf): order by primary key — `created_at DESC` was the
-          // #1 slow query (mean ~1.5s/page, 44k calls/day). Callers don't rely
-          // on creation order; PK ordering uses kpis_pkey directly.
-          .order('id', { ascending: true })
-          .range(from, from + pageSize - 1);
-
-        if (error) throw error;
-        
-        if (data && data.length > 0) {
-          allKpis.push(...data);
-          from += pageSize;
-          hasMore = data.length === pageSize;
-        } else {
-          hasMore = false;
-        }
-      }
-
+      // ADR-250 (perf): route the full-table read through the SECURITY
+      // DEFINER RPC `get_all_kpis_slim()`. The previous direct PostgREST
+      // paging over `kpis` evaluated ~18 RLS policies per row for every one
+      // of 20k rows × 21 pages and was the #1 database query by total time
+      // (267,953 calls, 591 ms mean, 7.95 s max against an 8 s
+      // statement_timeout). Saturating Postgres this way also starved the
+      // Storage API, which surfaced to reviewers as slow evidence previews
+      // and "The connection to the database timed out".
+      const allKpis = await fetchAllRpcPaged<any>((from, to) =>
+        (supabase as any).rpc('get_all_kpis_slim').range(from, to),
+      );
       return hydrateKpiRelations(allKpis);
     },
   });
