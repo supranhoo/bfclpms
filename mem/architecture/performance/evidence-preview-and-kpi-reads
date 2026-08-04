@@ -1,0 +1,13 @@
+---
+name: Evidence Preview & Full-Table KPI Reads
+description: POLICY §PERF-EVIDENCE-PREVIEW (ADR-250) — useAllKpis must use get_all_kpis_slim RPC; previews stream via signed URL with 20s timeout; transient errors are not access denials
+type: constraint
+---
+POLICY §PERF-EVIDENCE-PREVIEW (ADR-250, 2026-08-04):
+
+1. `useAllKpis` MUST read via `public.get_all_kpis_slim()` (STABLE SECURITY DEFINER) paged with `fetchAllRpcPaged`. Never reintroduce `supabase.from('kpis').select(SLIM_KPI_SELECT)` over the whole table — it was 267k calls / 591ms mean / 7.95s max against an 8s statement_timeout and starved the Storage API.
+2. `EvidencePreviewDialog` resolves a 10-min signed URL and streams; `storage.download()` blob-buffering is forbidden. 20s timeout (`PREVIEW_TIMEOUT_MS`) + Retry button required.
+3. `normalizeEvidenceError` classifies timeout/abort/5xx/429 as "server busy" (`EVIDENCE_SERVER_BUSY_MESSAGE`); only 403/404/RLS render access-denied.
+4. `review-evidence` storage SELECT policies call `public.can_read_kpi_evidence(uuid)` which uses `(select auth.uid())` for per-statement caching.
+
+Guards: `src/test/allKpisRpcContract.test.ts`, `src/test/evidenceErrorTransient.test.ts`.
