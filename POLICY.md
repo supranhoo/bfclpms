@@ -5917,3 +5917,13 @@ column-nullity `WITH CHECK` as the corresponding `INSERT` policy: manager,
 auditor, management and final score/rating/remarks/evidence columns stay `NULL`
 while the KPI is in `self_review`. Any new self-stage write path must be
 re-checked against this rule.
+
+## §EMP-MASTER-COLUMN-PARITY (ADR-247)
+Every Employee Master attribute defined in `src/lib/employeeMasterFields.ts`
+(plus active custom fields) MUST be (a) viewable in the User Management grid via
+the Columns chooser, and (b) importable and exportable using the same header
+alias. Adding a new master attribute requires updating
+`src/lib/employeeMasterColumns.ts` and the importer aliases in the same change.
+Non-roster columns are hydrated per-page only — never widen the roster RPC.
+Partial custom-field sheets merge into the existing JSONB row; they never
+overwrite fields absent from the upload.

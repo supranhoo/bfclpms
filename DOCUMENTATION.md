@@ -8176,3 +8176,23 @@ idempotency, batching, staleness).
 **Rollback.** Drop the plugin from `vite.config.ts` (report reverts to
 manual entries); delete synced rows by `linked_commit`; the previous RLS policy
 can be restored from this migration's inverse.
+
+## ADR-247 — Employee Master column parity (2026-08)
+**Grid:** `Admin → User Management` now has a **Columns** chooser (persisted per
+browser) exposing Functional Manager (F1), Company, Division, Business Unit,
+Location, Employee Category, Employment Status, GDOJ / DOJ / Confirmation Date,
+Portal Access, Dummy Employee and every active custom Employee Master field.
+Selected columns render in the table for the current page; the extra values are
+hydrated by `useEmployeeMasterRowExtras` (page-scoped fetch, the roster RPC is
+untouched).
+
+**Import/Export:** `Admin → Import Data → Employees` accepts `mobileNumber`,
+`isDummyEmployee` and one column per active custom field (header = field key or
+label). The downloadable template and the on-screen column list are generated
+from the same SSOT, and Export Employees emits the matching headers plus
+`portalAccess`, so export → edit → import round-trips without data loss.
+Custom-field uploads merge into the employee's existing values.
+
+Files: `src/lib/employeeMasterColumns.ts`, `src/hooks/useEmployeeMasterRowExtras.ts`,
+`src/pages/admin/UserManagement.tsx`, `src/pages/admin/ImportData.tsx`.
+Tests: `src/test/employeeMasterColumnParity.test.ts`.
