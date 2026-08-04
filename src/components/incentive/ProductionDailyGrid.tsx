@@ -9,12 +9,18 @@ import { Badge } from '@/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { Save, Search, Filter, X, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Info, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { useProductionRates, useProductionDailyEntries, useBulkUpsertDailyEntries } from '@/hooks/useProductionDailyEntries';
+import { useProductionRates, useProductionDailyEntries, useMergeDailyEntries } from '@/hooks/useProductionDailyEntries';
+import { buildMergePayload, detectShrink, type MergeRow, type ShrinkWarning } from '@/lib/incentiveDailySave';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { resolveEmployeeRate, resolveEmployeeCompanyId } from '@/lib/incentiveRateResolver';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import { useCompanyFilter } from '@/hooks/useCompanyFilter';
+import { useToast } from '@/hooks/use-toast';
 import { useIncentiveReportParity } from '@/hooks/useIncentiveReportParity';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 // Mapped-employee roster is resolved server-side via SECURITY DEFINER RPC.
@@ -55,7 +61,8 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
 
   const { data: rates = [], isLoading: ratesLoading, error: ratesError } = useProductionRates(programId);
   const { data: entries = [], isLoading: entriesLoading } = useProductionDailyEntries(programId, month, year);
-  const bulkUpsert = useBulkUpsertDailyEntries();
+  const mergeEntries = useMergeDailyEntries();
+  const { toast } = useToast();
 
   // Read-only company metadata for the parity badge (own selectedCompanyId state is
   // unused — we rely on the prop from the parent so toggles stay in sync).
@@ -308,22 +315,47 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [localData, pagedEmployees, employeeRates, visibleDays]);
 
+  // ADR-245 / POLICY §INC-DAILY-ENTRY-NO-SILENT-LOSS.
+  // Saves merge ONLY the loaded days server-side; days outside the visible
+  // window (and employees whose rows never hydrated) can no longer be wiped.
+  const dbValuesByEmployee = useMemo(() => {
+    const map: Record<string, Record<string, number>> = {};
+    for (const e of (entries as any[]) ?? []) {
+      map[e.employee_id] = (e.daily_values || {}) as Record<string, number>;
+    }
+    return map;
+  }, [entries]);
+
+  const [pendingSave, setPendingSave] = useState<{ rows: MergeRow[]; warnings: ShrinkWarning[] } | null>(null);
+
+  const commitSave = (rows: MergeRow[]) => {
+    mergeEntries.mutate(
+      { rows, days: visibleDays },
+      { onSuccess: () => { dirtyCellsRef.current.clear(); } },
+    );
+  };
+
   const handleSave = () => {
-    const payload = gridEmployees.map((emp: any) => ({
-      program_id: programId,
-      employee_id: emp.id,
+    // Never write from a partially hydrated grid.
+    if (isLoading) return;
+    const rows = buildMergePayload({
+      programId,
       month,
       year,
-      daily_values: localData[emp.id] || {},
-      updated_by: user?.id,
-    }));
-    bulkUpsert.mutate(payload, {
-      onSuccess: () => {
-        // Saved successfully — clear the dirty marker so the next snapshot
-        // refresh can adopt the server's canonical view.
-        dirtyCellsRef.current.clear();
-      },
+      employeeIds: gridEmployees.map((emp: any) => emp.id),
+      localData,
+      visibleDays,
     });
+    if (rows.length === 0) {
+      toast({ title: 'Nothing to save', description: 'No values entered for the selected day range.' });
+      return;
+    }
+    const warnings = detectShrink({ rows, dbValues: dbValuesByEmployee, visibleDays });
+    if (warnings.length > 0) {
+      setPendingSave({ rows, warnings });
+      return;
+    }
+    commitSave(rows);
   };
 
   const isLoading = ratesLoading || entriesLoading || mappedLoading;
@@ -601,14 +633,66 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
                     </span>
                   )}
                 </div>
-                <Button onClick={handleSave} disabled={bulkUpsert.isPending} title="Saves all mapped employees, not just the visible page.">
-                  <Save className="h-4 w-4 mr-1" /> Save All
+                <Button
+                  onClick={handleSave}
+                  disabled={mergeEntries.isPending || isLoading}
+                  title="Saves the currently selected day range for all mapped employees. Days outside the selected range are never modified."
+                >
+                  <Save className="h-4 w-4 mr-1" />
+                  {isLoading ? 'Loading…' : `Save${rangeLabel || ' All'}`}
                 </Button>
               </div>
             </div>
           </>
         )}
       </CardContent>
+
+      {/* ADR-245 shrink guard: a save that lowers stored tonnage for the
+          selected day range must be explicitly confirmed. */}
+      <AlertDialog open={!!pendingSave} onOpenChange={(open) => { if (!open) setPendingSave(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+              This save reduces recorded production
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  {pendingSave?.warnings.length} employee(s) will have lower tonnage for
+                  {rangeLabel || ' the selected month'} than what is currently stored.
+                  Confirm only if this reduction is intentional.
+                </p>
+                <ul className="max-h-40 overflow-auto space-y-1">
+                  {pendingSave?.warnings.slice(0, 15).map((w) => {
+                    const emp = gridEmployees.find((e: any) => e.id === w.employee_id) as any;
+                    return (
+                      <li key={w.employee_id} className="tabular-nums">
+                        {emp?.full_name ?? w.employee_id}: {w.before.toFixed(2)} → {w.after.toFixed(2)} t
+                        {w.droppedDays.length > 0 && ` (days ${w.droppedDays.join(', ')})`}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {(pendingSave?.warnings.length ?? 0) > 15 && (
+                  <p className="text-muted-foreground">…and {(pendingSave!.warnings.length - 15)} more.</p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingSave) commitSave(pendingSave.rows);
+                setPendingSave(null);
+              }}
+            >
+              Save anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

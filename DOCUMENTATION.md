@@ -8109,3 +8109,34 @@ password reset.
   the same generic success screen either way (anti-enumeration).
 - **Coverage:** `src/test/inactiveSuppression.test.ts` (7 assertions across the
   migration, the auth page, and both edge functions).
+
+### ADR-245 — Production Daily Grid: non-destructive saves, history & coverage diagnostic
+
+**Incident.** Saibal Kunar / Metal Sizing, June 2026, period 1-10 paid ₹97,658 instead of
+₹183,485.66 (170.5 t / ₹85,827.66 short).
+
+**RCA (5 Why).**
+1. Payout dropped because 170.5 t of days 1-10 production is missing.
+2. Missing because 52 of 69 employees have no day 1-10 keys in `daily_values`.
+3. The keys disappeared in a single bulk grid save at 2026-06-17 10:02 UTC.
+4. That save replaced the whole `daily_values` object per employee from local state.
+5. Local state was incomplete because the seed read was unpaginated (PostgREST 1,000-row
+   cap), so unhydrated employees were saved as an empty month. No history existed to
+   detect or reverse it.
+
+**CAPA.**
+- `src/lib/incentiveDailySave.ts` — pure `buildMergePayload` / `detectShrink` / `sumDays`.
+- `useMergeDailyEntries` (`src/hooks/useProductionDailyEntries.ts`) — chunked RPC writer.
+- `upsert_production_daily_values(p_rows, p_days)` — SECURITY INVOKER JSONB merge; existing
+  RLS on `production_daily_entries` still governs who may write.
+- `production_daily_entries_history` + `trg_production_daily_entries_history` — immutable
+  audit of every change (admin-readable).
+- `admin_restore_production_daily_values(p_rows, p_reason)` — admin-only audited restore.
+- `incentive_daily_coverage_diagnostic(program, month, year)` — sub-period coverage collapse
+  detector (<70% of the best sub-period is flagged).
+- Save button disabled while data loads; shrink-confirmation dialog before any reduction.
+- Tests: `src/test/incentiveDailySave.test.ts` (7 cases, incl. the exact loss mode).
+
+**Recovery status.** The oldest system backup (2026-07-05) post-dates the 2026-06-17 loss, so
+the wiped June 1-10 values cannot be recovered from backups. The audited restore RPC is ready
+to re-enter them from the invoice-time Excel download once provided.

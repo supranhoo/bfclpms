@@ -10780,6 +10780,60 @@ export type Database = {
           },
         ]
       }
+      production_daily_entries_history: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          employee_id: string
+          entry_id: string | null
+          id: string
+          month: string
+          new_values: Json | null
+          old_values: Json | null
+          operation: string
+          program_id: string
+          reason: string | null
+          removed_days: string[]
+          tonnage_after: number
+          tonnage_before: number
+          year: number
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          employee_id: string
+          entry_id?: string | null
+          id?: string
+          month: string
+          new_values?: Json | null
+          old_values?: Json | null
+          operation: string
+          program_id: string
+          reason?: string | null
+          removed_days?: string[]
+          tonnage_after?: number
+          tonnage_before?: number
+          year: number
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          employee_id?: string
+          entry_id?: string | null
+          id?: string
+          month?: string
+          new_values?: Json | null
+          old_values?: Json | null
+          operation?: string
+          program_id?: string
+          reason?: string | null
+          removed_days?: string[]
+          tonnage_after?: number
+          tonnage_before?: number
+          year?: number
+        }
+        Relationships: []
+      }
       production_targets: {
         Row: {
           achieved_value: number
@@ -15759,6 +15813,10 @@ export type Database = {
           submission_id: string
         }[]
       }
+      admin_restore_production_daily_values: {
+        Args: { p_reason: string; p_rows: Json }
+        Returns: number
+      }
       admin_update_system_scores_raw: {
         Args: {
           p_instance_id: string
@@ -17801,6 +17859,17 @@ export type Database = {
         }
         Returns: number
       }
+      incentive_daily_coverage_diagnostic: {
+        Args: { _month: string; _program_id: string; _year: number }
+        Returns: {
+          coverage_ratio: number
+          employees_with_data: number
+          is_suspicious: boolean
+          max_period_employees: number
+          period_label: string
+          total_tonnage: number
+        }[]
+      }
       is_annual_review_admin: { Args: { _uid: string }; Returns: boolean }
       is_annual_review_reviewer_for_profile: {
         Args: { p_profile_id: string }
@@ -18095,6 +18164,7 @@ export type Database = {
         Args: { p_move_alias_ids: string[]; p_source_id: string }
         Returns: Json
       }
+      production_daily_tonnage: { Args: { _vals: Json }; Returns: number }
       promote_signature_to_definition: {
         Args: {
           p_canonical_kpi?: string
@@ -19037,6 +19107,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      upsert_production_daily_values: {
+        Args: { p_days: number[]; p_rows: Json }
+        Returns: number
       }
       user_can_see_employee: {
         Args: { p_employee_id: string; p_user_id: string }
