@@ -176,6 +176,56 @@ export function useBulkUpsertDailyEntries() {
   });
 }
 
+/**
+ * ADR-245 / POLICY §INC-DAILY-ENTRY-NO-SILENT-LOSS.
+ *
+ * RCA 2026-08-04 (Saibal Kunar / Metal Sizing June 1-10, ₹85,827.66 short):
+ * the grid used to save `daily_values` as a WHOLE object per employee. When
+ * the seed read had not fully hydrated (unpaginated read capped at 1,000
+ * rows), employees seeded as `{}` and the save replaced their stored month
+ * with only the freshly typed days — silently destroying days 1-10 for 52
+ * employees, with no history to recover from.
+ *
+ * The merge writer sends ONLY the days the operator actually has loaded and
+ * merges them server-side into the existing JSONB. Days outside the visible
+ * window can no longer be erased by omission.
+ */
+export function useMergeDailyEntries() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async ({ rows, days }: {
+      rows: Array<{
+        program_id: string;
+        employee_id: string;
+        month: string;
+        year: number;
+        values: Record<string, number>;
+      }>;
+      days: number[];
+    }) => {
+      if (rows.length === 0 || days.length === 0) return 0;
+      // Chunked so a large roster never exceeds the request body limits.
+      let written = 0;
+      const CHUNK = 300;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const { data, error } = await supabase.rpc('upsert_production_daily_values', {
+          p_rows: rows.slice(i, i + CHUNK) as any,
+          p_days: days,
+        });
+        if (error) throw error;
+        written += Number(data ?? 0);
+      }
+      return written;
+    },
+    onSuccess: (written) => {
+      qc.invalidateQueries({ queryKey: ['production-daily-entries'] });
+      toast({ title: 'Daily entries saved', description: `${written} employee row(s) updated.` });
+    },
+    onError: (e: any) => toast({ title: 'Error saving entries', description: e.message, variant: 'destructive' }),
+  });
+}
+
 // ── Rate Resolution Helper ──
 // Canonical implementation lives in src/lib/incentiveRateResolver.ts and is shared
 // with the compute edge function via supabase/functions/_shared/incentiveRateResolver.ts.
