@@ -382,6 +382,13 @@ export function ComprehensiveTab({ cycleId, cycleName }: { cycleId: string | und
           rating cells; surface and repair them instead of failing silently. */}
       <MissingFinalScoreBanner rows={rows} cycleId={cycleId} />
 
+      {/* ADR-244 — never let a failed calibration fetch read as "no calibrations". */}
+      {calibrationError && (
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          Calibration data could not be loaded — ratings shown are uncalibrated.
+        </p>
+      )}
+
       {/* Executive Summary */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-muted-foreground">
