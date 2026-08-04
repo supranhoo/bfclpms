@@ -34,6 +34,8 @@ interface IngestEntry {
   entry_date?: string | null;
   title: string;
   description: string;
+  rationale?: string | null;
+  usage_notes?: string | null;
   module_area?: string | null;
   status?: string | null;
   severity?: string | null;
@@ -90,6 +92,7 @@ Deno.serve(async (req) => {
 
   const inserted: string[] = [];
   const skipped: string[] = [];
+  const enriched: string[] = [];
 
   // Per-row upsert against the (entry_type, entry_date, linked_commit, title)
   // unique index. We avoid bulk upsert because the index expression uses
@@ -98,7 +101,7 @@ Deno.serve(async (req) => {
   for (const e of valid) {
     const baseQ = auth.adminClient
       .from('dev_report_entries')
-      .select('id')
+      .select('id, rationale, usage_notes')
       .eq('entry_type', e.entry_type)
       .eq('title', e.title)
       .limit(1);
@@ -117,6 +120,20 @@ Deno.serve(async (req) => {
       continue;
     }
     if (found && found.length > 0) {
+      // ADR-249: enrich existing rows with What/Why/How only when empty —
+      // never overwrite an admin's manual detail with a NULL resync value.
+      const row = found[0] as { id: string; rationale: string | null; usage_notes: string | null };
+      const patch: Record<string, string> = {};
+      if (!row.rationale && e.rationale) patch.rationale = e.rationale;
+      if (!row.usage_notes && e.usage_notes) patch.usage_notes = e.usage_notes;
+      if (Object.keys(patch).length > 0) {
+        const { error: updErr } = await auth.adminClient
+          .from('dev_report_entries')
+          .update(patch)
+          .eq('id', row.id);
+        if (updErr) rejected.push({ index: -1, reason: `enrich failed: ${updErr.message}` });
+        else enriched.push(row.id);
+      }
       skipped.push(found[0].id);
       continue;
     }
@@ -128,6 +145,8 @@ Deno.serve(async (req) => {
         entry_date: e.entry_date ?? null,
         title: e.title,
         description: e.description,
+        rationale: e.rationale ?? null,
+        usage_notes: e.usage_notes ?? null,
         module_area: e.module_area ?? null,
         status: e.status ?? null,
         severity: e.severity ?? null,
@@ -154,6 +173,7 @@ Deno.serve(async (req) => {
       received: list.length,
       inserted: inserted.length,
       skipped_duplicates: skipped.length,
+      enriched: enriched.length,
       rejected,
     }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
