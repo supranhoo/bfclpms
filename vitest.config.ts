@@ -1,9 +1,10 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import { devReportCapturePlugin } from "./plugins/devReportCapture";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), devReportCapturePlugin()],
   test: {
     environment: "jsdom",
     globals: true,
