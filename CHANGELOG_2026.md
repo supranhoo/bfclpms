@@ -4,6 +4,11 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-08-04 — Development Report now records What / Why / How (ADR-249)
+- **What:** added `rationale` (Why it was built) and `usage_notes` (How it is used) to `dev_report_entries`, captured automatically from ADRs, changelog bullets and migrations.
+- **Why:** entries recorded only what shipped, so reviewers could not judge intent or usage without a verbal walkthrough.
+- **How:** admins expand any row on `/reports/dev-report` for the Why / How panel, track completeness on the "Detail coverage" card, edit both fields in the entry dialog, and export them as two appended XLSX columns.
+
 ## 2026-07-22 — KPI audit-ready notifications scoped to assignments (ADR-132)
 - Replaced the legacy all-auditor broadcast with a deduplicated union of KPI-level and employee-level audit assignments.
 - Filters inactive/non-login recipients, preserves best-effort delivery, and blocks anonymous function execution.
