@@ -150,6 +150,26 @@ export function DevReportEntryDialog({ open, onOpenChange, entryType, initial }:
             />
           </div>
 
+          <div className="space-y-1">
+            <Label>Why it was built (rationale)</Label>
+            <Textarea
+              rows={3}
+              placeholder="Problem, gap or request that triggered this work"
+              value={form.rationale}
+              onChange={(e) => setForm({ ...form, rationale: e.target.value })}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label>How it is used</Label>
+            <Textarea
+              rows={3}
+              placeholder="Who uses it, where in the app, and what it enables"
+              value={form.usage_notes}
+              onChange={(e) => setForm({ ...form, usage_notes: e.target.value })}
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             {entryType === 'feature' && (
               <div className="space-y-1">
