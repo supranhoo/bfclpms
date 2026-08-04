@@ -29,7 +29,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Download, Plus, Pencil, Trash2, RefreshCw, AlertTriangle } from 'lucide-react';
+import {
+  Download,
+  Plus,
+  Pencil,
+  Trash2,
+  RefreshCw,
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useReportAccess } from '@/hooks/useReportAccess';
 import {
@@ -140,11 +149,32 @@ export default function DevelopmentReport() {
     const q = search.trim().toLowerCase();
     if (!q) return filteredByTab;
     return filteredByTab.filter((e) =>
-      [e.title, e.description, e.module_area, e.period_label, e.severity, e.status, e.timeline_type]
+      [
+        e.title,
+        e.description,
+        e.rationale,
+        e.usage_notes,
+        e.module_area,
+        e.period_label,
+        e.severity,
+        e.status,
+        e.timeline_type,
+      ]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(q)),
     );
   }, [filteredByTab, search]);
+
+  // ADR-249 — What / Why / How coverage across the entries currently loaded.
+  const detailCoverage = useMemo(() => {
+    if (!allEntries.length) return { pct: 0, complete: 0, total: 0 };
+    const complete = allEntries.filter((e) => !!e.rationale && !!e.usage_notes).length;
+    return {
+      pct: Math.round((complete / allEntries.length) * 100),
+      complete,
+      total: allEntries.length,
+    };
+  }, [allEntries]);
 
   const summary = summaryQ.data;
   const cover = coverQ.data;
@@ -195,11 +225,16 @@ export default function DevelopmentReport() {
         backTo="/reports"
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <SummaryCard label="Features" value={summary?.feature_count ?? 0} loading={summaryQ.isLoading} />
         <SummaryCard label="Bug Fixes" value={summary?.bug_count ?? 0} loading={summaryQ.isLoading} />
         <SummaryCard label="Timeline Entries" value={summary?.timeline_count ?? 0} loading={summaryQ.isLoading} />
         <SummaryCard label="Reporting Period" value={reportingPeriod} loading={summaryQ.isLoading} />
+        <SummaryCard
+          label="Detail coverage (Why + How)"
+          value={`${detailCoverage.pct}% (${detailCoverage.complete}/${detailCoverage.total})`}
+          loading={entriesQ.isLoading}
+        />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
