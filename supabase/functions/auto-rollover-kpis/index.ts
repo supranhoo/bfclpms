@@ -231,7 +231,12 @@ Deno.serve(async (req) => {
       employee_ids,
       skip_employee_ids = [],
       carry_audit_assignments = false,
+      issued_by,
     } = params;
+    const isCronRun = triggered_by === 'system';
+    // Manual/admin runs mark the target period as deliberately issued by
+    // default; the cron never does.
+    const markIssued = params.mark_issued ?? !isCronRun;
 
     // Calculate source/target periods
     const currentDate = new Date();
