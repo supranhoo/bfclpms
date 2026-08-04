@@ -17,6 +17,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
+import {
+  MAX_ROLLOUT_PERIODS,
+  describeTargets,
+  resolveRolloutTargets,
+  type RepeatMode,
+  type RolloverTarget,
+} from '@/lib/rolloverTargets';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -54,6 +61,17 @@ interface RolloverResponse {
   audit_assignments_cloned?: number;
   audit_assignments_skipped_already_assigned?: number;
   audit_clone_errors?: string[];
+  employees_skipped_already_issued?: number;
+  weightage_warnings?: Array<{ employee_id: string; employee_name: string; total_weightage: number }>;
+}
+
+/** Per-target-period summary shown for a multi-month rollout. */
+interface PeriodSummary {
+  month: string;
+  year: number;
+  new_kpis: number;
+  employees: number;
+  conflicts: number;
 }
 
 interface RolloverDialogProps {
@@ -100,6 +118,17 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
   // mappings) from the source period onto the newly created target KPIs.
   // Off by default — existing assignments on target KPIs are never overwritten.
   const [carryAuditAssignments, setCarryAuditAssignments] = useState(true);
+  // ADR-248 — multi-month rollout
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>('single');
+  const [repeatCount, setRepeatCount] = useState(3);
+  const [periodSummaries, setPeriodSummaries] = useState<PeriodSummary[] | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
+
+  const rolloutTargets: RolloverTarget[] = useMemo(
+    () => resolveRolloutTargets({ month: targetMonth as any, year: targetYear }, repeatMode, repeatCount),
+    [targetMonth, targetYear, repeatMode, repeatCount],
+  );
+  const isMultiMonth = rolloutTargets.length > 1;
 
   // When opened in scoped mode, ensure state stays locked to the scoped employee
   // and the supplied target period each time the dialog is reopened.
