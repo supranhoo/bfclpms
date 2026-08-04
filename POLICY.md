@@ -5973,3 +5973,25 @@ overwrite fields absent from the upload.
    per affected employee for the target period and returns
    `weightage_warnings` for anyone above 100. The UI must surface these. The
    system flags, never silently corrects, a KRA set.
+
+## §PERF-EVIDENCE-PREVIEW (ADR-250, 2026-08-04)
+
+1. **No unfiltered `kpis` table reads.** Full-table KPI loads (`useAllKpis`)
+   MUST go through the `public.get_all_kpis_slim()` SECURITY DEFINER RPC, paged
+   with `fetchAllRpcPaged`. Direct `from('kpis').select(...)` over the whole
+   table re-evaluates ~18 RLS policies per row per page; it was the single
+   largest database cost in the system and starved the Storage API, surfacing
+   to reviewers as slow evidence previews and database timeouts.
+2. **Previews stream, never buffer.** Evidence previews resolve a short-lived
+   signed URL and let the browser stream the object. Downloading the whole
+   object into a Blob before painting is forbidden — it makes a queued request
+   indistinguishable from a frozen dialog.
+3. **Every preview is time-boxed.** A preview that has not resolved within
+   20 s fails with the server-busy message and an explicit Retry action.
+4. **Transient ≠ denied.** `normalizeEvidenceError` MUST classify timeouts,
+   aborted fetches, 5xx and 429 as transient ("server busy"). Only genuine
+   403/404/RLS failures may render the access-denied message.
+5. **Storage policies use cached identity.** `review-evidence` SELECT policies
+   call the STABLE SECURITY DEFINER helper `public.can_read_kpi_evidence(uuid)`
+   with `(select auth.uid())` inside, so the participation test is evaluated
+   once per statement rather than once per object row.
