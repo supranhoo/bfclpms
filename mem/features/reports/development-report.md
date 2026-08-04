@@ -30,3 +30,12 @@ Enforced by `uq_dev_report_entries_ingest_key` on `(entry_type, COALESCE(entry_d
 - `src/test/devReportPageNoCoverTab.test.tsx` — Cover tab absent; default = Features; period reflects filter.
 - `src/test/devReportMonthFilter.test.ts` — month bounds correctness.
 - `src/test/devReportExportSchema.test.ts` — XLSX column order locked.
+## Auto-capture delivery (ADR-246 / POLICY §131a)
+- SSOT parser: `src/lib/devReport/capture.ts`. NEVER fork it — the Vite plugin
+  `plugins/devReportCapture.ts` (virtual module `virtual:dev-report-capture`)
+  and `scripts/devReportReseed.ts` both call it.
+- Admin "Sync from repo" on `/reports/dev-report` posts captured rows to the
+  idempotent `dev-report-ingest` edge function in batches of 100.
+- Amber staleness banner when stored max entry_date lags the newest bundled
+  artefact by >14 days.
+- Tests: `src/test/devReportCapture.test.ts`.
