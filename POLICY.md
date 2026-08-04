@@ -5927,3 +5927,30 @@ alias. Adding a new master attribute requires updating
 Non-roster columns are hydrated per-page only — never widen the roster RPC.
 Partial custom-field sheets merge into the existing JSONB row; they never
 overwrite fields absent from the upload.
+
+## §KRA-MULTI-MONTH-ROLLOUT / §KRA-PERIOD-ISSUANCE (ADR-248)
+
+1. **Multi-month rollout.** The Rollover dialog MUST be able to apply one source
+   KRA set to several target periods in a single run. Target resolution is owned
+   solely by `src/lib/rolloverTargets.ts` (`resolveRolloutTargets`) with modes
+   `single`, `next_n`, `rest_of_fy`, `full_fy`. Fiscal year is July–June; a
+   rollout never rolls backwards before the chosen target and is capped at
+   `MAX_ROLLOUT_PERIODS`. Never recompute month sequences ad hoc.
+2. Each target period is dry-run and executed as its own edge-function call, in
+   ascending order, and logged separately in `kra_rollover_logs`. Conflict
+   choices made in the preview apply to every period of the run. A mid-run
+   failure names the failing period and how many earlier periods were applied.
+3. **Deliberate issuance is authoritative.** Any admin/manual rollover records
+   `kra_period_issuance(employee_id, review_period, review_year, status='issued')`.
+   The monthly cron (`triggered_by = 'system'`, `force = false`) MUST skip every
+   employee whose target period is marked issued, and — as a backstop for
+   pre-ADR-248 data — every employee who already has at least one KPI in the
+   exact target month. Dedup on `(kra_name, kpi_name, period)` alone is NOT
+   sufficient: it cannot distinguish "never prepared" from "prepared, this KPI
+   deliberately dropped", which is what inflated weightage past 100.
+4. Manual and admin runs are never blocked by issuance; they remain the way to
+   top-up a balance. `force: true` bypasses the guard for a cron rerun.
+5. **Weightage guard.** After inserting, the function recomputes total weightage
+   per affected employee for the target period and returns
+   `weightage_warnings` for anyone above 100. The UI must surface these. The
+   system flags, never silently corrects, a KRA set.
