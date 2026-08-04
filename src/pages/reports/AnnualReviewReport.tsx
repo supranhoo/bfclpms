@@ -223,6 +223,12 @@ export default function AnnualReviewReport() {
         </CardContent>
       </Card>
 
+      {calibrationError && (
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          Calibration data could not be loaded — ratings shown are uncalibrated.
+        </p>
+      )}
+
       {cycleId && counts && (
         <div className="grid gap-3 md:grid-cols-4">
           {[
