@@ -433,6 +433,41 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
                 </div>
               </div>
 
+              {/* ADR-248 — multi-month rollout */}
+              <div className="space-y-2 rounded-lg border p-4">
+                <Label className="font-medium">Repeat for</Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select value={repeatMode} onValueChange={(v) => setRepeatMode(v as RepeatMode)}>
+                    <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="single">Single month</SelectItem>
+                      <SelectItem value="next_n">Next N months</SelectItem>
+                      <SelectItem value="rest_of_fy">Rest of fiscal year (to June)</SelectItem>
+                      <SelectItem value="full_fy">Full assessment period (Jul–Jun)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {repeatMode === 'next_n' && (
+                    <Input
+                      type="number"
+                      min={2}
+                      max={MAX_ROLLOUT_PERIODS}
+                      value={repeatCount}
+                      onChange={(e) => setRepeatCount(Number(e.target.value) || 1)}
+                      className="w-20"
+                    />
+                  )}
+                  <Badge variant="secondary" className="font-normal">
+                    {describeTargets(rolloutTargets)} — {rolloutTargets.length} period{rolloutTargets.length === 1 ? '' : 's'}
+                  </Badge>
+                </div>
+                {isMultiMonth && (
+                  <p className="text-xs text-muted-foreground">
+                    The same source KRA set is applied to each period in turn. Existing KPIs are never
+                    duplicated, and each period is logged separately. Maximum {MAX_ROLLOUT_PERIODS} periods per run.
+                  </p>
+                )}
+              </div>
+
               {scopedEmployee ? (
                 <Alert className="border-primary/30 bg-primary/5">
                   <Users className="h-4 w-4" />
@@ -486,7 +521,7 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
                 className="w-full"
               >
                 {previewMutation.isPending ? (
-                  <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Checking...</>
+                  <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />{progress ?? 'Checking...'}</>
                 ) : (
                   <><Search className="h-4 w-4 mr-2" />Check & Preview</>
                 )}
