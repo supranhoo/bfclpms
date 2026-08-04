@@ -8840,6 +8840,74 @@ export type Database = {
         }
         Relationships: []
       }
+      kra_period_issuance: {
+        Row: {
+          employee_id: string
+          id: string
+          issued_at: string
+          issued_by: string | null
+          note: string | null
+          review_period: string
+          review_year: number
+          source: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          employee_id: string
+          id?: string
+          issued_at?: string
+          issued_by?: string | null
+          note?: string | null
+          review_period: string
+          review_year: number
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          employee_id?: string
+          id?: string
+          issued_at?: string
+          issued_by?: string | null
+          note?: string | null
+          review_period?: string
+          review_year?: number
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kra_period_issuance_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kra_period_issuance_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kra_period_issuance_issued_by_fkey"
+            columns: ["issued_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kra_period_issuance_issued_by_fkey"
+            columns: ["issued_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kra_rollover_logs: {
         Row: {
           created_at: string | null
