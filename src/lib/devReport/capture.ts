@@ -19,6 +19,10 @@ export interface DevReportCaptureRow {
   entry_date: string;
   title: string;
   description: string;
+  /** ADR-249 — Why it was built (problem / context). NULL when no genuine source. */
+  rationale: string | null;
+  /** ADR-249 — How it is used (who / where / what it enables). NULL when no genuine source. */
+  usage_notes: string | null;
   module_area: string | null;
   status: string | null;
   severity: string | null;
@@ -64,6 +68,37 @@ function dateFromMigrationFile(file: string): string | null {
   return `${ts.slice(0, 4)}-${ts.slice(4, 6)}-${ts.slice(6, 8)}`;
 }
 
+/** Extract a markdown `## Section` body (text until the next heading). */
+export function markdownSection(body: string, name: string): string | null {
+  const re = new RegExp(`##\\s*${name}\\s*\\n+([^#]+)`, 'i');
+  const raw = body.match(re)?.[1]?.trim();
+  if (!raw) return null;
+  const text = raw
+    .split('\n')
+    .map((l) => l.replace(/^[-*]\s+/, '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text ? text.slice(0, 600) : null;
+}
+
+/** Pull a labelled changelog bullet, e.g. `- **Why:** ...`. */
+export function labelledBullet(section: string, labels: string[]): string | null {
+  for (const line of section.split('\n')) {
+    const l = line.trim();
+    if (!l.startsWith('- ')) continue;
+    const m = l.match(/^-\s+\*\*([^*]+)\*\*:?\s*(.*)$/);
+    if (!m) continue;
+    const key = m[1].replace(/:$/, '').trim().toLowerCase();
+    if (labels.some((x) => key === x.toLowerCase())) {
+      const val = m[2].trim();
+      if (val) return val.slice(0, 600);
+    }
+  }
+  return null;
+}
+
 function migrationRows(f: CaptureFile): DevReportCaptureRow[] {
   const date = dateFromMigrationFile(f.file);
   if (!date) return [];
@@ -97,6 +132,14 @@ function migrationRows(f: CaptureFile): DevReportCaptureRow[] {
   if (policies) descParts.push(`Policies: ${policies}`);
   if (firstComment) descParts.push(firstComment);
   const adrRefs = [...new Set([...body.matchAll(/ADR-\d+/g)].map((m) => m[0]))].slice(0, 6);
+  const migrationUsage = tablesUniq.length
+    ? `Backs app features reading/writing ${tablesUniq
+        .slice(0, 3)
+        .map((t) => `public.${t}`)
+        .join(', ')}${policies ? ` under ${policies} access ${policies === 1 ? 'policy' : 'policies'}` : ''}.`
+    : funcsUniq.length
+      ? `Called by the app / edge functions via ${funcsUniq.slice(0, 3).join(', ')}.`
+      : null;
 
   const rows: DevReportCaptureRow[] = [
     {
@@ -104,6 +147,8 @@ function migrationRows(f: CaptureFile): DevReportCaptureRow[] {
       entry_date: date,
       title: title.slice(0, 200),
       description: descParts.join(' · ') || `Migration ${f.file}`,
+      rationale: firstComment || null,
+      usage_notes: migrationUsage,
       module_area: moduleFromText(`${slug} ${firstComment}`),
       status: null,
       severity: null,
@@ -118,6 +163,10 @@ function migrationRows(f: CaptureFile): DevReportCaptureRow[] {
       entry_date: date,
       title: `New table: ${t}`,
       description: `Created public.${t}${firstComment ? ' — ' + firstComment : ''}`,
+      rationale: firstComment || null,
+      usage_notes: `Stores the ${t.replace(/_/g, ' ')} records the app reads and writes${
+        policies ? `, protected by ${policies} access ${policies === 1 ? 'policy' : 'policies'}` : ''
+      }.`,
       module_area: moduleFromText(t),
       status: 'Shipped',
       severity: null,
@@ -144,11 +193,16 @@ function adrRow(f: CaptureFile): DevReportCaptureRow | null {
       .slice(0, 4)
       .join(' ')
       .slice(0, 400) ?? '';
+  const context = markdownSection(f.body, 'Context') ?? markdownSection(f.body, 'Problem');
+  const consequences =
+    markdownSection(f.body, 'Consequences') ?? markdownSection(f.body, 'Usage');
   return {
     entry_type: 'timeline',
     entry_date: date,
     title: h1.slice(0, 200),
     description: decision || `Architecture Decision Record ${id}`,
+    rationale: context,
+    usage_notes: consequences,
     module_area: moduleFromText(h1),
     status: null,
     severity: null,
@@ -188,11 +242,15 @@ function changelogRows(changelog: string): DevReportCaptureRow[] {
         .find((l) => l.startsWith('- '))
         ?.replace(/^-\s+\*\*[^*]+\*\*:?\s*/, '')
         .slice(0, 600) ?? '';
+    const why = labelledBullet(sec, ['Why', 'Problem', 'Root cause', 'RCA', 'Context']);
+    const how = labelledBullet(sec, ['How', 'Usage', 'Impact', 'Who', 'Where']);
     rows.push({
       entry_type,
       entry_date: date,
       title: titleRaw.slice(0, 200),
       description: firstBullet || titleRaw,
+      rationale: why,
+      usage_notes: how,
       module_area: moduleFromText(titleRaw),
       status,
       severity,
