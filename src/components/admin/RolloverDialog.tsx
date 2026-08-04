@@ -550,6 +550,34 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
           {/* Step 2: Preview */}
           {step === 'preview' && previewData && (
             <div className="space-y-4 py-2">
+              {periodSummaries && periodSummaries.length > 1 && (
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm">Per-period plan ({periodSummaries.length} periods)</h4>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Period</TableHead>
+                        <TableHead className="text-center">Employees</TableHead>
+                        <TableHead className="text-center">New KPIs</TableHead>
+                        <TableHead className="text-center">Already present</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {periodSummaries.map((p) => (
+                        <TableRow key={`${p.month}-${p.year}`}>
+                          <TableCell className="font-medium">{p.month} {p.year}</TableCell>
+                          <TableCell className="text-center">{p.employees}</TableCell>
+                          <TableCell className="text-center">{p.new_kpis || <span className="text-muted-foreground">nothing to create</span>}</TableCell>
+                          <TableCell className="text-center">{p.conflicts}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <p className="text-xs text-muted-foreground">
+                    The conflict choices below apply to every period in this rollout.
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-3">
                 <Card>
                   <CardContent className="pt-4 text-center">
