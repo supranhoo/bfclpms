@@ -352,6 +352,8 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
       setPreviewData(null);
       setResults(null);
       setBalanceIds(new Set());
+      setPeriodSummaries(null);
+      setProgress(null);
     }, 300);
   };
 
