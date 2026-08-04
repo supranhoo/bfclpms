@@ -12,3 +12,4 @@ ADR-230 / POLICY §AR-REPORT-EFFECTIVE-OUTCOME.
 - Eligibility questions resolve against `template_override_id ?? template_id` (ADR-117).
 - DB values (`total_score`, `final_rating`) stay raw — this is presentation only.
 - Guard: `src/test/annualReview/reportRating.test.ts`.
+- ADR-244: load calibrations with `useAnnualReviewCycleCalibrations(cycleId)` on every report surface. NEVER pass a per-row/per-page instance-id list (`useAnnualReviewCalibrations(ids)`) — page-scoped lists hide calibrations, cycle-wide lists overflow the request URL and silently degrade to `{}`. A calibration fetch error must render an inline warning, never an empty map. Guard: `src/test/annualReview/calibrationContextScope.test.ts`.
