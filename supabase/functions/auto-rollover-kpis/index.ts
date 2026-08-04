@@ -387,6 +387,39 @@ Deno.serve(async (req) => {
     // Process each employee
     const rolledOver: EmployeeResult[] = [];
     const skippedEmployees: EmployeeResult[] = [];
+
+    // ── ADR-248: cron must never touch a deliberately-issued target period ──
+    // Root cause it fixes: an admin issues next month's KRAs early with a
+    // reduced KPI set; on the 1st the cron re-adds every dropped KPI because
+    // dedup only sees rows that exist, inflating total weightage beyond 100.
+    // Two layers:
+    //   1. explicit intent — a `kra_period_issuance` row with status 'issued';
+    //   2. backstop for historical data — the employee already has at least
+    //      one KPI in the exact target month.
+    // Manual/admin runs are unaffected and can still top-up balances.
+    const issuanceSkipSet = new Set<string>();
+    if (isCronRun && !force) {
+      for (let i = 0; i < empIds.length; i += 50) {
+        const chunk = empIds.slice(i, i + 50);
+        const { data: issuedRows } = await supabase
+          .from('kra_period_issuance')
+          .select('employee_id')
+          .eq('review_period', targetMonth)
+          .eq('review_year', targetYear)
+          .eq('status', 'issued')
+          .in('employee_id', chunk);
+        for (const r of issuedRows ?? []) issuanceSkipSet.add(r.employee_id);
+      }
+      for (const tk of targetKpis) {
+        if (tk.review_period === targetMonth) issuanceSkipSet.add(tk.employee_id);
+      }
+      if (issuanceSkipSet.size > 0) {
+        console.log(
+          `[Rollover] Cron skipping ${issuanceSkipSet.size} employee(s) whose ${targetMonth} ${targetYear} KRAs were already issued.`,
+        );
+      }
+    }
+    const skippedAlreadyIssued: EmployeeResult[] = [];
     const conflicts: EmployeeResult[] = [];
     const kpisToInsert: any[] = [];
     // Track which source KPI each target row was cloned from, keyed by the
@@ -396,6 +429,21 @@ Deno.serve(async (req) => {
 
     for (const [empId, kpis] of Object.entries(employeeKpis)) {
       if (skip_employee_ids.includes(empId)) continue;
+      if (issuanceSkipSet.has(empId)) {
+        const p = (kpis[0] as any).profiles;
+        skippedAlreadyIssued.push({
+          employee_id: empId,
+          employee_name: p?.full_name || 'Unknown',
+          employee_code: p?.employee_code || '',
+          department: p?.departments?.name || '',
+          kpis_copied: 0,
+          status: 'skipped',
+          existing_kpi_count: 0,
+          existing_kpi_names: [],
+          source_kpi_count: kpis.length,
+        });
+        continue;
+      }
       if (inactiveSet.has(empId)) {
         const profile = (kpis[0] as any).profiles;
         skippedEmployees.push({
