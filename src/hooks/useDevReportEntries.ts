@@ -12,6 +12,10 @@ export interface DevReportEntry {
   title: string;
   module_area: string | null;
   description: string;
+  /** ADR-249 — Why it was built. */
+  rationale: string | null;
+  /** ADR-249 — How it is used. */
+  usage_notes: string | null;
   status: string | null;
   severity: string | null;
   timeline_type: string | null;
