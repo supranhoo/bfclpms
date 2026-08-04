@@ -5865,3 +5865,27 @@ invariants hold system-wide:
 
 Reactivating a profile restores all three behaviours immediately; nothing is queued or
 replayed for the suppressed period.
+
+## §INC-DAILY-ENTRY-NO-SILENT-LOSS (ADR-245)
+
+Production daily incentive entries may never be lost by omission.
+
+1. **Merge, never replace.** A grid save writes only the day keys the operator
+   actually has loaded, merged server-side into the stored month
+   (`upsert_production_daily_values`). Days outside the selected range, and
+   employees whose rows did not hydrate, are left untouched.
+2. **No writes from a partially loaded grid.** The save action is disabled while
+   rates, entries or the mapped roster are still loading.
+3. **Shrink guard.** Any save that lowers an employee's stored tonnage inside the
+   selected day range requires explicit confirmation, listing the affected
+   employees and days.
+4. **Immutable history.** Every insert/update/delete on
+   `production_daily_entries` is logged to `production_daily_entries_history`
+   with before/after values, removed days, tonnage before/after, actor and
+   optional reason. Admin-only readable.
+5. **Audited restore.** Lost days are re-entered only through
+   `admin_restore_production_daily_values`, which is admin-only and requires a
+   written reason recorded in the history log.
+6. **Coverage diagnostic.** `incentive_daily_coverage_diagnostic` flags any
+   sub-period whose employee coverage falls below 70% of the best sub-period of
+   the same program/month, so a partial wipe is detected before invoicing.
