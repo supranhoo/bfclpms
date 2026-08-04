@@ -646,6 +646,53 @@ export function ProductionDailyGrid({ programId, programName, onMonthYearChange,
           </>
         )}
       </CardContent>
+
+      {/* ADR-245 shrink guard: a save that lowers stored tonnage for the
+          selected day range must be explicitly confirmed. */}
+      <AlertDialog open={!!pendingSave} onOpenChange={(open) => { if (!open) setPendingSave(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-destructive" />
+              This save reduces recorded production
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                <p>
+                  {pendingSave?.warnings.length} employee(s) will have lower tonnage for
+                  {rangeLabel || ' the selected month'} than what is currently stored.
+                  Confirm only if this reduction is intentional.
+                </p>
+                <ul className="max-h-40 overflow-auto space-y-1">
+                  {pendingSave?.warnings.slice(0, 15).map((w) => {
+                    const emp = gridEmployees.find((e: any) => e.id === w.employee_id) as any;
+                    return (
+                      <li key={w.employee_id} className="tabular-nums">
+                        {emp?.full_name ?? w.employee_id}: {w.before.toFixed(2)} → {w.after.toFixed(2)} t
+                        {w.droppedDays.length > 0 && ` (days ${w.droppedDays.join(', ')})`}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {(pendingSave?.warnings.length ?? 0) > 15 && (
+                  <p className="text-muted-foreground">…and {(pendingSave!.warnings.length - 15)} more.</p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingSave) commitSave(pendingSave.rows);
+                setPendingSave(null);
+              }}
+            >
+              Save anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
