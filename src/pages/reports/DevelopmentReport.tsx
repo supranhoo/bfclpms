@@ -408,6 +408,7 @@ function EntriesTable({
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-[36px]" />
               <TableHead className="w-[140px]">Date / Period</TableHead>
               <TableHead>{type === 'feature' ? 'Feature' : type === 'bug' ? 'Bug / Issue' : 'Item'}</TableHead>
               {type !== 'timeline' && <TableHead className="w-[180px]">Module / Area</TableHead>}
@@ -419,8 +420,24 @@ function EntriesTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {entries.map((e) => (
-              <TableRow key={e.id}>
+            {entries.map((e) => {
+              const open = expanded.has(e.id);
+              const cols = (type !== 'timeline' ? 6 : 5) + (isAdmin ? 1 : 0);
+              return (
+              <Fragment key={e.id}>
+              <TableRow>
+                <TableCell className="align-top">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    aria-label={open ? 'Hide details' : 'Show details'}
+                    aria-expanded={open}
+                    onClick={() => toggle(e.id)}
+                  >
+                    {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </Button>
+                </TableCell>
                 <TableCell className="font-mono text-xs whitespace-nowrap">
                   {formatEntryDateCell(e)}
                 </TableCell>
@@ -447,7 +464,41 @@ function EntriesTable({
                   </TableCell>
                 )}
               </TableRow>
-            ))}
+              {open && (
+                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                  <TableCell colSpan={cols} className="py-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Why it was built
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-sm">
+                          {e.rationale ?? 'Not captured yet.'}
+                        </p>
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          How it is used
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-sm">
+                          {e.usage_notes ?? 'Not captured yet.'}
+                        </p>
+                      </div>
+                    </div>
+                    {(e.adr_refs?.length || e.linked_commit) && (
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        {(e.adr_refs ?? []).map((r) => (
+                          <Badge key={r} variant="secondary">{r}</Badge>
+                        ))}
+                        {e.linked_commit && <span className="font-mono">{e.linked_commit}</span>}
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+              )}
+              </Fragment>
+              );
+            })}
           </TableBody>
         </Table>
       </CardContent>
