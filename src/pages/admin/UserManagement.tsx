@@ -8,6 +8,24 @@ import { useEmployeeMasterFieldRequirements } from '@/hooks/useEmployeeMasterFie
 import { validateRequiredFields, type EmployeeMasterFieldKey } from '@/lib/employeeMasterFields';
 import { USER_EDIT_HYDRATION_SELECT } from '@/lib/userEditHydration';
 import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  OPTIONAL_GRID_COLUMNS,
+  customColumnKey,
+  customFieldKeyOf,
+  isCustomColumnKey,
+  loadVisibleColumns,
+  saveVisibleColumns,
+} from '@/lib/employeeMasterColumns';
+import { useEmployeeMasterRowExtras } from '@/hooks/useEmployeeMasterRowExtras';
+import {
   useEmployeeMasterCustomFieldDefs,
   saveEmployeeMasterCustomFieldValues,
   useEmployeeMasterCustomFieldValues,
@@ -38,7 +56,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { invalidateProfileCaches } from '@/lib/profileCacheKeys';
 import { setFunctionalRole } from '@/lib/userRoles';
-import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package, Calendar, Phone, UserX, UserCheck, Sparkles, GitBranch } from 'lucide-react';
+import { Users, Search, Shield, Edit2, Plus, ChevronLeft, ChevronRight, UserPlus, KeyRound, Copy, Check, Trash2, Package, Calendar, Phone, UserX, UserCheck, Sparkles, GitBranch, Columns3 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { SmartAssignmentDialog } from '@/components/admin/SmartAssignmentDialog';
@@ -635,6 +653,88 @@ export default function UserManagement() {
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
+
+  // ── ADR-247 — Employee Master column parity ───────────────────────────
+  // Hydrate the columns the slim roster RPC does not return, for the
+  // current page only (bounded cost), plus custom-field values.
+  const pageIds = useMemo(() => paginatedProfiles.map(p => p.id), [paginatedProfiles]);
+  const { data: rowExtras } = useEmployeeMasterRowExtras(pageIds);
+
+  const masterGridCustomFields = useMemo(
+    () => editCustomFieldDefsAll.filter(d => d.show_in_employee_master),
+    [editCustomFieldDefsAll],
+  );
+
+  const allOptionalColumns = useMemo(
+    () => [
+      ...OPTIONAL_GRID_COLUMNS.map(c => ({ key: c.key as string, label: c.label })),
+      ...masterGridCustomFields.map(d => ({
+        key: customColumnKey(d.field_key),
+        label: d.field_label,
+      })),
+    ],
+    [masterGridCustomFields],
+  );
+
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => loadVisibleColumns());
+  useEffect(() => {
+    saveVisibleColumns(visibleColumns);
+  }, [visibleColumns]);
+  const toggleColumn = (key: string) =>
+    setVisibleColumns(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key],
+    );
+  const activeOptionalColumns = useMemo(
+    () => allOptionalColumns.filter(c => visibleColumns.includes(c.key)),
+    [allOptionalColumns, visibleColumns],
+  );
+
+  const renderOptionalCell = (columnKey: string, profile: any): React.ReactNode => {
+    const extras = rowExtras?.get(profile.id);
+    const dash = <span className="text-muted-foreground">—</span>;
+    if (isCustomColumnKey(columnKey)) {
+      const v = extras?.custom?.[customFieldKeyOf(columnKey)];
+      if (v === undefined || v === null || v === '') return dash;
+      if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+      return String(v);
+    }
+    switch (columnKey) {
+      case 'functional_manager': {
+        const fm = profiles?.find(p => p.id === (profile as any).functional_manager_id);
+        return fm ? formatManagerLabel(fm.full_name, fm.employee_code) : dash;
+      }
+      case 'company':
+        return (companiesList || []).find((c: any) => c.id === profile.company_id)?.name || dash;
+      case 'division': {
+        const divId = deriveDivisionFromDept(profile.department_id);
+        return (divisions || []).find((d: any) => d.id === divId)?.name || dash;
+      }
+      case 'business_unit': {
+        const buId = (departments || []).find((d: any) => d.id === profile.department_id)?.business_unit_id;
+        return (businessUnits || []).find((b: any) => b.id === buId)?.name || dash;
+      }
+      case 'location':
+        return (locationsList || []).find((l: any) => l.id === extras?.location_id)?.name || dash;
+      case 'employee_category':
+        return extras?.employee_category || dash;
+      case 'employment_status':
+        return extras?.employment_status || dash;
+      case 'level':
+        return (profile as any).level || dash;
+      case 'group_doj':
+        return extras?.group_doj || dash;
+      case 'doj':
+        return extras?.doj || dash;
+      case 'confirmation_date':
+        return extras?.confirmation_date || dash;
+      case 'portal_access':
+        return extras?.portal_access === false ? 'No' : 'Yes';
+      case 'is_dummy_employee':
+        return extras?.is_dummy_employee || dummyIds.has(profile.id) ? 'Yes' : 'No';
+      default:
+        return dash;
+    }
+  };
 
   // Reset to first page when filters change
   const handleFilterChange = () => {
@@ -1495,6 +1595,39 @@ export default function UserManagement() {
           />
         </div>
 
+        {/* ADR-247 — column chooser: every Employee Master attribute is
+            selectable, so nothing is invisible to admins any more. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline">
+              <Columns3 className="h-4 w-4 mr-2" />
+              Columns{activeOptionalColumns.length > 0 ? ` (${activeOptionalColumns.length})` : ''}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto w-64 bg-popover z-50">
+            <DropdownMenuLabel>Extra columns</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {allOptionalColumns.map(col => (
+              <DropdownMenuCheckboxItem
+                key={col.key}
+                checked={visibleColumns.includes(col.key)}
+                onCheckedChange={() => toggleColumn(col.key)}
+                onSelect={(e) => e.preventDefault()}
+              >
+                {col.label}
+              </DropdownMenuCheckboxItem>
+            ))}
+            {activeOptionalColumns.length > 0 && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setVisibleColumns([])}>
+                  Reset to default
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         {selectedUserIds.size > 0 && (
           <Button variant="secondary" onClick={() => setBulkDialogOpen(true)}>
             <UserPlus className="h-4 w-4 mr-2" />
@@ -1615,6 +1748,9 @@ export default function UserManagement() {
                   <TableHead>Role</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Reporting To</TableHead>
+                  {activeOptionalColumns.map(col => (
+                    <TableHead key={col.key} className="whitespace-nowrap">{col.label}</TableHead>
+                  ))}
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1651,14 +1787,14 @@ export default function UserManagement() {
                       <TableCell>{profile.designation || '-'}</TableCell>
                       <TableCell>{profile.pms_grade || '-'}</TableCell>
                       <TableCell>
-                        {(profile as any).mobile_number ? (
+                        {(rowExtras?.get(profile.id)?.mobile_number || (profile as any).mobile_number) ? (
                           <a
-                            href={`tel:${(profile as any).mobile_number}`}
+                            href={`tel:${rowExtras?.get(profile.id)?.mobile_number || (profile as any).mobile_number}`}
                             className="flex items-center gap-1 text-sm text-foreground hover:text-primary transition-colors"
                             onClick={e => e.stopPropagation()}
                           >
                             <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                            {(profile as any).mobile_number}
+                            {rowExtras?.get(profile.id)?.mobile_number || (profile as any).mobile_number}
                           </a>
                         ) : (
                           <span className="text-muted-foreground">—</span>
@@ -1692,6 +1828,11 @@ export default function UserManagement() {
                             : '—'}
                         </div>
                       </TableCell>
+                      {activeOptionalColumns.map(col => (
+                        <TableCell key={col.key} className="whitespace-nowrap text-sm">
+                          {renderOptionalCell(col.key, profile)}
+                        </TableCell>
+                      ))}
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Button size="sm" variant="ghost" onClick={() => openEditDialog(profile)} title="Edit">

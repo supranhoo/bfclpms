@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useProfiles, useKraCategories, useDepartments, useDivisions, useBusinessUnits, useDesignations, useEmployeeCategories, useEmploymentStatuses } from '@/hooks/useOrganization';
+import { useEmployeeMasterCustomFieldDefs, saveEmployeeMasterCustomFieldValues } from '@/hooks/useEmployeeMasterCustomFields';
 import { useCompanies } from '@/hooks/useCompanies';
 import { useCreateKpi } from '@/hooks/useKpis';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -158,6 +159,10 @@ interface EmployeeImportRow {
   role?: string;
   portalAccess?: string;
   employeeStatus?: string;
+  mobileNumber?: string;
+  isDummyEmployee?: string;
+  /** ADR-247 — admin-defined custom Employee Master fields, keyed by field_key. */
+  customFields?: Record<string, unknown>;
   groupDoj?: string; // ISO yyyy-MM-dd (normalised)
   doj?: string; // ISO yyyy-MM-dd (normalised)
   confirmationDate?: string; // ISO yyyy-MM-dd (normalised)
@@ -216,6 +221,8 @@ export default function ImportData() {
   const { data: employeeCategories } = useEmployeeCategories();
   const { data: employmentStatuses } = useEmploymentStatuses();
   const { data: companiesList } = useCompanies();
+  // ADR-247 — custom Employee Master fields participate in import/export.
+  const { data: employeeCustomFieldDefs = [] } = useEmployeeMasterCustomFieldDefs({ activeOnly: true });
   const createKpi = useCreateKpi();
   const { toast } = useToast();
 
@@ -731,6 +738,22 @@ export default function ImportData() {
     reader.readAsArrayBuffer(file);
   }, [toast]);
 
+  /**
+   * ADR-247 — merge imported custom-field values into the employee's existing
+   * JSONB row so a partial sheet never wipes fields it does not contain.
+   */
+  const mergeCustomFieldValues = async (employeeId: string, incoming: Record<string, unknown>) => {
+    const { data } = await (supabase as any)
+      .from('employee_master_custom_field_values')
+      .select('values')
+      .eq('employee_id', employeeId)
+      .maybeSingle();
+    await saveEmployeeMasterCustomFieldValues(employeeId, {
+      ...((data?.values as Record<string, unknown>) || {}),
+      ...incoming,
+    } as any);
+  };
+
   // Normalize employee row to handle different column name variations
   const normalizeEmployeeRow = (rawRow: Record<string, any>): EmployeeImportRow => {
     // Helper to find value from multiple possible column names (case-insensitive)
@@ -763,6 +786,16 @@ export default function ImportData() {
     const confDateRaw = getRaw(['confirmationDate', 'confirmation_date', 'confirmDate', 'confirm_date', 'dateOfConfirmation', 'date_of_confirmation']);
     const confDateNorm = normalizeDateCell(confDateRaw);
 
+    // ADR-247 — custom Employee Master fields are matched by field_key or label.
+    const customFields: Record<string, unknown> = {};
+    for (const def of employeeCustomFieldDefs) {
+      const v = getRaw([def.field_key, def.field_label]);
+      if (v !== undefined && v !== null && String(v).trim() !== '') {
+        customFields[def.field_key] =
+          def.field_type === 'number' ? Number(String(v).trim()) : String(v).trim();
+      }
+    }
+
     return {
       employeeCode: getValue(['employeeCode', 'employeecode', 'employee_code', 'empCode', 'empcode', 'emp_code', 'newCode', 'newcode', 'new_code', 'code', 'id', 'empId', 'empid', 'emp_id']),
       fullName: getValue(['fullName', 'fullname', 'full_name', 'name', 'employeeName', 'employeename', 'employee_name', 'empName', 'empname', 'emp_name']),
@@ -784,6 +817,9 @@ export default function ImportData() {
       role: getValue(['role', 'appRole', 'approle', 'app_role', 'userRole', 'userrole', 'user_role', 'systemRole', 'systemrole', 'system_role']),
       portalAccess: getValue(['portalAccess', 'portalaccess', 'portal_access', 'loginAccess', 'loginaccess', 'login_access']),
       employeeStatus: getValue(['employeeStatus', 'employee_status', 'status', 'active', 'isActive', 'is_active']),
+      mobileNumber: getValue(['mobileNumber', 'mobilenumber', 'mobile_number', 'mobile', 'phone', 'phoneNumber', 'contactNumber', 'contact_number']),
+      isDummyEmployee: getValue(['isDummyEmployee', 'is_dummy_employee', 'dummyEmployee', 'dummy_employee', 'dummy', 'systemEmployee', 'system_employee']),
+      customFields: Object.keys(customFields).length ? customFields : undefined,
       groupDoj: gdojNorm === 'INVALID' ? 'INVALID' : (gdojNorm || undefined),
       doj: dojNorm === 'INVALID' ? 'INVALID' : (dojNorm || undefined),
       confirmationDate: confDateNorm === 'INVALID' ? 'INVALID' : (confDateNorm || undefined),
@@ -1475,6 +1511,11 @@ export default function ImportData() {
             ...(row.doj && row.doj !== 'INVALID' ? { doj: row.doj } : {}),
             ...(row.confirmationDate && row.confirmationDate !== 'INVALID' ? { confirmation_date: row.confirmationDate } : {}),
             ...(row.location && locationByName.get(row.location.trim().toLowerCase()) ? { location_id: locationByName.get(row.location.trim().toLowerCase()) } : {}),
+            ...(row.mobileNumber ? { mobile_number: sanitizeText(row.mobileNumber) } : {}),
+            ...(() => {
+              const d = parseEmployeeStatus(row.isDummyEmployee);
+              return d === true || d === false ? { is_dummy_employee: d } : {};
+            })(),
             ...(() => {
               const s = parseEmployeeStatus(row.employeeStatus);
               return s === true || s === false ? { is_active: s } : {};
@@ -1483,6 +1524,11 @@ export default function ImportData() {
           .eq('id', existingEmployee.id);
 
         if (error) throw error;
+
+        // ADR-247 — persist custom Employee Master field values from the sheet.
+        if (row.customFields) {
+          await mergeCustomFieldValues(existingEmployee.id, row.customFields);
+        }
 
         // Update role for existing employee if provided in import
         if (row.role) {
@@ -1558,6 +1604,11 @@ export default function ImportData() {
             group_doj: row.groupDoj && row.groupDoj !== 'INVALID' ? row.groupDoj : undefined,
             doj: row.doj && row.doj !== 'INVALID' ? row.doj : undefined,
             confirmation_date: row.confirmationDate && row.confirmationDate !== 'INVALID' ? row.confirmationDate : undefined,
+            mobile_number: sanitizeText(row.mobileNumber) || undefined,
+            ...(() => {
+              const d = parseEmployeeStatus(row.isDummyEmployee);
+              return d === true || d === false ? { is_dummy_employee: d } : {};
+            })(),
             ...(() => {
               const s = parseEmployeeStatus(row.employeeStatus);
               return s === true || s === false ? { is_active: s } : {};
@@ -1573,6 +1624,11 @@ export default function ImportData() {
         }
 
         const newUserId = fnData?.profile?.id || null;
+
+        // ADR-247 — persist custom Employee Master field values from the sheet.
+        if (newUserId && row.customFields) {
+          await mergeCustomFieldValues(newUserId, row.customFields);
+        }
 
         // Assign role to new user
         if (newUserId) {
@@ -1854,6 +1910,10 @@ export default function ImportData() {
         groupDoj: '2020-04-15',
         doj: '2020-04-15',
         confirmationDate: '2020-10-15',
+        mobileNumber: '9876543210',
+        isDummyEmployee: 'No',
+        // ADR-247 — one column per active custom Employee Master field.
+        ...Object.fromEntries(employeeCustomFieldDefs.map(d => [d.field_key, ''])),
       },
     ];
 
@@ -1872,9 +1932,23 @@ export default function ImportData() {
       const allProfiles = await fetchAllPaged<any>((from, to) =>
         supabase
           .from('profiles')
-          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, employee_category, employment_status, department_id, reporting_manager_id, functional_manager_id, is_active, group_doj, doj, confirmation_date, location_id')
+          .select('id, employee_code, full_name, email, designation, company_id, pms_grade, level, employee_category, employment_status, department_id, reporting_manager_id, functional_manager_id, is_active, group_doj, doj, confirmation_date, location_id, mobile_number, portal_access, is_dummy_employee')
           .order('id')
           .range(from, to)
+      );
+
+      // ADR-247 — custom Employee Master values round-trip with the export.
+      const customValueRows = employeeCustomFieldDefs.length
+        ? await fetchAllPaged<any>((from, to) =>
+            (supabase as any)
+              .from('employee_master_custom_field_values')
+              .select('employee_id, values')
+              .order('employee_id')
+              .range(from, to)
+          )
+        : [];
+      const customValueMap = new Map<string, Record<string, unknown>>(
+        customValueRows.map((r: any) => [r.employee_id, (r.values || {}) as Record<string, unknown>]),
       );
 
       // Lookup tables resolved separately via .in() — cheap and bounded.
@@ -1944,6 +2018,15 @@ export default function ImportData() {
           groupDoj: (profile as any).group_doj || '',
           doj: (profile as any).doj || '',
           confirmationDate: (profile as any).confirmation_date || '',
+          mobileNumber: (profile as any).mobile_number || '',
+          portalAccess: (profile as any).portal_access === false ? 'No' : 'Yes',
+          isDummyEmployee: (profile as any).is_dummy_employee ? 'Yes' : 'No',
+          ...Object.fromEntries(
+            employeeCustomFieldDefs.map(d => {
+              const v = customValueMap.get(profile.id)?.[d.field_key];
+              return [d.field_key, v === undefined || v === null ? '' : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v)];
+            }),
+          ),
         };
       });
 
@@ -2268,6 +2351,16 @@ export default function ImportData() {
                   <li><code>gdoj</code> / <code>groupDoj</code> - Group Date of Joining (yyyy-MM-dd or dd/MM/yyyy)</li>
                   <li><code>doj</code> / <code>dateOfJoining</code> - Date of Joining (yyyy-MM-dd or dd/MM/yyyy)</li>
                   <li><code>confirmationDate</code> - Confirmation Date (yyyy-MM-dd or dd/MM/yyyy)</li>
+                  <li><code>mobileNumber</code> - Mobile / Contact Number</li>
+                  <li><code>isDummyEmployee</code> - Dummy / System Employee <span className="text-xs ml-1 text-muted-foreground">(Yes/No)</span></li>
+                  {employeeCustomFieldDefs.map(d => (
+                    <li key={d.field_key}>
+                      <code>{d.field_key}</code> - {d.field_label}
+                      <span className="text-xs ml-1 text-muted-foreground">
+                        (custom field{d.is_mandatory ? ', mandatory' : ''})
+                      </span>
+                    </li>
+                  ))}
                 </ul>
                 <Alert className="mt-4">
                   <AlertCircle className="h-4 w-4" />
