@@ -17,6 +17,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
+import {
+  MAX_ROLLOUT_PERIODS,
+  describeTargets,
+  resolveRolloutTargets,
+  type RepeatMode,
+  type RolloverTarget,
+} from '@/lib/rolloverTargets';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -54,6 +61,17 @@ interface RolloverResponse {
   audit_assignments_cloned?: number;
   audit_assignments_skipped_already_assigned?: number;
   audit_clone_errors?: string[];
+  employees_skipped_already_issued?: number;
+  weightage_warnings?: Array<{ employee_id: string; employee_name: string; total_weightage: number }>;
+}
+
+/** Per-target-period summary shown for a multi-month rollout. */
+interface PeriodSummary {
+  month: string;
+  year: number;
+  new_kpis: number;
+  employees: number;
+  conflicts: number;
 }
 
 interface RolloverDialogProps {
@@ -70,6 +88,45 @@ interface RolloverDialogProps {
 }
 
 type Step = 'config' | 'preview' | 'results';
+
+/** Folds one response per target period into a single results payload. */
+function mergeResponses(responses: RolloverResponse[], targets: RolloverTarget[]): RolloverResponse {
+  const base = responses[responses.length - 1];
+  const byEmployee = new Map<string, EmployeeResult>();
+  for (const res of responses) {
+    for (const r of res.rolled_over ?? []) {
+      const prev = byEmployee.get(r.employee_id);
+      byEmployee.set(
+        r.employee_id,
+        prev ? { ...prev, kpis_copied: prev.kpis_copied + r.kpis_copied } : { ...r },
+      );
+    }
+  }
+  const skipped = new Map<string, EmployeeResult>();
+  for (const res of responses) {
+    for (const s of res.skipped_employees ?? []) {
+      if (!byEmployee.has(s.employee_id)) skipped.set(s.employee_id, s);
+    }
+  }
+  return {
+    ...base,
+    rolled_over: Array.from(byEmployee.values()),
+    skipped_employees: Array.from(skipped.values()),
+    conflicts: [],
+    total_kpis_copied: responses.reduce((s, r) => s + (r.total_kpis_copied ?? 0), 0),
+    duplicates_skipped: responses.reduce((s, r) => s + (r.duplicates_skipped ?? 0), 0),
+    total_employees_affected: byEmployee.size,
+    audit_assignments_cloned: responses.reduce((s, r) => s + (r.audit_assignments_cloned ?? 0), 0),
+    audit_assignments_skipped_already_assigned: responses.reduce(
+      (s, r) => s + (r.audit_assignments_skipped_already_assigned ?? 0),
+      0,
+    ),
+    audit_clone_errors: responses.flatMap((r) => r.audit_clone_errors ?? []),
+    weightage_warnings: responses.flatMap((r) => r.weightage_warnings ?? []),
+    target_period: targets[0]?.month ?? base.target_period,
+    target_year: targets[0]?.year ?? base.target_year,
+  };
+}
 
 export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTargetMonth, defaultTargetYear }: RolloverDialogProps) {
   const { toast } = useToast();
@@ -100,6 +157,17 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
   // mappings) from the source period onto the newly created target KPIs.
   // Off by default — existing assignments on target KPIs are never overwritten.
   const [carryAuditAssignments, setCarryAuditAssignments] = useState(true);
+  // ADR-248 — multi-month rollout
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>('single');
+  const [repeatCount, setRepeatCount] = useState(3);
+  const [periodSummaries, setPeriodSummaries] = useState<PeriodSummary[] | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
+
+  const rolloutTargets: RolloverTarget[] = useMemo(
+    () => resolveRolloutTargets({ month: targetMonth as any, year: targetYear }, repeatMode, repeatCount),
+    [targetMonth, targetYear, repeatMode, repeatCount],
+  );
+  const isMultiMonth = rolloutTargets.length > 1;
 
   // When opened in scoped mode, ensure state stays locked to the scoped employee
   // and the supplied target period each time the dialog is reopened.
@@ -144,24 +212,45 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
     return employees.filter((e: any) => e.name.toLowerCase().includes(q) || e.code.toLowerCase().includes(q) || e.department.toLowerCase().includes(q));
   }, [employees, empSearch]);
 
-  // Preview mutation (dry run)
+  // Preview mutation (dry run). For a multi-month rollout every target period
+  // is dry-run sequentially; the first period drives the conflict UI and the
+  // rest are summarised per-period (ADR-248).
   const previewMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('auto-rollover-kpis', {
-        body: {
-          triggered_by: 'admin_manual',
-          source_month: sourceMonth,
-          source_year: sourceYear,
-          target_month: targetMonth,
-          target_year: targetYear,
-          employee_ids: allEmployees ? undefined : selectedEmployeeIds,
-          dry_run: true,
-        },
-      });
-      if (error) throw error;
-      return data as RolloverResponse;
+      const summaries: PeriodSummary[] = [];
+      let first: RolloverResponse | null = null;
+      for (const t of rolloutTargets) {
+        setProgress(`Checking ${t.month} ${t.year}…`);
+        const { data, error } = await supabase.functions.invoke('auto-rollover-kpis', {
+          body: {
+            triggered_by: 'admin_manual',
+            source_month: sourceMonth,
+            source_year: sourceYear,
+            target_month: t.month,
+            target_year: t.year,
+            employee_ids: allEmployees ? undefined : selectedEmployeeIds,
+            dry_run: true,
+          },
+        });
+        if (error) throw error;
+        const res = data as RolloverResponse;
+        summaries.push({
+          month: t.month,
+          year: t.year,
+          new_kpis:
+            (res.rolled_over ?? []).reduce((s, r) => s + r.kpis_copied, 0) +
+            (res.conflicts ?? []).reduce((s, r) => s + r.kpis_copied, 0),
+          employees: (res.rolled_over ?? []).length + (res.conflicts ?? []).length,
+          conflicts: (res.conflicts ?? []).length,
+        });
+        if (!first) first = res;
+      }
+      setProgress(null);
+      return { first: first!, summaries };
     },
-    onSuccess: (data) => {
+    onSuccess: ({ first, summaries }) => {
+      const data = first;
+      setPeriodSummaries(summaries);
       if (data.skipped) {
         toast({ title: 'No KPIs Found', description: data.reason });
         return;
@@ -172,6 +261,7 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
       setStep('preview');
     },
     onError: (err: Error) => {
+      setProgress(null);
       toast({ title: 'Preview Failed', description: err.message, variant: 'destructive' });
     },
   });
@@ -183,22 +273,36 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
         .filter((c: EmployeeResult) => !balanceIds.has(c.employee_id))
         .map((c: EmployeeResult) => c.employee_id) || [];
 
-      const { data, error } = await supabase.functions.invoke('auto-rollover-kpis', {
-        body: {
-          triggered_by: 'admin_manual',
-          source_month: sourceMonth,
-          source_year: sourceYear,
-          target_month: targetMonth,
-          target_year: targetYear,
-          employee_ids: allEmployees ? undefined : selectedEmployeeIds,
-          dry_run: false,
-          rollover_balance_only: true,
-          skip_employee_ids: skipIds,
-          carry_audit_assignments: carryAuditAssignments,
-        },
-      });
-      if (error) throw error;
-      return data as RolloverResponse;
+      const { data: auth } = await supabase.auth.getUser();
+      const responses: RolloverResponse[] = [];
+      for (const t of rolloutTargets) {
+        setProgress(`Rolling over ${t.month} ${t.year}…`);
+        const { data, error } = await supabase.functions.invoke('auto-rollover-kpis', {
+          body: {
+            triggered_by: 'admin_manual',
+            source_month: sourceMonth,
+            source_year: sourceYear,
+            target_month: t.month,
+            target_year: t.year,
+            employee_ids: allEmployees ? undefined : selectedEmployeeIds,
+            dry_run: false,
+            rollover_balance_only: true,
+            skip_employee_ids: skipIds,
+            carry_audit_assignments: carryAuditAssignments,
+            mark_issued: true,
+            issued_by: auth?.user?.id,
+          },
+        });
+        if (error) {
+          throw new Error(
+            `${t.month} ${t.year}: ${error.message}` +
+              (responses.length ? ` (${responses.length} earlier period(s) already applied)` : ''),
+          );
+        }
+        responses.push(data as RolloverResponse);
+      }
+      setProgress(null);
+      return mergeResponses(responses, rolloutTargets);
     },
     onSuccess: (data) => {
       setResults(data);
@@ -215,6 +319,7 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
       }
     },
     onError: (err: Error) => {
+      setProgress(null);
       toast({ title: 'Rollover Failed', description: err.message, variant: 'destructive' });
     },
   });
@@ -247,6 +352,8 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
       setPreviewData(null);
       setResults(null);
       setBalanceIds(new Set());
+      setPeriodSummaries(null);
+      setProgress(null);
     }, 300);
   };
 
@@ -328,6 +435,41 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
                 </div>
               </div>
 
+              {/* ADR-248 — multi-month rollout */}
+              <div className="space-y-2 rounded-lg border p-4">
+                <Label className="font-medium">Repeat for</Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select value={repeatMode} onValueChange={(v) => setRepeatMode(v as RepeatMode)}>
+                    <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="single">Single month</SelectItem>
+                      <SelectItem value="next_n">Next N months</SelectItem>
+                      <SelectItem value="rest_of_fy">Rest of fiscal year (to June)</SelectItem>
+                      <SelectItem value="full_fy">Full assessment period (Jul–Jun)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {repeatMode === 'next_n' && (
+                    <Input
+                      type="number"
+                      min={2}
+                      max={MAX_ROLLOUT_PERIODS}
+                      value={repeatCount}
+                      onChange={(e) => setRepeatCount(Number(e.target.value) || 1)}
+                      className="w-20"
+                    />
+                  )}
+                  <Badge variant="secondary" className="font-normal">
+                    {describeTargets(rolloutTargets)} — {rolloutTargets.length} period{rolloutTargets.length === 1 ? '' : 's'}
+                  </Badge>
+                </div>
+                {isMultiMonth && (
+                  <p className="text-xs text-muted-foreground">
+                    The same source KRA set is applied to each period in turn. Existing KPIs are never
+                    duplicated, and each period is logged separately. Maximum {MAX_ROLLOUT_PERIODS} periods per run.
+                  </p>
+                )}
+              </div>
+
               {scopedEmployee ? (
                 <Alert className="border-primary/30 bg-primary/5">
                   <Users className="h-4 w-4" />
@@ -381,7 +523,7 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
                 className="w-full"
               >
                 {previewMutation.isPending ? (
-                  <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Checking...</>
+                  <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />{progress ?? 'Checking...'}</>
                 ) : (
                   <><Search className="h-4 w-4 mr-2" />Check & Preview</>
                 )}
@@ -410,6 +552,34 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
           {/* Step 2: Preview */}
           {step === 'preview' && previewData && (
             <div className="space-y-4 py-2">
+              {periodSummaries && periodSummaries.length > 1 && (
+                <div className="space-y-2">
+                  <h4 className="font-medium text-sm">Per-period plan ({periodSummaries.length} periods)</h4>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Period</TableHead>
+                        <TableHead className="text-center">Employees</TableHead>
+                        <TableHead className="text-center">New KPIs</TableHead>
+                        <TableHead className="text-center">Already present</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {periodSummaries.map((p) => (
+                        <TableRow key={`${p.month}-${p.year}`}>
+                          <TableCell className="font-medium">{p.month} {p.year}</TableCell>
+                          <TableCell className="text-center">{p.employees}</TableCell>
+                          <TableCell className="text-center">{p.new_kpis || <span className="text-muted-foreground">nothing to create</span>}</TableCell>
+                          <TableCell className="text-center">{p.conflicts}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <p className="text-xs text-muted-foreground">
+                    The conflict choices below apply to every period in this rollout.
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-3">
                 <Card>
                   <CardContent className="pt-4 text-center">
@@ -533,7 +703,19 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
 
               <div className="text-sm text-muted-foreground text-center">
                 Total: {results.total_kpis_copied} KPIs copied for {results.total_employees_affected} employees
+                {rolloutTargets.length > 1 && <> across {rolloutTargets.length} periods ({describeTargets(rolloutTargets)})</>}
               </div>
+
+              {(results.weightage_warnings?.length ?? 0) > 0 && (
+                <Alert variant="default" className="border-amber-500/50 bg-amber-500/5">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <AlertDescription className="text-sm">
+                    {results.weightage_warnings!.length} employee(s) now exceed 100 total weightage in a target
+                    period: {results.weightage_warnings!.slice(0, 5).map((w) => `${w.employee_name} (${w.total_weightage})`).join(', ')}
+                    {results.weightage_warnings!.length > 5 ? '…' : ''}. Review their KRA set.
+                  </AlertDescription>
+                </Alert>
+              )}
 
               {(results.audit_assignments_cloned ?? 0) +
                 (results.audit_assignments_skipped_already_assigned ?? 0) >
@@ -604,9 +786,10 @@ export function RolloverDialog({ open, onOpenChange, scopedEmployee, defaultTarg
               className="flex-1"
             >
               {executeMutation.isPending ? (
-                <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Rolling Over...</>
+                <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />{progress ?? 'Rolling Over...'}</>
               ) : (
-                <><RefreshCw className="h-4 w-4 mr-2" />Proceed with Rollover</>
+                <><RefreshCw className="h-4 w-4 mr-2" />
+                  {rolloutTargets.length > 1 ? `Proceed for ${rolloutTargets.length} periods` : 'Proceed with Rollover'}</>
               )}
             </Button>
           </div>

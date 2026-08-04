@@ -41,6 +41,15 @@ interface RolloverRequest {
    * (UNIQUE kpi_id → ON CONFLICT DO NOTHING). Opt-in, audit-logged.
    */
   carry_audit_assignments?: boolean;
+  /**
+   * ADR-248 — when true (default for admin/manual runs) the function records a
+   * `kra_period_issuance` row for every employee whose target period was
+   * deliberately prepared through this run. The monthly cron then leaves those
+   * periods alone instead of re-adding KPIs that were intentionally removed.
+   */
+  mark_issued?: boolean;
+  /** Profile id of the admin who triggered a manual run (audit trail). */
+  issued_by?: string;
 }
 
 // --- Frequency resolution helpers ---
@@ -222,7 +231,12 @@ Deno.serve(async (req) => {
       employee_ids,
       skip_employee_ids = [],
       carry_audit_assignments = false,
+      issued_by,
     } = params;
+    const isCronRun = triggered_by === 'system';
+    // Manual/admin runs mark the target period as deliberately issued by
+    // default; the cron never does.
+    const markIssued = params.mark_issued ?? !isCronRun;
 
     // Calculate source/target periods
     const currentDate = new Date();
@@ -373,6 +387,39 @@ Deno.serve(async (req) => {
     // Process each employee
     const rolledOver: EmployeeResult[] = [];
     const skippedEmployees: EmployeeResult[] = [];
+
+    // ── ADR-248: cron must never touch a deliberately-issued target period ──
+    // Root cause it fixes: an admin issues next month's KRAs early with a
+    // reduced KPI set; on the 1st the cron re-adds every dropped KPI because
+    // dedup only sees rows that exist, inflating total weightage beyond 100.
+    // Two layers:
+    //   1. explicit intent — a `kra_period_issuance` row with status 'issued';
+    //   2. backstop for historical data — the employee already has at least
+    //      one KPI in the exact target month.
+    // Manual/admin runs are unaffected and can still top-up balances.
+    const issuanceSkipSet = new Set<string>();
+    if (isCronRun && !force) {
+      for (let i = 0; i < empIds.length; i += 50) {
+        const chunk = empIds.slice(i, i + 50);
+        const { data: issuedRows } = await supabase
+          .from('kra_period_issuance')
+          .select('employee_id')
+          .eq('review_period', targetMonth)
+          .eq('review_year', targetYear)
+          .eq('status', 'issued')
+          .in('employee_id', chunk);
+        for (const r of issuedRows ?? []) issuanceSkipSet.add(r.employee_id);
+      }
+      for (const tk of targetKpis) {
+        if (tk.review_period === targetMonth) issuanceSkipSet.add(tk.employee_id);
+      }
+      if (issuanceSkipSet.size > 0) {
+        console.log(
+          `[Rollover] Cron skipping ${issuanceSkipSet.size} employee(s) whose ${targetMonth} ${targetYear} KRAs were already issued.`,
+        );
+      }
+    }
+    const skippedAlreadyIssued: EmployeeResult[] = [];
     const conflicts: EmployeeResult[] = [];
     const kpisToInsert: any[] = [];
     // Track which source KPI each target row was cloned from, keyed by the
@@ -382,6 +429,21 @@ Deno.serve(async (req) => {
 
     for (const [empId, kpis] of Object.entries(employeeKpis)) {
       if (skip_employee_ids.includes(empId)) continue;
+      if (issuanceSkipSet.has(empId)) {
+        const p = (kpis[0] as any).profiles;
+        skippedAlreadyIssued.push({
+          employee_id: empId,
+          employee_name: p?.full_name || 'Unknown',
+          employee_code: p?.employee_code || '',
+          department: p?.departments?.name || '',
+          kpis_copied: 0,
+          status: 'skipped',
+          existing_kpi_count: 0,
+          existing_kpi_names: [],
+          source_kpi_count: kpis.length,
+        });
+        continue;
+      }
       if (inactiveSet.has(empId)) {
         const profile = (kpis[0] as any).profiles;
         skippedEmployees.push({
@@ -499,10 +561,11 @@ Deno.serve(async (req) => {
           success: true,
           dry_run: true,
           rolled_over: rolledOver,
-          skipped_employees: skippedEmployees,
+          skipped_employees: [...skippedEmployees, ...skippedAlreadyIssued],
           conflicts,
           total_kpis_copied: rolledOver.reduce((s, r) => s + r.kpis_copied, 0),
           total_employees_affected: rolledOver.length,
+          employees_skipped_already_issued: skippedAlreadyIssued.length,
           source_period: sourceMonth,
           source_year: sourceYear,
           target_period: targetMonth,
@@ -753,6 +816,60 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── ADR-248: record deliberate issuance of the target period ──
+    if (markIssued && rolledOver.length > 0) {
+      const issuanceRows = rolledOver.map((r) => ({
+        employee_id: r.employee_id,
+        review_period: targetMonth,
+        review_year: targetYear,
+        status: 'issued',
+        source: `rollover:${triggered_by}`,
+        issued_by: issued_by ?? null,
+        note: `Rolled over from ${sourceMonth} ${sourceYear}`,
+      }));
+      for (let i = 0; i < issuanceRows.length; i += 200) {
+        const { error: issErr } = await supabase
+          .from('kra_period_issuance')
+          .upsert(issuanceRows.slice(i, i + 200), {
+            onConflict: 'employee_id,review_period,review_year',
+          });
+        if (issErr) console.error('[Rollover] issuance upsert failed:', issErr.message);
+      }
+    }
+
+    // ── ADR-248: weightage guard — surface, never silently inflate ──
+    const weightageWarnings: Array<{ employee_id: string; employee_name: string; total_weightage: number }> = [];
+    {
+      const affected = rolledOver.map((r) => r.employee_id);
+      for (let i = 0; i < affected.length; i += 50) {
+        const chunk = affected.slice(i, i + 50);
+        const { data: wRows } = await supabase
+          .from('kpis')
+          .select('employee_id, weightage')
+          .eq('review_period', targetMonth)
+          .eq('review_year', targetYear)
+          .in('employee_id', chunk);
+        const totals: Record<string, number> = {};
+        for (const w of wRows ?? []) {
+          totals[w.employee_id] = (totals[w.employee_id] ?? 0) + Number(w.weightage ?? 0);
+        }
+        for (const [empId, total] of Object.entries(totals)) {
+          if (total > 100.5) {
+            weightageWarnings.push({
+              employee_id: empId,
+              employee_name: rolledOver.find((r) => r.employee_id === empId)?.employee_name ?? 'Unknown',
+              total_weightage: Math.round(total * 100) / 100,
+            });
+          }
+        }
+      }
+      if (weightageWarnings.length > 0) {
+        console.warn(
+          `[Rollover] ${weightageWarnings.length} employee(s) exceed 100 total weightage in ${targetMonth} ${targetYear}.`,
+        );
+      }
+    }
+
     // Log successful rollover
     await supabase.from('kra_rollover_logs').insert({
       source_period: sourceMonth,
@@ -766,18 +883,26 @@ Deno.serve(async (req) => {
       error_message: duplicatesSkipped > 0
         ? `Skipped ${duplicatesSkipped} pre-existing duplicate KPI(s).`
         : null,
-      details: { rolled_over: rolledOver, skipped: skippedEmployees, duplicates_skipped: duplicatesSkipped },
+      details: {
+        rolled_over: rolledOver,
+        skipped: skippedEmployees,
+        skipped_already_issued: skippedAlreadyIssued,
+        duplicates_skipped: duplicatesSkipped,
+        weightage_warnings: weightageWarnings,
+      },
     });
 
     return new Response(
       JSON.stringify({
         success: true,
         rolled_over: rolledOver,
-        skipped_employees: skippedEmployees,
+        skipped_employees: [...skippedEmployees, ...skippedAlreadyIssued],
         conflicts: [],
         total_kpis_copied: totalInserted,
         duplicates_skipped: duplicatesSkipped,
         total_employees_affected: rolledOver.length,
+        employees_skipped_already_issued: skippedAlreadyIssued.length,
+        weightage_warnings: weightageWarnings,
         source_period: sourceMonth,
         source_year: sourceYear,
         target_period: targetMonth,
