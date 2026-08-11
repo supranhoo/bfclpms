@@ -9,6 +9,7 @@ export const PIP_POLICY_KEYS = {
   minDurationDays: 'pip_min_duration_days',
   maxDurationDays: 'pip_max_duration_days',
   monitorMonths: 'pip_monitor_months',
+  consecutiveMonths: 'pip_consecutive_months',
 } as const;
 
 export interface PipPolicySettings {
@@ -16,6 +17,11 @@ export interface PipPolicySettings {
   minDurationDays: number;
   maxDurationDays: number;
   monitorMonths: number;
+  /**
+   * ADR-252 — default trailing window length AND the minimum number of scored
+   * months required before an employee can be flagged as a PIP candidate.
+   */
+  consecutiveMonths: number;
 }
 
 export const DEFAULT_PIP_POLICY: PipPolicySettings = {
@@ -23,6 +29,7 @@ export const DEFAULT_PIP_POLICY: PipPolicySettings = {
   minDurationDays: 30,
   maxDurationDays: 90,
   monitorMonths: 3,
+  consecutiveMonths: 3,
 };
 
 function num(raw: unknown, fallback: number, max: number): number {
@@ -51,6 +58,7 @@ export function parsePipPolicy(map: Map<string, unknown>): PipPolicySettings {
     minDurationDays: num(map.get(PIP_POLICY_KEYS.minDurationDays), DEFAULT_PIP_POLICY.minDurationDays, 365),
     maxDurationDays: num(map.get(PIP_POLICY_KEYS.maxDurationDays), DEFAULT_PIP_POLICY.maxDurationDays, 365),
     monitorMonths: num(map.get(PIP_POLICY_KEYS.monitorMonths), DEFAULT_PIP_POLICY.monitorMonths, 24),
+    consecutiveMonths: num(map.get(PIP_POLICY_KEYS.consecutiveMonths), DEFAULT_PIP_POLICY.consecutiveMonths, 24),
   };
 }
 

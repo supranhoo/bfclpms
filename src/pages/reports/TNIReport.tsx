@@ -17,9 +17,6 @@ import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { 
   useTrainingNeeds, 
-  useTNIByCategory, 
-  useTNIByDepartment, 
-  useTNISummary,
   useDetectTrainingNeeds,
   useBackfillTrainingNeeds,
   TNIPriority,
@@ -27,6 +24,9 @@ import {
   TNIGapType,
   PeriodRange
 } from '@/hooks/useTNI';
+import { useTniThreshold, useTniQualifiedKpis } from '@/hooks/useTniQualification';
+import { filterQualifiedNeeds, qualifiedEvidence, tniKpiKey } from '@/lib/tni/tniQualification';
+import { summariseNeeds, aggregateByCategory, aggregateByDepartment } from '@/lib/tni/tniAggregation';
 import { useReviewPeriods } from '@/hooks/useKpis';
 import { 
   AlertTriangle, 
@@ -184,19 +184,55 @@ export default function TNIReport() {
   );
   const isMulti = periodRanges.length > 1;
 
-  const { data: summary, isLoading: summaryLoading } = useTNISummary(undefined, undefined, periodRanges);
-  const { data: categoryData, isLoading: categoryLoading } = useTNIByCategory(undefined, undefined, periodRanges);
-  const { data: departmentData, isLoading: departmentLoading } = useTNIByDepartment(undefined, undefined, periodRanges);
-  const { data: trainingNeeds, isLoading: needsLoading } = useTrainingNeeds({ periodRanges });
+  // ADR-252 — continuity rule: a KPI is a training need only when its score is
+  // at or below the configured threshold in EVERY scored month of the range.
+  const { data: tniThreshold } = useTniThreshold();
+  const { data: qualified, isLoading: qualifiedLoading } = useTniQualifiedKpis(periodRanges, tniThreshold);
+  const { data: rawNeeds, isLoading: rawNeedsLoading } = useTrainingNeeds({ periodRanges });
   const detectMutation = useDetectTrainingNeeds();
   const backfillMutation = useBackfillTrainingNeeds();
 
+  const monthOrder = useMemo(
+    () => periodRanges.map(r => `${r.year}|${r.month}`),
+    [periodRanges],
+  );
+
+  /** Persisted rows that survive the continuity rule (deduped per KPI when multi-month). */
+  const trainingNeeds = useMemo(() => {
+    if (!rawNeeds || !qualified) return undefined;
+    return filterQualifiedNeeds(rawNeeds, qualified.index, monthOrder, { multiMonth: isMulti });
+  }, [rawNeeds, qualified, monthOrder, isMulti]);
+
+  const needsLoading = rawNeedsLoading || qualifiedLoading;
+  const suppressedCount = (rawNeeds?.length ?? 0) - (trainingNeeds?.length ?? 0);
+
+  const monthLabelFor = (key: string) => {
+    const [y, m] = key.split('|');
+    return `${m.slice(0, 3)} ${y}`;
+  };
+  const evidenceText = (tn: { employee_id: string; kpi?: { kra_name?: string | null; kpi_name?: string | null } | null }) => {
+    const ev = qualified ? qualifiedEvidence(tn, qualified.index) : undefined;
+    if (!ev) return '';
+    return ev.months
+      .map(m => `${m.month.slice(0, 3)} ${m.year}: ${m.score == null ? '—' : Number(m.score).toFixed(2)}`)
+      .join(', ');
+  };
+
+  // Every aggregate is derived from the same qualified row-set so the cards,
+  // the category/department tables and the detail grid always reconcile.
+  const summary = useMemo(() => summariseNeeds((trainingNeeds ?? []) as any), [trainingNeeds]);
+  const categoryData = useMemo(() => aggregateByCategory((trainingNeeds ?? []) as any), [trainingNeeds]);
+  const departmentData = useMemo(() => aggregateByDepartment((trainingNeeds ?? []) as any), [trainingNeeds]);
+  const summaryLoading = needsLoading;
+  const categoryLoading = needsLoading;
+  const departmentLoading = needsLoading;
+
   // Months in the active range that have ZERO TNI records.
   const emptyMonths = useMemo<PeriodRange[]>(() => {
-    if (!trainingNeeds) return [];
-    const present = new Set(trainingNeeds.map(tn => `${tn.review_year}|${tn.review_period}`));
+    if (!rawNeeds) return [];
+    const present = new Set(rawNeeds.map(tn => `${tn.review_year}|${tn.review_period}`));
     return periodRanges.filter(r => !present.has(`${r.year}|${r.month}`));
-  }, [trainingNeeds, periodRanges]);
+  }, [rawNeeds, periodRanges]);
 
   const allEmpty = periodRanges.length > 0 && emptyMonths.length === periodRanges.length;
 
@@ -249,10 +285,10 @@ export default function TNIReport() {
     // Multi-month mode: detect on the user-chosen month from the dropdown (defaults to latest in range).
     if (isMulti) {
       const target = periodRanges.find(r => r.month === detectMonth) ?? periodRanges[periodRanges.length - 1];
-      detectMutation.mutate({ reviewPeriod: target.month, reviewYear: target.year });
+      detectMutation.mutate({ reviewPeriod: target.month, reviewYear: target.year, threshold: tniThreshold });
     } else {
       if (!selectedPeriod) return;
-      detectMutation.mutate({ reviewPeriod: selectedPeriod, reviewYear: selectedYear });
+      detectMutation.mutate({ reviewPeriod: selectedPeriod, reviewYear: selectedYear, threshold: tniThreshold });
     }
   };
 
@@ -289,11 +325,17 @@ export default function TNIReport() {
     const exportData = scopedNeeds.map((tn) => {
       const row: Record<string, string | number> = {};
       for (const fld of visible) row[fld.label] = valueFor(tn, fld.field_key);
+      // ADR-252 — continuity evidence travels with every exported row.
+      row['Months in Range'] = periodRanges.length;
+      row['Scored Months ≤ Threshold'] = evidenceText(tn);
+      row['TNI Threshold'] = tniThreshold ?? '';
       return row;
     });
 
     const wb = XLSX.utils.book_new();
-    const detailWs = XLSX.utils.json_to_sheet(exportData, { header: visible.map((f) => f.label) });
+    const detailWs = XLSX.utils.json_to_sheet(exportData, {
+      header: [...visible.map((f) => f.label), 'Months in Range', 'Scored Months ≤ Threshold', 'TNI Threshold'],
+    });
     appendEmployeeScopeNote(detailWs, empStatus);
     XLSX.utils.book_append_sheet(wb, detailWs, 'Detail');
 
@@ -341,7 +383,7 @@ export default function TNIReport() {
 
   const handleBackfill = () => {
     if (!isMulti) return;
-    backfillMutation.mutate({ ranges: periodRanges });
+    backfillMutation.mutate({ ranges: periodRanges, threshold: tniThreshold });
   };
 
   return (

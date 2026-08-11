@@ -1,12 +1,20 @@
 /**
- * ADR-205 — PIP candidate rule (extracted SSOT).
+ * ADR-205 / ADR-252 — PIP candidate rule (SSOT).
  *
- * Previously duplicated between `MonthlyTrendView.tsx` and its unit test.
- * An employee is a PIP candidate when EVERY month in the selected range has a
- * score (via the standard 8-stage fallback cascade) AND every one of those
- * scores is strictly below the configured threshold. A missing month
- * disqualifies the row — an incomplete picture is never treated as failure.
+ * An employee is a PIP candidate when EVERY *scored* month in the selected
+ * range is AT OR BELOW the configured threshold (`<=`), and at least
+ * `minScoredMonths` months of the range are actually scored.
+ *
+ * ADR-252 changes two things versus ADR-205:
+ *  1. `<` became `<=` (a score exactly on the threshold qualifies).
+ *  2. Unscored months (joiner/leaver, pending review) are skipped instead of
+ *     disqualifying the row; the minimum scored-month count guards against
+ *     acting on a single data point.
+ *
+ * Implementation delegates to the shared continuity evaluator so TNI and PIP
+ * always apply identical semantics.
  */
+import { evaluateContinuity } from '@/lib/continuity/allMonthsAtOrBelow';
 
 export interface PipCandidateInput {
   monthlyScores: Record<string, number | null | undefined>;
@@ -16,13 +24,8 @@ export function isPipCandidate(
   employee: PipCandidateInput,
   monthKeys: string[],
   threshold: number | null | undefined,
+  minScoredMonths = 1,
 ): boolean {
-  if (threshold == null || !Number.isFinite(threshold)) return false;
-  if (!monthKeys || monthKeys.length === 0) return false;
-  for (const key of monthKeys) {
-    const v = employee.monthlyScores[key];
-    if (v == null || !Number.isFinite(v)) return false;
-    if (v >= threshold) return false;
-  }
-  return true;
+  return evaluateContinuity(employee?.monthlyScores, monthKeys, threshold, { minScoredMonths })
+    .qualifies;
 }
