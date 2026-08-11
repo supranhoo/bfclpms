@@ -376,6 +376,7 @@ export function useDetectTrainingNeeds() {
     },
     onSuccess: ({ total }) => {
       queryClient.invalidateQueries({ queryKey: ['training-needs'] });
+      queryClient.invalidateQueries({ queryKey: ['tni-qualified-kpis'] });
       queryClient.invalidateQueries({ queryKey: ['tni-by-category'] });
       queryClient.invalidateQueries({ queryKey: ['tni-by-department'] });
       queryClient.invalidateQueries({ queryKey: ['tni-summary'] });
@@ -425,6 +426,7 @@ export function useBackfillTrainingNeeds() {
     },
     onSuccess: ({ totalDetected, perPeriod }) => {
       queryClient.invalidateQueries({ queryKey: ['training-needs'] });
+      queryClient.invalidateQueries({ queryKey: ['tni-qualified-kpis'] });
       queryClient.invalidateQueries({ queryKey: ['tni-by-category'] });
       queryClient.invalidateQueries({ queryKey: ['tni-by-department'] });
       queryClient.invalidateQueries({ queryKey: ['tni-summary'] });
