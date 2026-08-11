@@ -85,6 +85,14 @@ export function MonthlyTrendView({ canExport }: Props) {
     staleTime: 5 * 60 * 1000,
   });
 
+  // ADR-252 — minimum scored months before an employee can be flagged.
+  const { data: pipPolicy } = useQuery({
+    queryKey: ['pip-policy-settings'],
+    queryFn: getPipPolicySettings,
+    staleTime: 5 * 60 * 1000,
+  });
+  const minScoredMonths = pipPolicy?.consecutiveMonths ?? DEFAULT_PIP_POLICY.consecutiveMonths;
+
   const yearOptions = useMemo(() => {
     const y = currentYear;
     return [y - 2, y - 1, y, y + 1];
