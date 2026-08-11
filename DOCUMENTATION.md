@@ -8258,3 +8258,10 @@ Tests: `src/test/tni/continuityRule.test.ts`, `src/test/pip/*`.
 - v2.66.253 — ADR-252a TNI threshold criteria control moved from Admin → System
   Settings onto Reports → TNI Report (below the month filter). Admin-only inline
   edit, read-only display for everyone else.
+- v2.66.254 — ADR-252b TNI continuity enforcement fix. `tni_qualified_kpis`
+  gained `p_min_scored_months` (the report now passes the configured
+  consecutive-months window, clamped to the selected range) and evaluates the
+  canonical score cascade instead of `final_score` alone, so months scored at a
+  non-final stage can no longer be skipped. April–June 2026 @ threshold 3 /
+  window 3 drops from 741 qualifying rows to 300. The rule banner states the
+  minimum-scored-months requirement.

@@ -6011,7 +6011,15 @@ overwrite fields absent from the upload.
 4. **Unscored months are skipped, not failed.** Months with no score are
    excluded from the test and reported as skipped evidence.
 5. **Minimum scored months.** No finding may be raised when the number of
-   scored months is below the configured consecutive-months value.
+   scored months is below the configured consecutive-months value. This gate
+   applies to **TNI as well as PIP** (ADR-252b): `tni_qualified_kpis` takes
+   `p_min_scored_months` and the TNI report passes the configured window,
+   clamped to the number of months actually selected.
+5a. **Scored month = any stage score.** A month counts as scored when ANY stage
+   in the canonical cascade carries a score (final → management → HR PMS →
+   skip-level → auditor → functional manager → manager → self) and the row is
+   not N/A. Reading `final_score` alone is forbidden: it silently skipped
+   in-flight months and let a single low month qualify a KPI (ADR-252b).
 6. **Zero hardcoding.** The TNI threshold (`pms_tni_threshold`) and the
    consecutive-months window (`pip_consecutive_months`) live in
    `system_settings` and are editable by Admin **on the TNI Report, directly

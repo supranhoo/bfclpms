@@ -24,7 +24,7 @@ import {
   TNIGapType,
   PeriodRange
 } from '@/hooks/useTNI';
-import { useTniThreshold, useTniQualifiedKpis } from '@/hooks/useTniQualification';
+import { useTniThreshold, useTniQualifiedKpis, useTniMinScoredMonths } from '@/hooks/useTniQualification';
 import { filterQualifiedNeeds, qualifiedEvidence, tniKpiKey } from '@/lib/tni/tniQualification';
 import { TniThresholdInline } from '@/components/reports/TniThresholdInline';
 import { useAuth } from '@/contexts/AuthContext';
@@ -191,7 +191,9 @@ export default function TNIReport() {
   // ADR-252 — continuity rule: a KPI is a training need only when its score is
   // at or below the configured threshold in EVERY scored month of the range.
   const { data: tniThreshold } = useTniThreshold();
-  const { data: qualified, isLoading: qualifiedLoading } = useTniQualifiedKpis(periodRanges, tniThreshold);
+  const { data: minScoredMonthsCfg } = useTniMinScoredMonths();
+  const effectiveMinMonths = Math.max(1, Math.min(minScoredMonthsCfg ?? 1, Math.max(1, periodRanges.length)));
+  const { data: qualified, isLoading: qualifiedLoading } = useTniQualifiedKpis(periodRanges, tniThreshold, minScoredMonthsCfg);
   const { data: rawNeeds, isLoading: rawNeedsLoading } = useTrainingNeeds({ periodRanges });
   const detectMutation = useDetectTrainingNeeds();
   const backfillMutation = useBackfillTrainingNeeds();
@@ -451,9 +453,11 @@ export default function TNIReport() {
         <AlertDescription className="text-xs text-muted-foreground">
           A KPI is listed only when it stayed at or below the configured threshold in <b>every</b> scored
           month of the selected range ({periodRanges.length} month{periodRanges.length !== 1 ? 's' : ''}).
-          Months with no score (joiners, leavers, pending review, N/A) are skipped, never counted as a pass or a failure.
+          It must also carry at least <b>{effectiveMinMonths} scored month{effectiveMinMonths !== 1 ? 's' : ''}</b> in
+          this range, so a single low month can no longer flag a KPI. Months with no score at any review stage
+          (joiners, leavers, pending review, N/A) are skipped, never counted as a pass or a failure.
           {suppressedCount > 0 && (
-            <> {suppressedCount} detected record{suppressedCount !== 1 ? 's were' : ' was'} excluded because the KPI recovered above the threshold in at least one month of this range.</>
+            <> {suppressedCount} detected record{suppressedCount !== 1 ? 's were' : ' was'} excluded because the KPI recovered above the threshold in at least one month of this range, or had fewer than {effectiveMinMonths} scored month{effectiveMinMonths !== 1 ? 's' : ''}.</>
           )}
         </AlertDescription>
       </Alert>
