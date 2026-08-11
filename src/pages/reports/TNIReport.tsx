@@ -27,6 +27,7 @@ import {
 import { useTniThreshold, useTniQualifiedKpis } from '@/hooks/useTniQualification';
 import { filterQualifiedNeeds, qualifiedEvidence, tniKpiKey } from '@/lib/tni/tniQualification';
 import { TniThresholdInline } from '@/components/reports/TniThresholdInline';
+import { useAuth } from '@/contexts/AuthContext';
 import { summariseNeeds, aggregateByCategory, aggregateByDepartment } from '@/lib/tni/tniAggregation';
 import { useReviewPeriods } from '@/hooks/useKpis';
 import { 
