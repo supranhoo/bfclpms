@@ -919,12 +919,17 @@ export default function TNIReport() {
                     <TableRow>
                       <TableHead>Employee</TableHead>
                       <TableHead>KPI/Category</TableHead>
+                      <TableHead className="text-right">Wt %</TableHead>
                       <TableHead>Gap Type</TableHead>
                       <TableHead className="text-center">Score</TableHead>
-                      <TableHead>Months ≤ Threshold</TableHead>
                       <TableHead>Priority</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Recommendation</TableHead>
+                      {periodRanges.map(r => (
+                        <TableHead key={`${r.year}-${r.month}`} className="text-right whitespace-nowrap">
+                          {monthColumnLabel(r)}
+                        </TableHead>
+                      ))}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -944,6 +949,9 @@ export default function TNIReport() {
                             <div className="text-xs text-muted-foreground">{tn.category?.name || '-'}</div>
                           </div>
                         </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {(tn.kpi as any)?.weightage == null ? '—' : `${Number((tn.kpi as any).weightage)}%`}
+                        </TableCell>
                         <TableCell>
                           <Badge variant={tn.gap_type === 'compliance' ? 'outline' : 'secondary'}
                                  className={tn.gap_type === 'compliance' ? 'border-amber-500 text-amber-600' : ''}>
@@ -954,9 +962,6 @@ export default function TNIReport() {
                           <Badge variant={tn.score && tn.score < 2 ? 'destructive' : 'outline'}>
                             {tn.score?.toFixed(2) || '-'}
                           </Badge>
-                        </TableCell>
-                        <TableCell className="max-w-[16rem] text-xs text-muted-foreground truncate" title={evidenceText(tn)}>
-                          {evidenceText(tn) || '-'}
                         </TableCell>
                         <TableCell>
                           <Badge variant={PRIORITY_BADGE[tn.priority]}>
@@ -971,6 +976,23 @@ export default function TNIReport() {
                         <TableCell className="max-w-xs truncate">
                           {tn.training_recommendation || '-'}
                         </TableCell>
+                        {periodRanges.map(r => {
+                          const s = monthScoreFor(tn, r);
+                          return (
+                            <TableCell
+                              key={`${r.year}-${r.month}`}
+                              className={`text-right tabular-nums whitespace-nowrap ${
+                                s == null
+                                  ? 'text-muted-foreground'
+                                  : tniThreshold != null && s <= tniThreshold
+                                    ? 'text-destructive font-medium'
+                                    : ''
+                              }`}
+                            >
+                              {s == null ? '—' : s.toFixed(2)}
+                            </TableCell>
+                          );
+                        })}
                       </TableRow>
                     ))}
                     {filteredNeeds.length === 0 && (
