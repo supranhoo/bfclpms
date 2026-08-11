@@ -193,8 +193,23 @@ export default function TNIReport() {
   const { data: tniThreshold } = useTniThreshold();
   const { data: minScoredMonthsCfg } = useTniMinScoredMonths();
   const effectiveMinMonths = Math.max(1, Math.min(minScoredMonthsCfg ?? 1, Math.max(1, periodRanges.length)));
-  const { data: qualified, isLoading: qualifiedLoading } = useTniQualifiedKpis(periodRanges, tniThreshold, minScoredMonthsCfg);
-  const { data: rawNeeds, isLoading: rawNeedsLoading } = useTrainingNeeds({ periodRanges });
+  const {
+    data: qualifiedRaw,
+    isLoading: qualifiedLoading,
+    isFetching: qualifiedFetching,
+  } = useTniQualifiedKpis(periodRanges, tniThreshold, minScoredMonthsCfg);
+  const {
+    data: rawNeeds,
+    isLoading: rawNeedsLoading,
+    isFetching: rawNeedsFetching,
+  } = useTrainingNeeds({ periodRanges });
+
+  // ADR-252c — a qualified result-set computed for another range must never be
+  // rendered against the active filter (that produced August evidence inside an
+  // Apr–Jun report). The stamp is the single guard.
+  const activeRangeKey = useMemo(() => tniRangeKey(periodRanges), [periodRanges]);
+  const staleRange = !!qualifiedRaw && qualifiedRaw.rangeKey !== activeRangeKey;
+  const qualified = staleRange ? undefined : qualifiedRaw;
   const detectMutation = useDetectTrainingNeeds();
   const backfillMutation = useBackfillTrainingNeeds();
 
@@ -209,7 +224,8 @@ export default function TNIReport() {
     return filterQualifiedNeeds(rawNeeds, qualified.index, monthOrder, { multiMonth: isMulti });
   }, [rawNeeds, qualified, monthOrder, isMulti]);
 
-  const needsLoading = rawNeedsLoading || qualifiedLoading;
+  const needsLoading =
+    rawNeedsLoading || qualifiedLoading || rawNeedsFetching || qualifiedFetching || staleRange;
   const suppressedCount = (rawNeeds?.length ?? 0) - (trainingNeeds?.length ?? 0);
 
   const monthLabelFor = (key: string) => {

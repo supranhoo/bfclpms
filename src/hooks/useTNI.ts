@@ -149,6 +149,8 @@ export function useTrainingNeeds(filters?: {
       return result;
     },
     staleTime: 2 * 60 * 1000,
+    // ADR-252c — range-scoped data must never render from a previous filter.
+    placeholderData: undefined,
   });
 }
 
