@@ -19,7 +19,7 @@ const MONTHS = ['2026-04', '2026-05', '2026-06'];
 const d = (s: string) => new Date(`${s}T00:00:00Z`);
 
 describe('monthly trigger (POLICY §15.2)', () => {
-  it('qualifies when every month is strictly below the threshold', () => {
+  it('qualifies when every scored month is at or below the threshold', () => {
     const r = evaluateMonthlyTrigger(
       { monthlyScores: { '2026-04': 1.4, '2026-05': 1.9, '2026-06': 1.1 } },
       MONTHS,
@@ -30,27 +30,50 @@ describe('monthly trigger (POLICY §15.2)', () => {
     expect(r.shortWindow).toBe(false);
   });
 
-  it('does not qualify when a month reaches the threshold', () => {
+  it('ADR-252 — still qualifies when a month sits exactly on the threshold', () => {
     const r = evaluateMonthlyTrigger(
       { monthlyScores: { '2026-04': 1.4, '2026-05': 2, '2026-06': 1.1 } },
       MONTHS,
       POLICY_PIP_RATING,
     );
-    expect(r.qualifies).toBe(false);
+    expect(r.qualifies).toBe(true);
   });
 
-  it('does not qualify on an incomplete window and reports the gap', () => {
+  it('does not qualify when any scored month is above the threshold', () => {
     const r = evaluateMonthlyTrigger(
-      { monthlyScores: { '2026-04': 1.4, '2026-06': 1.1 } },
+      { monthlyScores: { '2026-04': 1.4, '2026-05': 2.01, '2026-06': 1.1 } },
       MONTHS,
       POLICY_PIP_RATING,
     );
     expect(r.qualifies).toBe(false);
+  });
+
+  it('ADR-252 — skips unscored months instead of disqualifying', () => {
+    const r = evaluateMonthlyTrigger(
+      { monthlyScores: { '2026-04': 1.4, '2026-06': 1.1 } },
+      MONTHS,
+      POLICY_PIP_RATING,
+      2, // minimum scored months
+    );
+    expect(r.qualifies).toBe(true);
+    expect(r.scoredMonths).toBe(2);
+    expect(r.skippedMonths).toBe(1);
     expect(r.months.find(m => m.key === '2026-05')?.score).toBeNull();
   });
 
-  it('flags a window shorter than the policy consecutive-month rule', () => {
-    const r = evaluateMonthlyTrigger({ monthlyScores: { '2026-06': 1 } }, ['2026-06'], 2);
+  it('ADR-252 — refuses to act when fewer months are scored than the minimum', () => {
+    const r = evaluateMonthlyTrigger(
+      { monthlyScores: { '2026-06': 1.1 } },
+      MONTHS,
+      POLICY_PIP_RATING,
+      3,
+    );
+    expect(r.qualifies).toBe(false);
+    expect(r.shortWindow).toBe(true);
+  });
+
+  it('flags a window shorter than the configured consecutive-month rule', () => {
+    const r = evaluateMonthlyTrigger({ monthlyScores: { '2026-06': 1 } }, ['2026-06'], 2, 3);
     expect(r.shortWindow).toBe(true);
     expect(POLICY_CONSECUTIVE_MONTHS).toBe(3);
   });
