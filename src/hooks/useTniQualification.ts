@@ -11,7 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { getTniThreshold } from '@/lib/pmsSettings';
 import { getPipPolicySettings } from '@/lib/pip/pipPolicySettings';
-import { buildQualifiedIndex, type QualifiedKpiRow, type QualifiedIndex } from '@/lib/tni/tniQualification';
+import { buildQualifiedIndex, tniRangeKey, type QualifiedKpiRow, type QualifiedIndex } from '@/lib/tni/tniQualification';
 import type { PeriodRange } from '@/hooks/useTNI';
 
 export function useTniThreshold() {
@@ -40,11 +40,15 @@ export function useTniQualifiedKpis(
   threshold: number | undefined,
   minScoredMonths?: number,
 ) {
+  const rangeKey = tniRangeKey(periodRanges);
   return useQuery({
     queryKey: ['tni-qualified-kpis', periodRanges, threshold, minScoredMonths ?? null],
     enabled: threshold != null && minScoredMonths != null && periodRanges.length > 0,
     staleTime: 2 * 60 * 1000,
-    queryFn: async (): Promise<{ rows: QualifiedKpiRow[]; index: QualifiedIndex }> => {
+    // ADR-252c — never carry the previous filter's result-set over while the
+    // new range is fetching. A spinner is correct; stale numbers are not.
+    placeholderData: undefined,
+    queryFn: async (): Promise<{ rows: QualifiedKpiRow[]; index: QualifiedIndex; rangeKey: string }> => {
       // The window can never exceed the number of months actually selected,
       // otherwise a 3-month policy would empty a 1-month report entirely.
       const minMonths = Math.max(1, Math.min(minScoredMonths ?? 1, periodRanges.length));
@@ -64,7 +68,7 @@ export function useTniQualifiedKpis(
         worst_score: r.worst_score == null ? null : Number(r.worst_score),
         latest_score: r.latest_score == null ? null : Number(r.latest_score),
       })) as QualifiedKpiRow[];
-      return { rows, index: buildQualifiedIndex(rows) };
+      return { rows, index: buildQualifiedIndex(rows), rangeKey };
     },
   });
 }
