@@ -26,6 +26,8 @@ import {
 } from '@/hooks/useTNI';
 import { useTniThreshold, useTniQualifiedKpis } from '@/hooks/useTniQualification';
 import { filterQualifiedNeeds, qualifiedEvidence, tniKpiKey } from '@/lib/tni/tniQualification';
+import { TniThresholdInline } from '@/components/reports/TniThresholdInline';
+import { useAuth } from '@/contexts/AuthContext';
 import { summariseNeeds, aggregateByCategory, aggregateByDepartment } from '@/lib/tni/tniAggregation';
 import { useReviewPeriods } from '@/hooks/useKpis';
 import { 
@@ -160,6 +162,8 @@ function rangeLabel(ranges: PeriodRange[]): string {
 
 export default function TNIReport() {
   const { canDownload } = useReportAccess();
+  const { effectiveRole } = useAuth();
+  const isAdmin = effectiveRole === 'admin';
   const canExport = canDownload('tni');
   const { getCompanyCode } = useCompanyFilter();
   const resolvedFields = useResolvedReportFields('RPT-TNI-001', TNI_DEFAULT_FIELDS);
@@ -552,6 +556,9 @@ export default function TNIReport() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ADR-252a — continuity criteria, shown right after the month filter */}
+      <TniThresholdInline readOnly={!isAdmin} />
 
       {/* Summary Cards */}
       {summaryLoading ? (

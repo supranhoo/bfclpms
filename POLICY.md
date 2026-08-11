@@ -6014,8 +6014,11 @@ overwrite fields absent from the upload.
    scored months is below the configured consecutive-months value.
 6. **Zero hardcoding.** The TNI threshold (`pms_tni_threshold`) and the
    consecutive-months window (`pip_consecutive_months`) live in
-   `system_settings` and are editable by Admin in System Settings. Call sites
-   MUST NOT inline 3.0 or 3.
+   `system_settings` and are editable by Admin **on the TNI Report, directly
+   under the month/period filter** (ADR-252a). System Settings no longer hosts
+   this control. Non-admins see the effective values read-only; RLS on
+   `system_settings` remains the enforcing guard. Call sites MUST NOT inline
+   3.0 or 3.
 7. **One source of truth per view.** TNI summary cards, category and department
    aggregates MUST be derived from the same qualified row-set as the detail
    grid, and the active rule MUST be disclosed in the UI.

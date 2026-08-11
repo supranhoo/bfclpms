@@ -47,7 +47,6 @@ import { useResolvedMenu } from '@/hooks/useResolvedMenu';
 import { SETTINGS_SECTION_KEY_TO_MENU_KEY } from '@/lib/menu/catalog';
 import { ConfirmationIncrementSection } from '@/components/admin/scoring/ConfirmationIncrementSection';
 import { PipThresholdCard } from '@/components/admin/PipThresholdCard';
-import { TniThresholdCard } from '@/components/admin/TniThresholdCard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -685,7 +684,6 @@ export default function SystemSettings() {
 
             <AnnualScoreCalculationSection />
             <PipThresholdCard />
-            <TniThresholdCard />
           </div>
         );
       case 'increment':
