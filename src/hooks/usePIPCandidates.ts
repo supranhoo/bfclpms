@@ -181,6 +181,8 @@ export function usePIPCandidates({ windowMonths, enabled, today, anchor }: UsePI
         { monthlyScores: emp.monthlyFinalScores ?? emp.monthlyScores },
         monthKeys,
         threshold,
+        // ADR-252 — configurable minimum number of scored months.
+        policy.consecutiveMonths,
       );
       const annual = evaluateAnnualTrigger(annualMap[emp.id] ?? null, threshold);
       if (!monthly.qualifies && !annual.qualifies) continue;
@@ -208,7 +210,7 @@ export function usePIPCandidates({ windowMonths, enabled, today, anchor }: UsePI
       });
     }
     return out.sort((a, b) => (a.monthly.worstScore ?? 99) - (b.monthly.worstScore ?? 99));
-  }, [threshold, trendQ.data, annualQ.data, pipsQ.data, monthKeys, monthLabels, policy.monitorMonths]);
+  }, [threshold, trendQ.data, annualQ.data, pipsQ.data, monthKeys, monthLabels, policy.monitorMonths, policy.consecutiveMonths]);
 
   return {
     candidates,
