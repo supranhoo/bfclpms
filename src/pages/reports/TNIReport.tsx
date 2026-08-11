@@ -25,7 +25,7 @@ import {
   PeriodRange
 } from '@/hooks/useTNI';
 import { useTniThreshold, useTniQualifiedKpis, useTniMinScoredMonths } from '@/hooks/useTniQualification';
-import { filterQualifiedNeeds, qualifiedEvidence, tniKpiKey, tniRangeKey } from '@/lib/tni/tniQualification';
+import { filterQualifiedNeeds, qualifiedEvidence, tniKpiKey, tniRangeKey, monthColumnLabel, scoreForMonth } from '@/lib/tni/tniQualification';
 import { TniThresholdInline } from '@/components/reports/TniThresholdInline';
 import { useAuth } from '@/contexts/AuthContext';
 import { summariseNeeds, aggregateByCategory, aggregateByDepartment } from '@/lib/tni/tniAggregation';
@@ -244,6 +244,15 @@ export default function TNIReport() {
     return ev.months
       .map(m => `${m.month.slice(0, 3)} ${m.year}: ${m.score == null ? '—' : Number(m.score).toFixed(2)}`)
       .join(', ');
+  };
+
+  // ADR-253 — one column per month of the active filter range.
+  const monthScoreFor = (
+    tn: { employee_id: string; kpi?: { kra_name?: string | null; kpi_name?: string | null } | null },
+    range: PeriodRange,
+  ): number | null => {
+    const ev = qualified ? qualifiedEvidence(tn, qualified.index) : undefined;
+    return scoreForMonth(ev, range);
   };
 
   // Every aggregate is derived from the same qualified row-set so the cards,
