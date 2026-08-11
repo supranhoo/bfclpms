@@ -25,7 +25,7 @@ import {
   PeriodRange
 } from '@/hooks/useTNI';
 import { useTniThreshold, useTniQualifiedKpis, useTniMinScoredMonths } from '@/hooks/useTniQualification';
-import { filterQualifiedNeeds, qualifiedEvidence, tniKpiKey } from '@/lib/tni/tniQualification';
+import { filterQualifiedNeeds, qualifiedEvidence, tniKpiKey, tniRangeKey } from '@/lib/tni/tniQualification';
 import { TniThresholdInline } from '@/components/reports/TniThresholdInline';
 import { useAuth } from '@/contexts/AuthContext';
 import { summariseNeeds, aggregateByCategory, aggregateByDepartment } from '@/lib/tni/tniAggregation';
