@@ -5995,3 +5995,27 @@ overwrite fields absent from the upload.
    call the STABLE SECURITY DEFINER helper `public.can_read_kpi_evidence(uuid)`
    with `(select auth.uid())` inside, so the participation test is evaluated
    once per statement rather than once per object row.
+
+---
+
+## §PMS-CONTINUITY-AT-OR-BELOW (ADR-252)
+
+1. **At or below, never strictly below.** A KPI (TNI) or an overall score (PIP)
+   qualifies when the score is `<= threshold`. A score sitting exactly on the
+   threshold qualifies.
+2. **Whole selected range, not a fixed window.** Continuity is evaluated across
+   every month of the range the user selected. A fixed 3-month trailing window
+   is forbidden.
+3. **Every scored month must qualify.** A single month above the threshold
+   disqualifies the KPI/employee. Any-month UNION semantics are forbidden.
+4. **Unscored months are skipped, not failed.** Months with no score are
+   excluded from the test and reported as skipped evidence.
+5. **Minimum scored months.** No finding may be raised when the number of
+   scored months is below the configured consecutive-months value.
+6. **Zero hardcoding.** The TNI threshold (`pms_tni_threshold`) and the
+   consecutive-months window (`pip_consecutive_months`) live in
+   `system_settings` and are editable by Admin in System Settings. Call sites
+   MUST NOT inline 3.0 or 3.
+7. **One source of truth per view.** TNI summary cards, category and department
+   aggregates MUST be derived from the same qualified row-set as the detail
+   grid, and the active rule MUST be disclosed in the UI.

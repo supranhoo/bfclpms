@@ -4,13 +4,18 @@ import { supabase } from '@/integrations/supabase/client';
  * PMS-scoped settings helpers backed by `system_settings` (key/value).
  *
  * Keys owned here:
- *  - pms_pip_threshold : numeric (0..5). Employees whose Final-Only average
- *    monthly PMS score is strictly below this number are flagged as PIP
- *    candidates in the Monthly Scorecard Trend report.
+ *  - pms_pip_threshold : numeric (0..5). Employees whose Final-Only monthly
+ *    PMS score is at or below this number in every scored month of the
+ *    selected range are flagged as PIP candidates (ADR-252).
+ *  - pms_tni_threshold : numeric (0..5). A KPI whose score is at or below this
+ *    number in every scored month of the selected range is a training need.
  */
 
 export const PMS_PIP_THRESHOLD_KEY = 'pms_pip_threshold';
 export const DEFAULT_PIP_THRESHOLD = 3.0;
+
+export const PMS_TNI_THRESHOLD_KEY = 'pms_tni_threshold';
+export const DEFAULT_TNI_THRESHOLD = 3.0;
 
 /** Parse & clamp a raw system_settings value into a valid threshold. */
 export function parsePipThreshold(raw: unknown): number {
@@ -43,6 +48,41 @@ export async function setPipThreshold(value: number): Promise<void> {
     .from('system_settings')
     .upsert(
       { setting_key: PMS_PIP_THRESHOLD_KEY, setting_value: clean },
+      { onConflict: 'setting_key' },
+    );
+  if (error) throw error;
+}
+
+/** Parse & clamp a raw system_settings value into a valid TNI threshold. */
+export function parseTniThreshold(raw: unknown): number {
+  if (raw == null) return DEFAULT_TNI_THRESHOLD;
+  let v: unknown = raw;
+  if (typeof v === 'string') {
+    const n = Number(v.replace(/^"|"$/g, '').trim());
+    v = Number.isFinite(n) ? n : NaN;
+  }
+  if (typeof v !== 'number' || !Number.isFinite(v)) return DEFAULT_TNI_THRESHOLD;
+  if (v < 0) return 0;
+  if (v > 5) return 5;
+  return Math.round(v * 100) / 100;
+}
+
+export async function getTniThreshold(): Promise<number> {
+  const { data, error } = await supabase
+    .from('system_settings')
+    .select('setting_value')
+    .eq('setting_key', PMS_TNI_THRESHOLD_KEY)
+    .maybeSingle();
+  if (error) throw error;
+  return parseTniThreshold(data?.setting_value ?? null);
+}
+
+export async function setTniThreshold(value: number): Promise<void> {
+  const clean = parseTniThreshold(value);
+  const { error } = await supabase
+    .from('system_settings')
+    .upsert(
+      { setting_key: PMS_TNI_THRESHOLD_KEY, setting_value: clean },
       { onConflict: 'setting_key' },
     );
   if (error) throw error;

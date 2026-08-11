@@ -7,12 +7,16 @@
  * Nothing in this module writes data — the triggers are advisory. A human
  * always initiates the plan (§15.5).
  */
-import { isPipCandidate } from './pipCandidateRule';
+import { evaluateContinuity } from '@/lib/continuity/allMonthsAtOrBelow';
 
 /** POLICY §15.2 / §15.3 reference value on the 5-point rating scale. */
 export const POLICY_PIP_RATING = 2;
 
-/** POLICY §15.2 — "continues below 2 into the third consecutive month". */
+/**
+ * POLICY §15.2 fallback — "continues below 2 into the third consecutive
+ * month". ADR-252: the effective value is admin-configurable via
+ * `pip_consecutive_months`; this constant is only the default.
+ */
 export const POLICY_CONSECUTIVE_MONTHS = 3;
 
 export type PIPTriggerSource = 'monthly_trend' | 'annual_rating' | 'manual';
@@ -26,29 +30,35 @@ export interface MonthlyTriggerResult {
   /** Per-month evidence in range order (null when the month has no score). */
   months: { key: string; score: number | null }[];
   worstScore: number | null;
-  /** True when the range is shorter than the policy's consecutive-month rule. */
+  /** True when fewer months carry a score than the configured minimum. */
   shortWindow: boolean;
+  /** How many months of the range actually carry a score. */
+  scoredMonths: number;
+  /** Months in the range that had no score and were skipped (ADR-252). */
+  skippedMonths: number;
 }
 
 /**
- * POLICY §15.2 — strictly below the threshold in EVERY month of the window.
- * A missing month disqualifies (an incomplete picture is never failure).
+ * POLICY §15.2 (ADR-252) — AT OR BELOW the threshold in every *scored* month
+ * of the selected range. Unscored months are skipped; at least
+ * `minScoredMonths` months must be scored before the trigger can fire.
  */
 export function evaluateMonthlyTrigger(
   employee: MonthlyTriggerInput,
   monthKeys: string[],
   threshold: number | null | undefined,
+  minScoredMonths: number = POLICY_CONSECUTIVE_MONTHS,
 ): MonthlyTriggerResult {
-  const months = (monthKeys ?? []).map(key => {
-    const raw = employee.monthlyScores?.[key];
-    return { key, score: typeof raw === 'number' && Number.isFinite(raw) ? raw : null };
+  const result = evaluateContinuity(employee?.monthlyScores, monthKeys ?? [], threshold, {
+    minScoredMonths,
   });
-  const present = months.filter(m => m.score != null).map(m => m.score as number);
   return {
-    qualifies: isPipCandidate(employee, monthKeys ?? [], threshold),
-    months,
-    worstScore: present.length ? Math.min(...present) : null,
-    shortWindow: (monthKeys?.length ?? 0) < POLICY_CONSECUTIVE_MONTHS,
+    qualifies: result.qualifies,
+    months: result.months,
+    worstScore: result.worstScore,
+    shortWindow: result.shortWindow,
+    scoredMonths: result.scoredMonths,
+    skippedMonths: result.skippedMonths,
   };
 }
 

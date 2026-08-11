@@ -19143,6 +19143,19 @@ export type Database = {
         Args: { p_cycle_id: string; p_performed_by?: string }
         Returns: number
       }
+      tni_qualified_kpis: {
+        Args: { p_periods: Json; p_threshold: number }
+        Returns: {
+          employee_id: string
+          kpi_key: string
+          kpi_name: string
+          kra_name: string
+          latest_score: number
+          months: Json
+          scored_months: number
+          worst_score: number
+        }[]
+      }
       transfer_annual_review_stage_response: {
         Args: {
           p_drop_from_stage?: boolean

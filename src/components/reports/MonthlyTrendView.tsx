@@ -12,6 +12,7 @@ import { useMonthlyTrend, buildMonthRange } from '@/hooks/useMonthlyTrend';
 import { MonthlyTrendTable } from './MonthlyTrendTable';
 import { getPipThreshold } from '@/lib/pmsSettings';
 import { isPipCandidate as isPipCandidateRule } from '@/lib/pip/pipCandidateRule';
+import { getPipPolicySettings, DEFAULT_PIP_POLICY } from '@/lib/pip/pipPolicySettings';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -84,6 +85,14 @@ export function MonthlyTrendView({ canExport }: Props) {
     staleTime: 5 * 60 * 1000,
   });
 
+  // ADR-252 — minimum scored months before an employee can be flagged.
+  const { data: pipPolicy } = useQuery({
+    queryKey: ['pip-policy-settings'],
+    queryFn: getPipPolicySettings,
+    staleTime: 5 * 60 * 1000,
+  });
+  const minScoredMonths = pipPolicy?.consecutiveMonths ?? DEFAULT_PIP_POLICY.consecutiveMonths;
+
   const yearOptions = useMemo(() => {
     const y = currentYear;
     return [y - 2, y - 1, y, y + 1];
@@ -140,8 +149,10 @@ export function MonthlyTrendView({ canExport }: Props) {
   // PIP rule lives in `@/lib/pip/pipCandidateRule` (ADR-205 SSOT) so the
   // report, the PIP module and the unit tests cannot drift apart.
   const monthKeys = useMemo(() => months.map(m => m.key), [months]);
+  // ADR-252 — at-or-below in every scored month, with a configurable minimum
+  // number of scored months (unscored months are skipped, not failures).
   const isPipCandidate = (emp: typeof allEmployees[number]): boolean =>
-    isPipCandidateRule(emp, monthKeys, pipThreshold);
+    isPipCandidateRule(emp, monthKeys, pipThreshold, minScoredMonths);
 
   // Client-side search + BU + PIP filter (instant, no refetch)
   const filteredEmployees = useMemo(() => {
@@ -158,7 +169,7 @@ export function MonthlyTrendView({ canExport }: Props) {
         (e.reportingManagerName ?? '').toLowerCase().includes(s)
       );
     });
-  }, [allEmployees, search, buFilter, pipOnly, pipThreshold, months]);
+  }, [allEmployees, search, buFilter, pipOnly, pipThreshold, months, minScoredMonths]);
 
   const pipCandidates = useMemo(() => {
     if (pipThreshold == null) return [] as typeof allEmployees;
@@ -167,7 +178,7 @@ export function MonthlyTrendView({ canExport }: Props) {
       (buFilter === '__all__' || (e.businessUnitId ?? '') === buFilter)
       && isPipCandidate(e),
     );
-  }, [allEmployees, buFilter, pipThreshold, months]);
+  }, [allEmployees, buFilter, pipThreshold, months, minScoredMonths]);
 
   const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -324,7 +335,7 @@ export function MonthlyTrendView({ canExport }: Props) {
                 <div className="flex items-center gap-2 pb-2">
                   <Switch id="pip-only" checked={pipOnly} onCheckedChange={(v) => { setPipOnly(v); setPage(1); }} />
                   <Label htmlFor="pip-only" className="text-sm cursor-pointer">
-                    Show PIP candidates only (every month's score &lt; {pipThreshold.toFixed(2)})
+                    Show PIP candidates only (every scored month ≤ {pipThreshold.toFixed(2)}, min {minScoredMonths} scored month{minScoredMonths === 1 ? '' : 's'})
                   </Label>
                 </div>
               )}
@@ -370,7 +381,8 @@ export function MonthlyTrendView({ canExport }: Props) {
                   {pipCandidates.length} PIP candidate{pipCandidates.length === 1 ? '' : 's'}
                 </span>
                 <span className="text-muted-foreground ml-1">
-                  — employees whose score is below {pipThreshold.toFixed(2)} in every month of this range
+                  — employees whose score is at or below {pipThreshold.toFixed(2)} in every scored month of this range
+                  (minimum {minScoredMonths} scored month{minScoredMonths === 1 ? '' : 's'})
                   {buFilter !== '__all__' ? ' (within selected BU)' : ''}.
                 </span>
               </div>

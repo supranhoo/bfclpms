@@ -2,7 +2,7 @@
  * ADR-207 / POLICY §PIP-TRIGGER-SUGGESTIONS
  * Advisory list of employees meeting an objective PIP trigger.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +17,7 @@ import { AlertTriangle, Info, RotateCw, Search, ShieldCheck } from 'lucide-react
 import { usePIPCandidates, recentMonthOptions, type PIPCandidate } from '@/hooks/usePIPCandidates';
 import type { MonthKey } from '@/hooks/useMonthlyTrend';
 import { POLICY_PIP_RATING } from '@/lib/pip/pipTriggerRules';
+import { DEFAULT_PIP_POLICY } from '@/lib/pip/pipPolicySettings';
 import { cn } from '@/lib/utils';
 
 const PAGE_SIZE = 25;
@@ -32,7 +33,9 @@ interface PIPSuggestionsPanelProps {
 }
 
 export function PIPSuggestionsPanel({ active, onInitiate, onOpenPip }: PIPSuggestionsPanelProps) {
-  const [windowMonths, setWindowMonths] = useState(3);
+  // ADR-252 — the default window comes from `pip_consecutive_months`; the user
+  // can still widen it. `null` means "not yet chosen — follow the setting".
+  const [windowMonths, setWindowMonths] = useState<number | null>(null);
   const monthOptions = useMemo(() => recentMonthOptions(18, new Date()), []);
   const [anchorKey, setAnchorKey] = useState(() => `${monthOptions[0].month}-${monthOptions[0].year}`);
   const anchor = useMemo(
@@ -43,8 +46,16 @@ export function PIPSuggestionsPanel({ active, onInitiate, onOpenPip }: PIPSugges
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
-  const { candidates, months, threshold, thresholdMatchesPolicy, isLoading, error, refetch } =
-    usePIPCandidates({ windowMonths, enabled: active, anchor });
+  const { candidates, months, threshold, policy, thresholdMatchesPolicy, isLoading, error, refetch } =
+    usePIPCandidates({
+      windowMonths: windowMonths ?? DEFAULT_PIP_POLICY.consecutiveMonths,
+      enabled: active,
+      anchor,
+    });
+
+  useEffect(() => {
+    if (windowMonths == null && policy?.consecutiveMonths) setWindowMonths(policy.consecutiveMonths);
+  }, [policy?.consecutiveMonths, windowMonths]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -68,9 +79,11 @@ export function PIPSuggestionsPanel({ active, onInitiate, onOpenPip }: PIPSugges
       <CardHeader>
         <CardTitle>PIP suggestions</CardTitle>
         <CardDescription>
-          Employees meeting an objective trigger under POLICY §15.2 (monthly rating below the
-          threshold in every month of the window) or §15.3 (annual rating at or below the
-          threshold). Suggestions are advisory — a plan is always initiated by a person.
+          Employees meeting an objective trigger under POLICY §15.2 (monthly rating at or below the
+          threshold in every <b>scored</b> month of the selected window — unscored months are skipped,
+          and at least {policy?.consecutiveMonths ?? DEFAULT_PIP_POLICY.consecutiveMonths} months must
+          be scored) or §15.3 (annual rating at or below the threshold). Suggestions are advisory — a
+          plan is always initiated by a person.
         </CardDescription>
       </CardHeader>
 
@@ -94,11 +107,20 @@ export function PIPSuggestionsPanel({ active, onInitiate, onOpenPip }: PIPSugges
 
             <div className="space-y-1">
               <Label htmlFor="pip-window">Window</Label>
-              <Select value={String(windowMonths)} onValueChange={v => { setWindowMonths(Number(v)); setPage(1); }}>
+              <Select
+                value={String(windowMonths ?? DEFAULT_PIP_POLICY.consecutiveMonths)}
+                onValueChange={v => { setWindowMonths(Number(v)); setPage(1); }}
+              >
                 <SelectTrigger id="pip-window" className="h-10 w-44"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="3">Last 3 months</SelectItem>
-                  <SelectItem value="6">Last 6 months</SelectItem>
+                  {Array.from(new Set([policy?.consecutiveMonths ?? DEFAULT_PIP_POLICY.consecutiveMonths, 3, 6, 12]))
+                    .sort((a, b) => a - b)
+                    .map(n => (
+                      <SelectItem key={n} value={String(n)}>
+                        Last {n} month{n === 1 ? '' : 's'}
+                        {n === (policy?.consecutiveMonths ?? DEFAULT_PIP_POLICY.consecutiveMonths) ? ' (policy)' : ''}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
