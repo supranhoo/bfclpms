@@ -188,6 +188,12 @@ export default function TNIReport() {
   );
   const isMulti = periodRanges.length > 1;
 
+  // ADR-252c — the detect target must always be a month inside the active
+  // range, otherwise the header advertises a month the report does not cover.
+  const detectTarget = periodRanges.some(r => r.month === detectMonth)
+    ? detectMonth
+    : (periodRanges[periodRanges.length - 1]?.month ?? selectedPeriod);
+
   // ADR-252 — continuity rule: a KPI is a training need only when its score is
   // at or below the configured threshold in EVERY scored month of the range.
   const { data: tniThreshold } = useTniThreshold();
@@ -306,7 +312,7 @@ export default function TNIReport() {
     // Single-month mode: detect on the selected period.
     // Multi-month mode: detect on the user-chosen month from the dropdown (defaults to latest in range).
     if (isMulti) {
-      const target = periodRanges.find(r => r.month === detectMonth) ?? periodRanges[periodRanges.length - 1];
+      const target = periodRanges.find(r => r.month === detectTarget) ?? periodRanges[periodRanges.length - 1];
       detectMutation.mutate({ reviewPeriod: target.month, reviewYear: target.year, threshold: tniThreshold });
     } else {
       if (!selectedPeriod) return;
@@ -442,7 +448,7 @@ export default function TNIReport() {
               </Button>
             )}
             {isMulti && (
-              <Select value={detectMonth} onValueChange={setDetectMonth}>
+              <Select value={detectTarget} onValueChange={setDetectMonth}>
                 <SelectTrigger className="w-36 h-9">
                   <SelectValue placeholder="Detect month" />
                 </SelectTrigger>
@@ -461,7 +467,7 @@ export default function TNIReport() {
               disabled={detectMutation.isPending || (!isMulti && !selectedPeriod)}
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${detectMutation.isPending ? 'animate-spin' : ''}`} />
-              Detect TNI{isMulti ? ` (${detectMonth.slice(0,3)})` : ''}
+              Detect TNI{isMulti ? ` (${detectTarget.slice(0,3)})` : ''}
             </Button>
           </div>
         }
