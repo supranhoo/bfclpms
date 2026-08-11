@@ -8219,3 +8219,39 @@ access error.
 Files: `src/hooks/useKpis.ts`, `src/components/review/EvidencePreviewDialog.tsx`,
 `src/lib/review/evidenceError.ts`, `docs/adr/ADR-250.md`, POLICY
 §PERF-EVIDENCE-PREVIEW. Removed dead `src/hooks/useReviewPageState.ts`.
+
+---
+
+## ADR-252 — TNI & PIP continuity rule (at-or-below, whole selected range)
+
+**What:** TNI and PIP now share one continuity evaluator. A KPI is reported as a
+training need only when its score is **at or below** the configured threshold in
+**every scored month** of the selected range (not any-month, not a fixed
+3-month window); unscored months are skipped, and a minimum scored-month count
+guards thin windows. The TNI report derives its summary cards, category and
+department aggregates from the single qualified row-set returned by the
+`tni_qualified_kpis` RPC. Both parameters are admin-configurable in
+Admin → System Settings ("TNI Threshold & Continuity Window").
+
+**Why:** TNI multi-month reporting previously UNIONed per-month detection
+records, so a KPI that recovered in one month still appeared as a persistent
+need, and the 3.0 threshold plus the 3-month PIP window were hardcoded — a
+Zero-Hardcoding violation. Separate aggregation hooks could also drift from the
+detail grid.
+
+**How:** Admins set the threshold and the consecutive-months window once in
+System Settings; the TNI report and the PIP candidate/suggestion panels read
+those values, disclose the active rule in a banner, and show a
+"Months ≤ Threshold" column (also exported) as evidence for each finding.
+
+Files: `src/lib/continuity/allMonthsAtOrBelow.ts`, `src/lib/tni/*`,
+`src/hooks/useTniQualification.ts`, `src/pages/reports/TNIReport.tsx`,
+`src/lib/pip/{pipCandidateRule,pipTriggerRules,pipPolicySettings}.ts`,
+`src/hooks/{useTNI,usePIPCandidates}.ts`,
+`src/components/admin/TniThresholdCard.tsx`,
+`src/components/{reports/MonthlyTrendView,pip/PIPSuggestionsPanel}.tsx`,
+RPC `tni_qualified_kpis`, POLICY §PMS-CONTINUITY-AT-OR-BELOW.
+Tests: `src/test/tni/continuityRule.test.ts`, `src/test/pip/*`.
+
+### Version History
+- v2.66.252 — ADR-252 TNI/PIP continuity rule, configurable threshold & window.
