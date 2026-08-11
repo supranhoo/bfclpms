@@ -24,7 +24,7 @@ import {
   TNIGapType,
   PeriodRange
 } from '@/hooks/useTNI';
-import { useTniThreshold, useTniQualifiedKpis } from '@/hooks/useTniQualification';
+import { useTniThreshold, useTniQualifiedKpis, useTniMinScoredMonths } from '@/hooks/useTniQualification';
 import { filterQualifiedNeeds, qualifiedEvidence, tniKpiKey } from '@/lib/tni/tniQualification';
 import { TniThresholdInline } from '@/components/reports/TniThresholdInline';
 import { useAuth } from '@/contexts/AuthContext';
@@ -191,7 +191,9 @@ export default function TNIReport() {
   // ADR-252 — continuity rule: a KPI is a training need only when its score is
   // at or below the configured threshold in EVERY scored month of the range.
   const { data: tniThreshold } = useTniThreshold();
-  const { data: qualified, isLoading: qualifiedLoading } = useTniQualifiedKpis(periodRanges, tniThreshold);
+  const { data: minScoredMonthsCfg } = useTniMinScoredMonths();
+  const effectiveMinMonths = Math.max(1, Math.min(minScoredMonthsCfg ?? 1, Math.max(1, periodRanges.length)));
+  const { data: qualified, isLoading: qualifiedLoading } = useTniQualifiedKpis(periodRanges, tniThreshold, minScoredMonthsCfg);
   const { data: rawNeeds, isLoading: rawNeedsLoading } = useTrainingNeeds({ periodRanges });
   const detectMutation = useDetectTrainingNeeds();
   const backfillMutation = useBackfillTrainingNeeds();
