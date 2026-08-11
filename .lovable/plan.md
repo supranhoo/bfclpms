@@ -61,10 +61,10 @@ Audit only. No code has been changed.
 | Detect / Backfill | writes with default 3.0; de-dupes by kpi_id only | uses configured threshold; safely re-runnable | Pass the resolved threshold; change the conflict key to (kpi_id, period, year) with update on re-detect |
 | Dashboard cards | count monthly records | count qualifying employee+KPI pairs | Derive cards from the same qualified set |
 | Export | mirrors screen | mirrors corrected screen | Same qualified set plus per-month evidence columns |
-| Missing scores | absent month = no row | must break continuity, never be read as 0 | Define "applicable month" explicitly (see Q2) |
+| Missing scores | absent month = no row | month is skipped, never read as 0 | Evaluate only months that have an approved score; a range with no scored month never qualifies |
 | KPI identity | `kpi_id` (per-month row) | stable identity across months | Match on employee + normalised `kra_name` + `kpi_name`, reusing the KPI standardization registry aliases |
-| PIP consecutive months | hardcoded 3 | configurable | Add `pip_consecutive_months` to `pipPolicySettings.ts`; drive the panel default and `shortWindow` from it |
-| PIP longer range | two divergent behaviours | one | See Q1 |
+| PIP consecutive months | hardcoded 3 | configurable minimum window | Add `pip_consecutive_months` to `pipPolicySettings.ts`; it sets the default window length and the minimum number of scored months required, not a sliding streak |
+| PIP longer range | two divergent behaviours | entire selected range at/below threshold | Align `PIPSuggestionsPanel` with `MonthlyTrendView`: all scored months in the selected range must be `<=` threshold |
 | Performance | loads all rows in range client-side, unbounded | bounded | Evaluate continuity server-side in a set-returning RPC; keep the existing page and filters |
 | Security / tenant isolation | `training_needs` RLS + report access catalog | unchanged | New RPC is SECURITY DEFINER but re-applies the same visibility predicate; export stays gated by `canDownload('tni')` |
 
