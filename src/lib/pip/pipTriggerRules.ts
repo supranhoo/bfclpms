@@ -7,7 +7,7 @@
  * Nothing in this module writes data — the triggers are advisory. A human
  * always initiates the plan (§15.5).
  */
-import { isPipCandidate } from './pipCandidateRule';
+import { evaluateContinuity } from '@/lib/continuity/allMonthsAtOrBelow';
 
 /** POLICY §15.2 / §15.3 reference value on the 5-point rating scale. */
 export const POLICY_PIP_RATING = 2;
