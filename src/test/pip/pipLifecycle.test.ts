@@ -121,9 +121,10 @@ describe('PIP candidate rule', () => {
     expect(isPipCandidate(emp, months, 60)).toBe(false);
   });
 
-  it('does not flag when a month is missing (incomplete picture)', () => {
+  it('ADR-252 — skips a missing month but honours the minimum scored-month count', () => {
     const emp = { monthlyScores: { '2026-04': 40, '2026-05': null, '2026-06': 51 } };
-    expect(isPipCandidate(emp, months, 60)).toBe(false);
+    expect(isPipCandidate(emp, months, 60, 2)).toBe(true);
+    expect(isPipCandidate(emp, months, 60, 3)).toBe(false);
   });
 
   it('is inert without a configured threshold or range', () => {
