@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { DEFAULT_TNI_THRESHOLD } from '@/lib/pmsSettings';
 
 export type TNIGapType = 'skill' | 'knowledge' | 'behavior' | 'compliance';
 export type TNIPriority = 'high' | 'medium' | 'low';
@@ -358,7 +359,7 @@ export function useDetectTrainingNeeds() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ reviewPeriod, reviewYear, threshold = 3.0 }: {
+    mutationFn: async ({ reviewPeriod, reviewYear, threshold }: {
       reviewPeriod: string;
       reviewYear: number;
       threshold?: number;
@@ -366,7 +367,8 @@ export function useDetectTrainingNeeds() {
       const { data, error } = await supabase.rpc('detect_training_needs_for_period', {
         p_review_period: reviewPeriod,
         p_review_year: reviewYear,
-        p_threshold: threshold,
+        // ADR-252 — never hardcode the business threshold at the call site.
+        p_threshold: threshold ?? DEFAULT_TNI_THRESHOLD,
       });
 
       if (error) throw error;
@@ -394,7 +396,7 @@ export function useBackfillTrainingNeeds() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ ranges, threshold = 3.0, onProgress }: {
+    mutationFn: async ({ ranges, threshold, onProgress }: {
       ranges: PeriodRange[];
       threshold?: number;
       onProgress?: (done: number, total: number, currentLabel: string) => void;
@@ -408,7 +410,7 @@ export function useBackfillTrainingNeeds() {
           const { data, error } = await supabase.rpc('detect_training_needs_for_period', {
             p_review_period: r.month,
             p_review_year: r.year,
-            p_threshold: threshold,
+            p_threshold: threshold ?? DEFAULT_TNI_THRESHOLD,
           });
           if (error) throw error;
           const n = (data as number) ?? 0;
