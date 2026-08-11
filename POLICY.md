@@ -6030,3 +6030,12 @@ overwrite fields absent from the upload.
 7. **One source of truth per view.** TNI summary cards, category and department
    aggregates MUST be derived from the same qualified row-set as the detail
    grid, and the active rule MUST be disclosed in the UI.
+
+### Range-scoped results must be stamped (ADR-252c)
+Any qualification/aggregation payload computed for a (month, year) range MUST
+carry the range stamp it was computed for, and consumers MUST discard a payload
+whose stamp differs from the active filter. Range-scoped queries MUST NOT use
+the global `placeholderData: (prev) => prev` carry-over: showing the previous
+filter's result-set as if it were the current one is a correctness defect, not
+a loading nicety. Exports are blocked while the active range is still fetching
+and must record the range they cover.

@@ -25,7 +25,7 @@ import {
   PeriodRange
 } from '@/hooks/useTNI';
 import { useTniThreshold, useTniQualifiedKpis, useTniMinScoredMonths } from '@/hooks/useTniQualification';
-import { filterQualifiedNeeds, qualifiedEvidence, tniKpiKey } from '@/lib/tni/tniQualification';
+import { filterQualifiedNeeds, qualifiedEvidence, tniKpiKey, tniRangeKey } from '@/lib/tni/tniQualification';
 import { TniThresholdInline } from '@/components/reports/TniThresholdInline';
 import { useAuth } from '@/contexts/AuthContext';
 import { summariseNeeds, aggregateByCategory, aggregateByDepartment } from '@/lib/tni/tniAggregation';
@@ -188,13 +188,34 @@ export default function TNIReport() {
   );
   const isMulti = periodRanges.length > 1;
 
+  // ADR-252c — the detect target must always be a month inside the active
+  // range, otherwise the header advertises a month the report does not cover.
+  const detectTarget = periodRanges.some(r => r.month === detectMonth)
+    ? detectMonth
+    : (periodRanges[periodRanges.length - 1]?.month ?? selectedPeriod);
+
   // ADR-252 — continuity rule: a KPI is a training need only when its score is
   // at or below the configured threshold in EVERY scored month of the range.
   const { data: tniThreshold } = useTniThreshold();
   const { data: minScoredMonthsCfg } = useTniMinScoredMonths();
   const effectiveMinMonths = Math.max(1, Math.min(minScoredMonthsCfg ?? 1, Math.max(1, periodRanges.length)));
-  const { data: qualified, isLoading: qualifiedLoading } = useTniQualifiedKpis(periodRanges, tniThreshold, minScoredMonthsCfg);
-  const { data: rawNeeds, isLoading: rawNeedsLoading } = useTrainingNeeds({ periodRanges });
+  const {
+    data: qualifiedRaw,
+    isLoading: qualifiedLoading,
+    isFetching: qualifiedFetching,
+  } = useTniQualifiedKpis(periodRanges, tniThreshold, minScoredMonthsCfg);
+  const {
+    data: rawNeeds,
+    isLoading: rawNeedsLoading,
+    isFetching: rawNeedsFetching,
+  } = useTrainingNeeds({ periodRanges });
+
+  // ADR-252c — a qualified result-set computed for another range must never be
+  // rendered against the active filter (that produced August evidence inside an
+  // Apr–Jun report). The stamp is the single guard.
+  const activeRangeKey = useMemo(() => tniRangeKey(periodRanges), [periodRanges]);
+  const staleRange = !!qualifiedRaw && qualifiedRaw.rangeKey !== activeRangeKey;
+  const qualified = staleRange ? undefined : qualifiedRaw;
   const detectMutation = useDetectTrainingNeeds();
   const backfillMutation = useBackfillTrainingNeeds();
 
@@ -209,7 +230,8 @@ export default function TNIReport() {
     return filterQualifiedNeeds(rawNeeds, qualified.index, monthOrder, { multiMonth: isMulti });
   }, [rawNeeds, qualified, monthOrder, isMulti]);
 
-  const needsLoading = rawNeedsLoading || qualifiedLoading;
+  const needsLoading =
+    rawNeedsLoading || qualifiedLoading || rawNeedsFetching || qualifiedFetching || staleRange;
   const suppressedCount = (rawNeeds?.length ?? 0) - (trainingNeeds?.length ?? 0);
 
   const monthLabelFor = (key: string) => {
@@ -290,7 +312,7 @@ export default function TNIReport() {
     // Single-month mode: detect on the selected period.
     // Multi-month mode: detect on the user-chosen month from the dropdown (defaults to latest in range).
     if (isMulti) {
-      const target = periodRanges.find(r => r.month === detectMonth) ?? periodRanges[periodRanges.length - 1];
+      const target = periodRanges.find(r => r.month === detectTarget) ?? periodRanges[periodRanges.length - 1];
       detectMutation.mutate({ reviewPeriod: target.month, reviewYear: target.year, threshold: tniThreshold });
     } else {
       if (!selectedPeriod) return;
@@ -299,7 +321,7 @@ export default function TNIReport() {
   };
 
   const handleExport = () => {
-    if (!trainingNeeds) return;
+    if (!trainingNeeds || needsLoading) return;
     // ADR-199 — exports honour the on-screen employee scope.
     const scopedNeeds = applyEmployeeStatusFilter(
       trainingNeeds,
@@ -333,6 +355,7 @@ export default function TNIReport() {
       for (const fld of visible) row[fld.label] = valueFor(tn, fld.field_key);
       // ADR-252 — continuity evidence travels with every exported row.
       row['Months in Range'] = periodRanges.length;
+      row['Range'] = rangeLabel(periodRanges);
       row['Scored Months ≤ Threshold'] = evidenceText(tn);
       row['TNI Threshold'] = tniThreshold ?? '';
       return row;
@@ -340,7 +363,7 @@ export default function TNIReport() {
 
     const wb = XLSX.utils.book_new();
     const detailWs = XLSX.utils.json_to_sheet(exportData, {
-      header: [...visible.map((f) => f.label), 'Months in Range', 'Scored Months ≤ Threshold', 'TNI Threshold'],
+      header: [...visible.map((f) => f.label), 'Months in Range', 'Range', 'Scored Months ≤ Threshold', 'TNI Threshold'],
     });
     appendEmployeeScopeNote(detailWs, empStatus);
     XLSX.utils.book_append_sheet(wb, detailWs, 'Detail');
@@ -401,7 +424,13 @@ export default function TNIReport() {
         actions={
           <div className="flex items-center gap-2">
             {canExport && (
-              <Button variant="outline" size="sm" onClick={handleExport} disabled={!trainingNeeds?.length}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                disabled={!trainingNeeds?.length || needsLoading}
+                title={needsLoading ? 'Waiting for the selected range to finish loading' : undefined}
+              >
                 <Download className="h-4 w-4 mr-2" />
                 Export
               </Button>
@@ -419,7 +448,7 @@ export default function TNIReport() {
               </Button>
             )}
             {isMulti && (
-              <Select value={detectMonth} onValueChange={setDetectMonth}>
+              <Select value={detectTarget} onValueChange={setDetectMonth}>
                 <SelectTrigger className="w-36 h-9">
                   <SelectValue placeholder="Detect month" />
                 </SelectTrigger>
@@ -438,7 +467,7 @@ export default function TNIReport() {
               disabled={detectMutation.isPending || (!isMulti && !selectedPeriod)}
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${detectMutation.isPending ? 'animate-spin' : ''}`} />
-              Detect TNI{isMulti ? ` (${detectMonth.slice(0,3)})` : ''}
+              Detect TNI{isMulti ? ` (${detectTarget.slice(0,3)})` : ''}
             </Button>
           </div>
         }

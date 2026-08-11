@@ -1,0 +1,1 @@
+DROP FUNCTION IF EXISTS public.tni_qualified_kpis(jsonb, numeric);

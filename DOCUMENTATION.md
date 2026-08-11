@@ -5435,6 +5435,15 @@ Every new edge function **must** complete all of these steps before deployment:
 - **Fix**: In `EmployeeSelectorGrid.tsx` `stats` recompute — (a) **Total Employees** now equals unique employees in `relevantKpis` (i.e. anyone in the filtered, workflow-eligible roster with ≥1 KPI in the period), regardless of their current stage; (b) **Reviewed** for HR PMS / Audit / Management now counts KPIs whose stage-specific signature column is populated (`hr_pms_score`, `audit_score`, `management_score`) so that work already advanced past the stage is still credited to the reviewer; (c) **Total KPIs** continues to reflect the full period total for the visible roster; (d) `StatCard` accepts an optional `tooltip` prop and renders an `Info` icon plus Radix Tooltip; all five cards on HR PMS / Audit / Management dashboards now disclose their precise definition. Skip-Level stats also switched from `demographicFilteredMembers.length` to period-presence for consistency.
 - **Modified files**: `src/components/review/EmployeeSelectorGrid.tsx`
 
+### v2.66.255 — TNI range-stamp guard (ADR-252c)
+- TNI qualification payloads carry a `rangeKey`; the report ignores any payload
+  from another range and treats it as loading.
+- `useTniQualifiedKpis` / `useTrainingNeeds` opt out of the global
+  `placeholderData` carry-over.
+- Export disabled while fetching; new `Range` column in the Detail sheet.
+- Detect-month target clamped to the selected range.
+- Dropped the obsolete 2-arg `tni_qualified_kpis` overload.
+
 ### v2.66.0 — Atomic Org KPI propagation RPC (Phase A3, 2026-04-21)
 - **Problem (RCA)**: `propagate_org_kpi_value` advanced status without verifying `ROW_COUNT`, so KPIs already past `kra_set` silently incremented the success counter. Root cause for Buckets B, C, F (87 silent failures).
 - **Fix**: Both overloads now use guarded `UPDATE … WHERE status='kra_set'` + `GET DIAGNOSTICS ROW_COUNT`, return `{propagated_count, skipped_count, details, skipped[]}`, emit `PROPAGATION_PARTIAL` audit logs.

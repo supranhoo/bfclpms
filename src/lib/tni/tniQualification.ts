@@ -22,6 +22,16 @@ export function tniRowKey(employeeId?: string | null, kpiKey?: string | null): s
   return `${employeeId ?? ''}::${kpiKey ?? ''}`;
 }
 
+/**
+ * ADR-252c — stamp identifying the exact (month, year) range a qualified
+ * result-set was computed for. Any consumer must compare this against the
+ * active range before rendering, so a cached/placeholder result from another
+ * filter can never be presented as the current one.
+ */
+export function tniRangeKey(ranges: { month: string; year: number }[] | null | undefined): string {
+  return (ranges ?? []).map(r => `${r.month}|${r.year}`).join(',');
+}
+
 export interface QualifiedKpiRow {
   employee_id: string;
   kpi_key: string;
