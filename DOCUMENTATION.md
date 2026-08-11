@@ -8248,10 +8248,13 @@ Files: `src/lib/continuity/allMonthsAtOrBelow.ts`, `src/lib/tni/*`,
 `src/hooks/useTniQualification.ts`, `src/pages/reports/TNIReport.tsx`,
 `src/lib/pip/{pipCandidateRule,pipTriggerRules,pipPolicySettings}.ts`,
 `src/hooks/{useTNI,usePIPCandidates}.ts`,
-`src/components/admin/TniThresholdCard.tsx`,
+`src/components/reports/TniThresholdInline.tsx`,
 `src/components/{reports/MonthlyTrendView,pip/PIPSuggestionsPanel}.tsx`,
 RPC `tni_qualified_kpis`, POLICY §PMS-CONTINUITY-AT-OR-BELOW.
 Tests: `src/test/tni/continuityRule.test.ts`, `src/test/pip/*`.
 
 ### Version History
 - v2.66.252 — ADR-252 TNI/PIP continuity rule, configurable threshold & window.
+- v2.66.253 — ADR-252a TNI threshold criteria control moved from Admin → System
+  Settings onto Reports → TNI Report (below the month filter). Admin-only inline
+  edit, read-only display for everyone else.
