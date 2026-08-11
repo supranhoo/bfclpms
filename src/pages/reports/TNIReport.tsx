@@ -438,6 +438,22 @@ export default function TNIReport() {
         }
       />
 
+      {/* ADR-252 — continuity rule disclosure */}
+      <Alert>
+        <Layers className="h-4 w-4" />
+        <AlertTitle>
+          Continuity rule — score at or below {tniThreshold?.toFixed(2) ?? '…'} in every scored month
+        </AlertTitle>
+        <AlertDescription className="text-xs text-muted-foreground">
+          A KPI is listed only when it stayed at or below the configured threshold in <b>every</b> scored
+          month of the selected range ({periodRanges.length} month{periodRanges.length !== 1 ? 's' : ''}).
+          Months with no score (joiners, leavers, pending review, N/A) are skipped, never counted as a pass or a failure.
+          {suppressedCount > 0 && (
+            <> {suppressedCount} detected record{suppressedCount !== 1 ? 's were' : ' was'} excluded because the KPI recovered above the threshold in at least one month of this range.</>
+          )}
+        </AlertDescription>
+      </Alert>
+
       {/* Empty-period guidance */}
       {!needsLoading && emptyMonths.length > 0 && (
         <Alert variant={allEmpty ? 'destructive' : 'default'}>
@@ -842,6 +858,7 @@ export default function TNIReport() {
                       <TableHead>KPI/Category</TableHead>
                       <TableHead>Gap Type</TableHead>
                       <TableHead className="text-center">Score</TableHead>
+                      <TableHead>Months ≤ Threshold</TableHead>
                       <TableHead>Priority</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Recommendation</TableHead>
@@ -875,6 +892,9 @@ export default function TNIReport() {
                             {tn.score?.toFixed(2) || '-'}
                           </Badge>
                         </TableCell>
+                        <TableCell className="max-w-[16rem] text-xs text-muted-foreground truncate" title={evidenceText(tn)}>
+                          {evidenceText(tn) || '-'}
+                        </TableCell>
                         <TableCell>
                           <Badge variant={PRIORITY_BADGE[tn.priority]}>
                             {tn.priority}
@@ -892,7 +912,7 @@ export default function TNIReport() {
                     ))}
                     {filteredNeeds.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                           {searchTerm ? 'No matching results' : 'No training needs identified'}
                         </TableCell>
                       </TableRow>
