@@ -361,18 +361,32 @@ export default function TNIReport() {
     };
     const exportData = scopedNeeds.map((tn) => {
       const row: Record<string, string | number> = {};
-      for (const fld of visible) row[fld.label] = valueFor(tn, fld.field_key);
+      for (const fld of visible) {
+        row[fld.label] = valueFor(tn, fld.field_key);
+        // ADR-253 — weightage travels immediately after the KPI column.
+        if (fld.field_key === 'kpi') row['Weightage (%)'] = (tn.kpi as any)?.weightage ?? '';
+      }
       // ADR-252 — continuity evidence travels with every exported row.
       row['Months in Range'] = periodRanges.length;
       row['Range'] = rangeLabel(periodRanges);
-      row['Scored Months ≤ Threshold'] = evidenceText(tn);
       row['TNI Threshold'] = tniThreshold ?? '';
+      // ADR-253 — one column per filtered month with that month's score.
+      periodRanges.forEach(r => {
+        const s = monthScoreFor(tn, r);
+        row[monthColumnLabel(r)] = s == null ? '—' : Number(s.toFixed(2));
+      });
       return row;
     });
 
     const wb = XLSX.utils.book_new();
     const detailWs = XLSX.utils.json_to_sheet(exportData, {
-      header: [...visible.map((f) => f.label), 'Months in Range', 'Range', 'Scored Months ≤ Threshold', 'TNI Threshold'],
+      header: [
+        ...visible.flatMap((f) => (f.field_key === 'kpi' ? [f.label, 'Weightage (%)'] : [f.label])),
+        'Months in Range',
+        'Range',
+        'TNI Threshold',
+        ...periodRanges.map(monthColumnLabel),
+      ],
     });
     appendEmployeeScopeNote(detailWs, empStatus);
     XLSX.utils.book_append_sheet(wb, detailWs, 'Detail');
