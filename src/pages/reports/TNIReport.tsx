@@ -315,7 +315,7 @@ export default function TNIReport() {
   };
 
   const handleExport = () => {
-    if (!trainingNeeds) return;
+    if (!trainingNeeds || needsLoading) return;
     // ADR-199 — exports honour the on-screen employee scope.
     const scopedNeeds = applyEmployeeStatusFilter(
       trainingNeeds,
@@ -349,6 +349,7 @@ export default function TNIReport() {
       for (const fld of visible) row[fld.label] = valueFor(tn, fld.field_key);
       // ADR-252 — continuity evidence travels with every exported row.
       row['Months in Range'] = periodRanges.length;
+      row['Range'] = rangeLabel(periodRanges);
       row['Scored Months ≤ Threshold'] = evidenceText(tn);
       row['TNI Threshold'] = tniThreshold ?? '';
       return row;
@@ -356,7 +357,7 @@ export default function TNIReport() {
 
     const wb = XLSX.utils.book_new();
     const detailWs = XLSX.utils.json_to_sheet(exportData, {
-      header: [...visible.map((f) => f.label), 'Months in Range', 'Scored Months ≤ Threshold', 'TNI Threshold'],
+      header: [...visible.map((f) => f.label), 'Months in Range', 'Range', 'Scored Months ≤ Threshold', 'TNI Threshold'],
     });
     appendEmployeeScopeNote(detailWs, empStatus);
     XLSX.utils.book_append_sheet(wb, detailWs, 'Detail');
@@ -417,7 +418,13 @@ export default function TNIReport() {
         actions={
           <div className="flex items-center gap-2">
             {canExport && (
-              <Button variant="outline" size="sm" onClick={handleExport} disabled={!trainingNeeds?.length}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                disabled={!trainingNeeds?.length || needsLoading}
+                title={needsLoading ? 'Waiting for the selected range to finish loading' : undefined}
+              >
                 <Download className="h-4 w-4 mr-2" />
                 Export
               </Button>
