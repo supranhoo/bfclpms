@@ -83,6 +83,25 @@ export function dedupeNeedsByKpi<T extends NeedLike & { review_year: number; rev
 }
 
 /** Apply the continuity rule to persisted rows. */
+
+/** ADR-253 — one report column per filtered month. Header label `MMM YYYY`. */
+export function monthColumnLabel(range: { month: string; year: number }): string {
+  return `${range.month.slice(0, 3)} ${range.year}`;
+}
+
+/**
+ * ADR-253 — the achieved score for a single month of the selected range,
+ * read from the per-month evidence returned by `tni_qualified_kpis`.
+ * Returns null when that month carries no score (rendered as an em dash).
+ */
+export function scoreForMonth(
+  evidence: QualifiedKpiRow | undefined,
+  range: { month: string; year: number },
+): number | null {
+  const hit = evidence?.months?.find(m => m.month === range.month && m.year === range.year);
+  return hit?.score == null ? null : Number(hit.score);
+}
+
 export function filterQualifiedNeeds<T extends NeedLike & { review_year: number; review_period: string }>(
   needs: T[] | null | undefined,
   index: QualifiedIndex,

@@ -6039,3 +6039,11 @@ the global `placeholderData: (prev) => prev` carry-over: showing the previous
 filter's result-set as if it were the current one is a correctness defect, not
 a loading nicety. Exports are blocked while the active range is still fetching
 and must record the range they cover.
+
+### Per-month evidence layout (ADR-253)
+Continuity evidence MUST be presented one column per month of the selected
+range (`MMM YYYY`), showing that month's achieved score, with an em dash for a
+month carrying no score — never as a single concatenated text cell. The KPI's
+configured weightage MUST accompany the KPI in both the on-screen grid and the
+export. This is a presentation rule only; qualification semantics remain
+§PMS-CONTINUITY-AT-OR-BELOW.

@@ -40,6 +40,7 @@ export interface TrainingNeed {
     id: string;
     kra_name: string;
     kpi_name: string;
+    weightage?: number | null;
   };
 }
 
@@ -108,7 +109,7 @@ export function useTrainingNeeds(filters?: {
             department:departments!profiles_department_fk(id, name)
           ),
           category:kra_categories(id, name),
-          kpi:kpis(id, kra_name, kpi_name)
+          kpi:kpis(id, kra_name, kpi_name, weightage)
         `)
         .order('priority', { ascending: true })
         .order('created_at', { ascending: false });

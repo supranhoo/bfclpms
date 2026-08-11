@@ -25,7 +25,7 @@ import {
   PeriodRange
 } from '@/hooks/useTNI';
 import { useTniThreshold, useTniQualifiedKpis, useTniMinScoredMonths } from '@/hooks/useTniQualification';
-import { filterQualifiedNeeds, qualifiedEvidence, tniKpiKey, tniRangeKey } from '@/lib/tni/tniQualification';
+import { filterQualifiedNeeds, qualifiedEvidence, tniKpiKey, tniRangeKey, monthColumnLabel, scoreForMonth } from '@/lib/tni/tniQualification';
 import { TniThresholdInline } from '@/components/reports/TniThresholdInline';
 import { useAuth } from '@/contexts/AuthContext';
 import { summariseNeeds, aggregateByCategory, aggregateByDepartment } from '@/lib/tni/tniAggregation';
@@ -238,12 +238,13 @@ export default function TNIReport() {
     const [y, m] = key.split('|');
     return `${m.slice(0, 3)} ${y}`;
   };
-  const evidenceText = (tn: { employee_id: string; kpi?: { kra_name?: string | null; kpi_name?: string | null } | null }) => {
+  // ADR-253 — one column per month of the active filter range.
+  const monthScoreFor = (
+    tn: { employee_id: string; kpi?: { kra_name?: string | null; kpi_name?: string | null } | null },
+    range: PeriodRange,
+  ): number | null => {
     const ev = qualified ? qualifiedEvidence(tn, qualified.index) : undefined;
-    if (!ev) return '';
-    return ev.months
-      .map(m => `${m.month.slice(0, 3)} ${m.year}: ${m.score == null ? '—' : Number(m.score).toFixed(2)}`)
-      .join(', ');
+    return scoreForMonth(ev, range);
   };
 
   // Every aggregate is derived from the same qualified row-set so the cards,
@@ -352,18 +353,32 @@ export default function TNIReport() {
     };
     const exportData = scopedNeeds.map((tn) => {
       const row: Record<string, string | number> = {};
-      for (const fld of visible) row[fld.label] = valueFor(tn, fld.field_key);
+      for (const fld of visible) {
+        row[fld.label] = valueFor(tn, fld.field_key);
+        // ADR-253 — weightage travels immediately after the KPI column.
+        if (fld.field_key === 'kpi') row['Weightage (%)'] = (tn.kpi as any)?.weightage ?? '';
+      }
       // ADR-252 — continuity evidence travels with every exported row.
       row['Months in Range'] = periodRanges.length;
       row['Range'] = rangeLabel(periodRanges);
-      row['Scored Months ≤ Threshold'] = evidenceText(tn);
       row['TNI Threshold'] = tniThreshold ?? '';
+      // ADR-253 — one column per filtered month with that month's score.
+      periodRanges.forEach(r => {
+        const s = monthScoreFor(tn, r);
+        row[monthColumnLabel(r)] = s == null ? '—' : Number(s.toFixed(2));
+      });
       return row;
     });
 
     const wb = XLSX.utils.book_new();
     const detailWs = XLSX.utils.json_to_sheet(exportData, {
-      header: [...visible.map((f) => f.label), 'Months in Range', 'Range', 'Scored Months ≤ Threshold', 'TNI Threshold'],
+      header: [
+        ...visible.flatMap((f) => (f.field_key === 'kpi' ? [f.label, 'Weightage (%)'] : [f.label])),
+        'Months in Range',
+        'Range',
+        'TNI Threshold',
+        ...periodRanges.map(monthColumnLabel),
+      ],
     });
     appendEmployeeScopeNote(detailWs, empStatus);
     XLSX.utils.book_append_sheet(wb, detailWs, 'Detail');
@@ -891,17 +906,23 @@ export default function TNIReport() {
                   {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12" />)}
                 </div>
               ) : (
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Employee</TableHead>
                       <TableHead>KPI/Category</TableHead>
+                      <TableHead className="text-right">Wt %</TableHead>
                       <TableHead>Gap Type</TableHead>
                       <TableHead className="text-center">Score</TableHead>
-                      <TableHead>Months ≤ Threshold</TableHead>
                       <TableHead>Priority</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Recommendation</TableHead>
+                      {periodRanges.map(r => (
+                        <TableHead key={`${r.year}-${r.month}`} className="text-right whitespace-nowrap">
+                          {monthColumnLabel(r)}
+                        </TableHead>
+                      ))}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -921,6 +942,9 @@ export default function TNIReport() {
                             <div className="text-xs text-muted-foreground">{tn.category?.name || '-'}</div>
                           </div>
                         </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {(tn.kpi as any)?.weightage == null ? '—' : `${Number((tn.kpi as any).weightage)}%`}
+                        </TableCell>
                         <TableCell>
                           <Badge variant={tn.gap_type === 'compliance' ? 'outline' : 'secondary'}
                                  className={tn.gap_type === 'compliance' ? 'border-amber-500 text-amber-600' : ''}>
@@ -931,9 +955,6 @@ export default function TNIReport() {
                           <Badge variant={tn.score && tn.score < 2 ? 'destructive' : 'outline'}>
                             {tn.score?.toFixed(2) || '-'}
                           </Badge>
-                        </TableCell>
-                        <TableCell className="max-w-[16rem] text-xs text-muted-foreground truncate" title={evidenceText(tn)}>
-                          {evidenceText(tn) || '-'}
                         </TableCell>
                         <TableCell>
                           <Badge variant={PRIORITY_BADGE[tn.priority]}>
@@ -948,17 +969,35 @@ export default function TNIReport() {
                         <TableCell className="max-w-xs truncate">
                           {tn.training_recommendation || '-'}
                         </TableCell>
+                        {periodRanges.map(r => {
+                          const s = monthScoreFor(tn, r);
+                          return (
+                            <TableCell
+                              key={`${r.year}-${r.month}`}
+                              className={`text-right tabular-nums whitespace-nowrap ${
+                                s == null
+                                  ? 'text-muted-foreground'
+                                  : tniThreshold != null && s <= tniThreshold
+                                    ? 'text-destructive font-medium'
+                                    : ''
+                              }`}
+                            >
+                              {s == null ? '—' : s.toFixed(2)}
+                            </TableCell>
+                          );
+                        })}
                       </TableRow>
                     ))}
                     {filteredNeeds.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={8 + periodRanges.length} className="text-center text-muted-foreground py-8">
                           {searchTerm ? 'No matching results' : 'No training needs identified'}
                         </TableCell>
                       </TableRow>
                     )}
                   </TableBody>
                 </Table>
+                </div>
               )}
             </CardContent>
           </Card>

@@ -5444,6 +5444,22 @@ Every new edge function **must** complete all of these steps before deployment:
 - Detect-month target clamped to the selected range.
 - Dropped the obsolete 2-arg `tni_qualified_kpis` overload.
 
+### v2.66.256 — TNI weightage column + per-month score columns (ADR-253)
+- Individual tab of the TNI Report now shows a **Wt %** column right after
+  KPI/Category (`kpis.weightage`, `—` when unset).
+- The single `Months ≤ Threshold` text column is replaced by **one column per
+  filtered month** (`MMM YYYY`), each showing that month's achieved score to two
+  decimals; `—` when the month has no score. Scores at/below the threshold are
+  highlighted. The table scrolls horizontally for long ranges.
+- Excel Detail sheet mirrors this: `Weightage (%)` after the KPI column and one
+  `MMM YYYY` column per month at the end (`Months in Range`, `Range`,
+  `TNI Threshold` retained; explicit header order per ADR-236).
+- Helpers `monthColumnLabel` / `scoreForMonth` in `src/lib/tni/tniQualification.ts`;
+  tests in `src/test/tni/monthColumns.test.ts`. Presentation-only — no schema,
+  RLS or qualification-logic change.
+- **Modified files**: `src/pages/reports/TNIReport.tsx`, `src/hooks/useTNI.ts`,
+  `src/lib/tni/tniQualification.ts`, `src/test/tni/monthColumns.test.ts`
+
 ### v2.66.0 — Atomic Org KPI propagation RPC (Phase A3, 2026-04-21)
 - **Problem (RCA)**: `propagate_org_kpi_value` advanced status without verifying `ROW_COUNT`, so KPIs already past `kra_set` silently incremented the success counter. Root cause for Buckets B, C, F (87 silent failures).
 - **Fix**: Both overloads now use guarded `UPDATE … WHERE status='kra_set'` + `GET DIAGNOSTICS ROW_COUNT`, return `{propagated_count, skipped_count, details, skipped[]}`, emit `PROPAGATION_PARTIAL` audit logs.
