@@ -914,6 +914,7 @@ export default function TNIReport() {
                   {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12" />)}
                 </div>
               ) : (
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -997,13 +998,14 @@ export default function TNIReport() {
                     ))}
                     {filteredNeeds.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={8 + periodRanges.length} className="text-center text-muted-foreground py-8">
                           {searchTerm ? 'No matching results' : 'No training needs identified'}
                         </TableCell>
                       </TableRow>
                     )}
                   </TableBody>
                 </Table>
+                </div>
               )}
             </CardContent>
           </Card>
