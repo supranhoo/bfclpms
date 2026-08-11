@@ -61,10 +61,10 @@ Audit only. No code has been changed.
 | Detect / Backfill | writes with default 3.0; de-dupes by kpi_id only | uses configured threshold; safely re-runnable | Pass the resolved threshold; change the conflict key to (kpi_id, period, year) with update on re-detect |
 | Dashboard cards | count monthly records | count qualifying employee+KPI pairs | Derive cards from the same qualified set |
 | Export | mirrors screen | mirrors corrected screen | Same qualified set plus per-month evidence columns |
-| Missing scores | absent month = no row | must break continuity, never be read as 0 | Define "applicable month" explicitly (see Q2) |
+| Missing scores | absent month = no row | month is skipped, never read as 0 | Evaluate only months that have an approved score; a range with no scored month never qualifies |
 | KPI identity | `kpi_id` (per-month row) | stable identity across months | Match on employee + normalised `kra_name` + `kpi_name`, reusing the KPI standardization registry aliases |
-| PIP consecutive months | hardcoded 3 | configurable | Add `pip_consecutive_months` to `pipPolicySettings.ts`; drive the panel default and `shortWindow` from it |
-| PIP longer range | two divergent behaviours | one | See Q1 |
+| PIP consecutive months | hardcoded 3 | configurable minimum window | Add `pip_consecutive_months` to `pipPolicySettings.ts`; it sets the default window length and the minimum number of scored months required, not a sliding streak |
+| PIP longer range | two divergent behaviours | entire selected range at/below threshold | Align `PIPSuggestionsPanel` with `MonthlyTrendView`: all scored months in the selected range must be `<=` threshold |
 | Performance | loads all rows in range client-side, unbounded | bounded | Evaluate continuity server-side in a set-returning RPC; keep the existing page and filters |
 | Security / tenant isolation | `training_needs` RLS + report access catalog | unchanged | New RPC is SECURITY DEFINER but re-applies the same visibility predicate; export stays gated by `canDownload('tni')` |
 
@@ -81,12 +81,12 @@ Generalise rather than duplicate: promote `isPipCandidate` into a shared `allMon
 3. **TNI qualification RPC** — `tni_qualified_for_period(p_months jsonb, p_threshold numeric)` returning employee, KPI identity, per-month scores and a qualified flag, evaluated at query time from `kpis` + `review_submissions`. `training_needs` remains the store for status, recommendation and workflow, joined in. This removes the backfill-union defect at its root.
 4. **Report wiring** — `useTNI.ts` gains `useQualifiedTrainingNeeds(periodRanges)`; table, summary cards and export all read that single set. The table gains per-month score columns and a "continuous low period" indicator in multi-month mode. Filters unchanged.
 5. **Detect / Backfill** — pass the configured threshold; fix the de-dupe key so re-detection updates score and priority.
-6. **PIP** — `<=` comparison; `pip_consecutive_months` drives the evaluation window and `shortWindow`; align `MonthlyTrendView` with the Q1 decision.
-7. **Tests** — full TNI matrix (2.0/2.0/2.0 include; 1.8/1.9/2.0 include; 2.0/2.1/2.0 exclude; 1.5/2.5/1.5 exclude; 2.0 include, 2.01 exclude), threshold-change tests (2.0 vs 2.5), Apr–Jun include vs Apr–Jul exclude, the backfill-union regression test, cards-vs-table reconciliation, PIP matrix with configurable consecutive months, boundary/decimal and missing-data tests.
+6. **PIP** — `<=` comparison; every scored month in the selected range must be at/below the threshold (no sliding streak); `pip_consecutive_months` sets the default window length and the minimum scored-month count; `PIPSuggestionsPanel` and `MonthlyTrendView` share one evaluator.
+7. **Tests** — full TNI matrix (2.0/2.0/2.0 include; 1.8/1.9/2.0 include; 2.0/2.1/2.0 exclude; 1.5/2.5/1.5 exclude; 2.0 include, 2.01 exclude), threshold-change tests (2.0 vs 2.5), Apr–Jun include vs Apr–Jul exclude, the backfill-union regression test, cards-vs-table reconciliation, PIP whole-range matrix with configurable window, skipped-month tests (unscored months ignored, all-unscored range never qualifies), boundary/decimal tests.
 8. **Docs** — ADR-252, POLICY §TNI-PERIOD-CONTINUITY and §PIP-CONSECUTIVE-MONTHS, DOCUMENTATION.md version history.
 
-## G. Business decisions genuinely required
+## G. Business decisions — confirmed by owner
 
-- **Q1 — PIP over a longer range.** For Apr–Aug with 3 consecutive months configured: Option A (any 3-month streak inside the range qualifies) or Option B (entire range at/below threshold)? Today the suggestions panel behaves like a fixed 3-month window and the trend view behaves like Option B. Recommendation: **Option A**, matching "configured number of consecutive months" and making the selected range a search window.
-- **Q2 — missing month.** When a month in range has no approved score (KPI not assigned, employee joined late, review pending): (a) disqualify, (b) skip it and evaluate only applicable months, or (c) disqualify only when the KPI existed but was unscored? Recommendation: **(b) for TNI** and **(a) for PIP** (which is current PIP behaviour).
-- **Q3 — historical thresholds.** Thresholds are current-value-only today. Keep that, or introduce effective-dated thresholds? Recommendation: keep current-value-only and stamp each report with the threshold used.
+- **Q1 — PIP over a longer range: entire selected range, not a fixed 3-month streak.** For Apr–Aug the employee qualifies only when every scored month Apr through Aug is at/below the PIP threshold. `pip_consecutive_months` becomes the default window length and the minimum number of scored months, not a sliding streak detector. This is a behaviour change for `PIPSuggestionsPanel` (fixed trailing window today) and matches `MonthlyTrendView`.
+- **Q2 — missing month: skip it.** Months with no approved score (KPI not assigned, employee joined/exited mid-range, review pending) are excluded from the evaluation for both TNI and PIP; remaining scored months must all be at/below threshold. A missing month is never read as 0. Guardrail: a range where nothing is scored never qualifies, and PIP additionally requires at least `pip_consecutive_months` scored months. This changes today's PIP rule, where a blank month disqualifies. Both TNI and PIP rows will show which months were skipped.
+- **Q3 — thresholds stay current-value-only.** No effective dating. Historical reports are recomputed with today's configured threshold, and each report/export is stamped with the threshold used so a re-run is explainable.
