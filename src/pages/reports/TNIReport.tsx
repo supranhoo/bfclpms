@@ -238,14 +238,6 @@ export default function TNIReport() {
     const [y, m] = key.split('|');
     return `${m.slice(0, 3)} ${y}`;
   };
-  const evidenceText = (tn: { employee_id: string; kpi?: { kra_name?: string | null; kpi_name?: string | null } | null }) => {
-    const ev = qualified ? qualifiedEvidence(tn, qualified.index) : undefined;
-    if (!ev) return '';
-    return ev.months
-      .map(m => `${m.month.slice(0, 3)} ${m.year}: ${m.score == null ? '—' : Number(m.score).toFixed(2)}`)
-      .join(', ');
-  };
-
   // ADR-253 — one column per month of the active filter range.
   const monthScoreFor = (
     tn: { employee_id: string; kpi?: { kra_name?: string | null; kpi_name?: string | null } | null },
