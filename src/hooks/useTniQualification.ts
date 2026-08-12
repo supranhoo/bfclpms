@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { getTniThreshold } from '@/lib/pmsSettings';
 import { getPipPolicySettings } from '@/lib/pip/pipPolicySettings';
 import { buildQualifiedIndex, tniRangeKey, type QualifiedKpiRow, type QualifiedIndex } from '@/lib/tni/tniQualification';
+import type { TniEmployeeLite } from '@/lib/tni/tniQualification';
 import type { PeriodRange } from '@/hooks/useTNI';
 
 export function useTniThreshold() {
@@ -19,6 +20,32 @@ export function useTniThreshold() {
     queryKey: ['tni-threshold'],
     queryFn: getTniThreshold,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * ADR-254 — qualifying KPIs can belong to employees with no persisted
+ * `training_needs` record, so the report resolves their profile directly.
+ */
+export function useTniEmployeeProfiles(employeeIds: string[]) {
+  const ids = Array.from(new Set(employeeIds)).sort();
+  return useQuery({
+    queryKey: ['tni-employee-profiles', ids],
+    enabled: ids.length > 0,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<Map<string, TniEmployeeLite>> => {
+      const CHUNK = 200;
+      const out = new Map<string, TniEmployeeLite>();
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, employee_code, designation, is_active, department_id, department:departments!profiles_department_fk(id, name)')
+          .in('id', ids.slice(i, i + CHUNK));
+        if (error) throw error;
+        (data ?? []).forEach((p: any) => out.set(p.id, p as TniEmployeeLite));
+      }
+      return out;
+    },
   });
 }
 
