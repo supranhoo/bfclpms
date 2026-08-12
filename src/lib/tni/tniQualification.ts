@@ -111,3 +111,102 @@ export function filterQualifiedNeeds<T extends NeedLike & { review_year: number;
   const kept = (needs ?? []).filter(n => index.has(tniRowKey(n.employee_id, tniKpiKey(n.kpi?.kra_name, n.kpi?.kpi_name))));
   return opts?.multiMonth ? dedupeNeedsByKpi(kept, monthOrder) : kept;
 }
+
+/**
+ * ADR-254 — the qualification result-set is the report's source of truth.
+ *
+ * A qualifying (employee, KPI) is reported even when no `training_needs`
+ * detection record exists for it (detection is run per month, at whatever
+ * threshold was configured that day). Persisted rows only enrich a qualifying
+ * row with its descriptive fields; they can never gate it.
+ */
+export interface TniEmployeeLite {
+  id: string;
+  full_name: string | null;
+  employee_code: string | null;
+  designation: string | null;
+  is_active: boolean | null;
+  department_id: string | null;
+  department?: { id: string; name: string } | null;
+}
+
+export interface TniDisplayRow {
+  id: string;
+  employee_id: string;
+  kpi_key: string;
+  actioned: boolean;
+  review_period: string;
+  review_year: number;
+  score: number | null;
+  gap_type: string;
+  priority: 'high' | 'medium' | 'low';
+  status: string;
+  training_recommendation: string | null;
+  category_id: string | null;
+  category: { id: string; name: string } | null;
+  kpi: { kra_name: string | null; kpi_name: string | null; weightage?: number | null } | null;
+  employee: TniEmployeeLite | null;
+  evidence: QualifiedKpiRow;
+}
+
+type MergeableNeed = NeedLike & {
+  id: string;
+  review_year: number;
+  review_period: string;
+  score?: number | null;
+  gap_type?: string | null;
+  priority?: string | null;
+  status?: string | null;
+  training_recommendation?: string | null;
+  category_id?: string | null;
+  category?: { id: string; name: string } | null;
+  employee?: any;
+};
+
+export function mergeQualifiedWithNeeds(
+  qualified: QualifiedKpiRow[] | null | undefined,
+  needs: MergeableNeed[] | null | undefined,
+  monthOrder: string[],
+  profiles?: Map<string, TniEmployeeLite> | null,
+): TniDisplayRow[] {
+  // Latest persisted record per (employee, KPI) — it carries current status.
+  const latest = new Map<string, MergeableNeed>();
+  const rank = new Map(monthOrder.map((k, i) => [k, i]));
+  (needs ?? []).forEach(n => {
+    const key = tniRowKey(n.employee_id, tniKpiKey(n.kpi?.kra_name, n.kpi?.kpi_name));
+    const cur = latest.get(key);
+    const r = rank.get(`${n.review_year}|${n.review_period}`) ?? -1;
+    const curR = cur ? (rank.get(`${cur.review_year}|${cur.review_period}`) ?? -1) : -Infinity;
+    if (!cur || r >= curR) latest.set(key, n);
+  });
+
+  const lastRange = monthOrder[monthOrder.length - 1]?.split('|') ?? [];
+
+  return (qualified ?? []).map(q => {
+    const key = tniRowKey(q.employee_id, q.kpi_key);
+    const n = latest.get(key);
+    const profile = profiles?.get(q.employee_id) ?? (n?.employee as TniEmployeeLite | undefined) ?? null;
+    return {
+      id: n?.id ?? `qualified:${key}`,
+      employee_id: q.employee_id,
+      kpi_key: q.kpi_key,
+      actioned: !!n,
+      review_period: n?.review_period ?? (lastRange[1] ?? ''),
+      review_year: n?.review_year ?? Number(lastRange[0] ?? 0),
+      score: n?.score ?? q.worst_score ?? null,
+      gap_type: (n?.gap_type as string) ?? 'skill',
+      priority: ((n?.priority as any) ?? 'high') as 'high' | 'medium' | 'low',
+      status: (n?.status as string) ?? 'identified',
+      training_recommendation: n?.training_recommendation ?? null,
+      category_id: n?.category_id ?? null,
+      category: n?.category ?? null,
+      kpi: {
+        kra_name: n?.kpi?.kra_name ?? q.kra_name,
+        kpi_name: n?.kpi?.kpi_name ?? q.kpi_name,
+        weightage: (n?.kpi as any)?.weightage ?? null,
+      },
+      employee: profile,
+      evidence: q,
+    };
+  });
+}

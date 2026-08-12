@@ -24,8 +24,8 @@ import {
   TNIGapType,
   PeriodRange
 } from '@/hooks/useTNI';
-import { useTniThreshold, useTniQualifiedKpis, useTniMinScoredMonths } from '@/hooks/useTniQualification';
-import { filterQualifiedNeeds, qualifiedEvidence, tniKpiKey, tniRangeKey, monthColumnLabel, scoreForMonth } from '@/lib/tni/tniQualification';
+import { useTniThreshold, useTniQualifiedKpis, useTniMinScoredMonths, useTniEmployeeProfiles } from '@/hooks/useTniQualification';
+import { mergeQualifiedWithNeeds, tniRangeKey, monthColumnLabel, scoreForMonth } from '@/lib/tni/tniQualification';
 import { TniThresholdInline } from '@/components/reports/TniThresholdInline';
 import { useAuth } from '@/contexts/AuthContext';
 import { summariseNeeds, aggregateByCategory, aggregateByDepartment } from '@/lib/tni/tniAggregation';
@@ -203,11 +203,13 @@ export default function TNIReport() {
     data: qualifiedRaw,
     isLoading: qualifiedLoading,
     isFetching: qualifiedFetching,
+    error: qualifiedError,
   } = useTniQualifiedKpis(periodRanges, tniThreshold, minScoredMonthsCfg);
   const {
     data: rawNeeds,
     isLoading: rawNeedsLoading,
     isFetching: rawNeedsFetching,
+    error: rawNeedsError,
   } = useTrainingNeeds({ periodRanges });
 
   // ADR-252c — a qualified result-set computed for another range must never be
@@ -224,15 +226,24 @@ export default function TNIReport() {
     [periodRanges],
   );
 
-  /** Persisted rows that survive the continuity rule (deduped per KPI when multi-month). */
+  // ADR-254 — the qualification result-set is the source of truth. Persisted
+  // detection records only enrich a qualifying row; they never gate it.
+  const qualifiedEmployeeIds = useMemo(
+    () => (qualified?.rows ?? []).map(r => r.employee_id),
+    [qualified],
+  );
+  const { data: profileMap, isFetching: profilesFetching } = useTniEmployeeProfiles(qualifiedEmployeeIds);
+
   const trainingNeeds = useMemo(() => {
-    if (!rawNeeds || !qualified) return undefined;
-    return filterQualifiedNeeds(rawNeeds, qualified.index, monthOrder, { multiMonth: isMulti });
-  }, [rawNeeds, qualified, monthOrder, isMulti]);
+    if (!qualified) return undefined;
+    return mergeQualifiedWithNeeds(qualified.rows, rawNeeds as any, monthOrder, profileMap ?? null);
+  }, [qualified, rawNeeds, monthOrder, profileMap]);
 
   const needsLoading =
-    rawNeedsLoading || qualifiedLoading || rawNeedsFetching || qualifiedFetching || staleRange;
-  const suppressedCount = (rawNeeds?.length ?? 0) - (trainingNeeds?.length ?? 0);
+    rawNeedsLoading || qualifiedLoading || rawNeedsFetching || qualifiedFetching || profilesFetching || staleRange;
+  const loadError = (qualifiedError || rawNeedsError) as Error | null;
+  const actionedCount = (trainingNeeds ?? []).filter(t => t.actioned).length;
+  const unactionedCount = (trainingNeeds?.length ?? 0) - actionedCount;
 
   const monthLabelFor = (key: string) => {
     const [y, m] = key.split('|');
@@ -240,12 +251,9 @@ export default function TNIReport() {
   };
   // ADR-253 — one column per month of the active filter range.
   const monthScoreFor = (
-    tn: { employee_id: string; kpi?: { kra_name?: string | null; kpi_name?: string | null } | null },
+    tn: { evidence?: any },
     range: PeriodRange,
-  ): number | null => {
-    const ev = qualified ? qualifiedEvidence(tn, qualified.index) : undefined;
-    return scoreForMonth(ev, range);
-  };
+  ): number | null => scoreForMonth(tn.evidence, range);
 
   // Every aggregate is derived from the same qualified row-set so the cards,
   // the category/department tables and the detail grid always reconcile.
@@ -362,6 +370,8 @@ export default function TNIReport() {
       row['Months in Range'] = periodRanges.length;
       row['Range'] = rangeLabel(periodRanges);
       row['TNI Threshold'] = tniThreshold ?? '';
+      // ADR-254 — whether a persisted detection record backs this qualifying KPI.
+      row['Detection Record'] = tn.actioned ? 'Yes' : 'No';
       // ADR-253 — one column per filtered month with that month's score.
       periodRanges.forEach(r => {
         const s = monthScoreFor(tn, r);
@@ -377,6 +387,7 @@ export default function TNIReport() {
         'Months in Range',
         'Range',
         'TNI Threshold',
+        'Detection Record',
         ...periodRanges.map(monthColumnLabel),
       ],
     });
@@ -500,13 +511,25 @@ export default function TNIReport() {
           It must also carry at least <b>{effectiveMinMonths} scored month{effectiveMinMonths !== 1 ? 's' : ''}</b> in
           this range, so a single low month can no longer flag a KPI. Months with no score at any review stage
           (joiners, leavers, pending review, N/A) are skipped, never counted as a pass or a failure.
-          {suppressedCount > 0 && (
-            <> {suppressedCount} detected record{suppressedCount !== 1 ? 's were' : ' was'} excluded because the KPI recovered above the threshold in at least one month of this range, or had fewer than {effectiveMinMonths} scored month{effectiveMinMonths !== 1 ? 's' : ''}.</>
+          {trainingNeeds && (
+            <> {trainingNeeds.length} qualifying KPI{trainingNeeds.length !== 1 ? 's' : ''} in this range
+            — {actionedCount} with a detection record, {unactionedCount} not yet actioned
+            (shown with default priority/status until TNI detection is run).</>
           )}
         </AlertDescription>
       </Alert>
 
       {/* Empty-period guidance */}
+      {loadError && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Could not load the training-needs data for this range</AlertTitle>
+          <AlertDescription className="text-xs">
+            {loadError.message} — the figures below are incomplete. Retry the filter or narrow the range.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {!needsLoading && emptyMonths.length > 0 && (
         <Alert variant={allEmpty ? 'destructive' : 'default'}>
           <AlertTriangle className="h-4 w-4" />

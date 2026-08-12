@@ -6047,3 +6047,14 @@ month carrying no score — never as a single concatenated text cell. The KPI's
 configured weightage MUST accompany the KPI in both the on-screen grid and the
 export. This is a presentation rule only; qualification semantics remain
 §PMS-CONTINUITY-AT-OR-BELOW.
+
+### Qualification is the source of truth (ADR-254)
+The TNI report MUST list every (employee, KPI) identity returned by the
+qualification evaluation for the selected range, whether or not a persisted
+`training_needs` detection record exists for it. Persisted rows are descriptive
+enrichment (priority, status, gap type, recommendation) and MUST NOT gate
+visibility; unactioned identities are reported with default priority `high` and
+status `identified`, and their count MUST be disclosed on the report.
+Range-scoped reads MUST page to completion — a report may never present a
+truncated result-set as complete — and a fetch failure MUST be surfaced rather
+than rendered as an empty report.

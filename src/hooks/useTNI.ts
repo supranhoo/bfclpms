@@ -137,12 +137,20 @@ export function useTrainingNeeds(filters?: {
         query = query.eq('gap_type', filters.gapType);
       }
 
-      const { data, error } = await query;
-
-      if (error) throw error;
+      // ADR-254 — page to completion. PostgREST caps an unbounded read at 1000
+      // rows, which silently dropped whole months of detection records.
+      const PAGE = 1000;
+      const all: TrainingNeed[] = [];
+      for (let from = 0; ; from += PAGE) {
+        const { data, error } = await (query as any).range(from, from + PAGE - 1);
+        if (error) throw error;
+        const batch = (data ?? []) as TrainingNeed[];
+        all.push(...batch);
+        if (batch.length < PAGE) break;
+      }
 
       // Filter by department if needed (post-query since it's a nested field)
-      let result = data as TrainingNeed[];
+      let result = all;
       if (filters?.departmentId) {
         result = result.filter(tn => tn.employee?.department_id === filters.departmentId);
       }
