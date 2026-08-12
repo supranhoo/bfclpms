@@ -197,7 +197,6 @@ export default function TNIReport() {
 
   // ADR-252 — continuity rule: a KPI is a training need only when its score is
   // at or below the configured threshold in EVERY scored month of the range.
-  const { data: tniThreshold } = useTniThreshold();
   const thresholdQuery = useTniThreshold();
   const { data: tniThreshold, error: thresholdError } = thresholdQuery;
   const minMonthsQuery = useTniMinScoredMonths();
