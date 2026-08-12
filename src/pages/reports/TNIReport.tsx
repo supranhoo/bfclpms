@@ -517,6 +517,16 @@ export default function TNIReport() {
       </Alert>
 
       {/* Empty-period guidance */}
+      {loadError && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Could not load the training-needs data for this range</AlertTitle>
+          <AlertDescription className="text-xs">
+            {loadError.message} — the figures below are incomplete. Retry the filter or narrow the range.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {!needsLoading && emptyMonths.length > 0 && (
         <Alert variant={allEmpty ? 'destructive' : 'default'}>
           <AlertTriangle className="h-4 w-4" />
