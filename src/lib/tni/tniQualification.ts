@@ -37,6 +37,7 @@ export interface QualifiedKpiRow {
   kpi_key: string;
   kra_name: string | null;
   kpi_name: string | null;
+  weightage?: number | null;
   months: { month: string; year: number; score: number | null }[];
   scored_months: number;
   worst_score: number | null;
@@ -203,7 +204,7 @@ export function mergeQualifiedWithNeeds(
       kpi: {
         kra_name: n?.kpi?.kra_name ?? q.kra_name,
         kpi_name: n?.kpi?.kpi_name ?? q.kpi_name,
-        weightage: (n?.kpi as any)?.weightage ?? null,
+        weightage: (n?.kpi as any)?.weightage ?? q.weightage ?? null,
       },
       employee: profile,
       evidence: q,

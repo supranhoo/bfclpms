@@ -2,10 +2,10 @@
  * ADR-252 — TNI continuity evaluation.
  *
  * `tni_qualified_kpis` evaluates the "at or below the threshold in EVERY
- * scored month" rule server-side (SECURITY INVOKER — the caller's RLS still
- * applies) and returns only the qualifying (employee, KPI) identities with
- * their per-month evidence. Evaluating in SQL keeps the payload small even for
- * a 12-month, org-wide range.
+ * scored month" rule server-side. ADR-255 makes the RPC SECURITY DEFINER with
+ * explicit report authorization and KPI-row scope checks, so RLS cannot turn a
+ * valid organization report into a silent zero while managers remain scoped.
+ * Evaluating in SQL keeps the payload small even for a 12-month range.
  */
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -90,6 +90,7 @@ export function useTniQualifiedKpis(
         kpi_key: r.kpi_key,
         kra_name: r.kra_name ?? null,
         kpi_name: r.kpi_name ?? null,
+        weightage: r.weightage == null ? null : Number(r.weightage),
         months: Array.isArray(r.months) ? r.months : [],
         scored_months: Number(r.scored_months ?? 0),
         worst_score: r.worst_score == null ? null : Number(r.worst_score),

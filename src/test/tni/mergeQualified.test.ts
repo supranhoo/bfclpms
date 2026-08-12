@@ -13,6 +13,7 @@ const q = (employee_id: string, kra: string, kpi: string): QualifiedKpiRow => ({
   kpi_key: `${kra.toLowerCase()}||${kpi.toLowerCase()}`,
   kra_name: kra,
   kpi_name: kpi,
+  weightage: 12.5,
   months: [{ month: 'June', year: 2026, score: 1.5 }],
   scored_months: 3,
   worst_score: 1.5,
@@ -26,6 +27,7 @@ describe('mergeQualifiedWithNeeds', () => {
     expect(rows[0].actioned).toBe(false);
     expect(rows[0].priority).toBe('high');
     expect(rows[0].score).toBe(1.5);
+    expect(rows[0].kpi?.weightage).toBe(12.5);
   });
 
   it('enriches from the latest persisted record', () => {
