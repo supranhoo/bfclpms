@@ -5444,6 +5444,24 @@ Every new edge function **must** complete all of these steps before deployment:
 - Detect-month target clamped to the selected range.
 - Dropped the obsolete 2-arg `tni_qualified_kpis` overload.
 
+### v2.66.257 — TNI report source-of-truth shift & complete paging (ADR-254)
+- **What**: the TNI report now renders one row per identity returned by
+  `tni_qualified_kpis`; persisted `training_needs` rows only enrich them.
+  `useTrainingNeeds` pages in 1,000-row batches; profiles for unactioned rows
+  resolve via `useTniEmployeeProfiles`; fetch errors show a destructive alert;
+  export gains a `Detection Record` column and the banner reconciles
+  qualifying vs actioned counts.
+- **Why**: Apr–Jun 2026 @ threshold 2 / 3 months rendered empty although the
+  RPC returned 252 qualifying identities — the report needed a stored detection
+  record (none exist for a threshold configured today) and silently truncated
+  the 2,290-row range at the PostgREST 1,000-row cap.
+- **How**: `mergeQualifiedWithNeeds` in `src/lib/tni/tniQualification.ts`;
+  unactioned rows default to priority `high` / status `identified` with the
+  worst in-range score. Tests: `src/test/tni/mergeQualified.test.ts`.
+- **Modified files**: `src/pages/reports/TNIReport.tsx`, `src/hooks/useTNI.ts`,
+  `src/hooks/useTniQualification.ts`, `src/lib/tni/tniQualification.ts`,
+  `docs/adr/ADR-254.md`, `POLICY.md`.
+
 ### v2.66.256 — TNI weightage column + per-month score columns (ADR-253)
 - Individual tab of the TNI Report now shows a **Wt %** column right after
   KPI/Category (`kpis.weightage`, `—` when unset).
