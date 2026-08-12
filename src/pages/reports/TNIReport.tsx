@@ -508,8 +508,10 @@ export default function TNIReport() {
           It must also carry at least <b>{effectiveMinMonths} scored month{effectiveMinMonths !== 1 ? 's' : ''}</b> in
           this range, so a single low month can no longer flag a KPI. Months with no score at any review stage
           (joiners, leavers, pending review, N/A) are skipped, never counted as a pass or a failure.
-          {suppressedCount > 0 && (
-            <> {suppressedCount} detected record{suppressedCount !== 1 ? 's were' : ' was'} excluded because the KPI recovered above the threshold in at least one month of this range, or had fewer than {effectiveMinMonths} scored month{effectiveMinMonths !== 1 ? 's' : ''}.</>
+          {trainingNeeds && (
+            <> {trainingNeeds.length} qualifying KPI{trainingNeeds.length !== 1 ? 's' : ''} in this range
+            — {actionedCount} with a detection record, {unactionedCount} not yet actioned
+            (shown with default priority/status until TNI detection is run).</>
           )}
         </AlertDescription>
       </Alert>
