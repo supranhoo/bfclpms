@@ -370,6 +370,8 @@ export default function TNIReport() {
       row['Months in Range'] = periodRanges.length;
       row['Range'] = rangeLabel(periodRanges);
       row['TNI Threshold'] = tniThreshold ?? '';
+      // ADR-254 — whether a persisted detection record backs this qualifying KPI.
+      row['Detection Record'] = tn.actioned ? 'Yes' : 'No';
       // ADR-253 — one column per filtered month with that month's score.
       periodRanges.forEach(r => {
         const s = monthScoreFor(tn, r);
@@ -385,6 +387,7 @@ export default function TNIReport() {
         'Months in Range',
         'Range',
         'TNI Threshold',
+        'Detection Record',
         ...periodRanges.map(monthColumnLabel),
       ],
     });
