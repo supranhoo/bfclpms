@@ -6030,6 +6030,18 @@ overwrite fields absent from the upload.
 7. **One source of truth per view.** TNI summary cards, category and department
    aggregates MUST be derived from the same qualified row-set as the detail
    grid, and the active rule MUST be disclosed in the UI.
+8. **Qualification is independent of action persistence (ADR-254/255).** A row
+   returned by `tni_qualified_kpis` MUST appear even when no `training_needs`
+   record exists. Persistent records enrich priority, status, recommendation,
+   and workflow only; they may never gate report visibility.
+9. **Secure report parity (ADR-255).** Qualification executes through an
+   authenticated fixed-search-path reporting function that verifies TNI report
+   access. Broad reporting roles use the approved organization scope; other
+   authorized viewers remain restricted by the canonical KPI-row access guard.
+   Anonymous execution is forbidden.
+10. **Action-record writes are Admin-only (ADR-255).** Creating monthly/range
+    TNI action records is a deliberate persistent workflow action, not a report
+    calculation or repair. Non-admin report viewers must not see or invoke it.
 
 ### Range-scoped results must be stamped (ADR-252c)
 Any qualification/aggregation payload computed for a (month, year) range MUST

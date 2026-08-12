@@ -46,6 +46,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Tooltip as UiTooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import * as XLSX from 'xlsx';
 import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
 
@@ -196,8 +197,10 @@ export default function TNIReport() {
 
   // ADR-252 — continuity rule: a KPI is a training need only when its score is
   // at or below the configured threshold in EVERY scored month of the range.
-  const { data: tniThreshold } = useTniThreshold();
-  const { data: minScoredMonthsCfg } = useTniMinScoredMonths();
+  const thresholdQuery = useTniThreshold();
+  const { data: tniThreshold, error: thresholdError } = thresholdQuery;
+  const minMonthsQuery = useTniMinScoredMonths();
+  const { data: minScoredMonthsCfg, error: minMonthsError } = minMonthsQuery;
   const effectiveMinMonths = Math.max(1, Math.min(minScoredMonthsCfg ?? 1, Math.max(1, periodRanges.length)));
   const {
     data: qualifiedRaw,
@@ -232,7 +235,11 @@ export default function TNIReport() {
     () => (qualified?.rows ?? []).map(r => r.employee_id),
     [qualified],
   );
-  const { data: profileMap, isFetching: profilesFetching } = useTniEmployeeProfiles(qualifiedEmployeeIds);
+  const {
+    data: profileMap,
+    isFetching: profilesFetching,
+    error: profilesError,
+  } = useTniEmployeeProfiles(qualifiedEmployeeIds);
 
   const trainingNeeds = useMemo(() => {
     if (!qualified) return undefined;
@@ -241,7 +248,7 @@ export default function TNIReport() {
 
   const needsLoading =
     rawNeedsLoading || qualifiedLoading || rawNeedsFetching || qualifiedFetching || profilesFetching || staleRange;
-  const loadError = (qualifiedError || rawNeedsError) as Error | null;
+  const loadError = (thresholdError || minMonthsError || qualifiedError || rawNeedsError || profilesError) as Error | null;
   const actionedCount = (trainingNeeds ?? []).filter(t => t.actioned).length;
   const unactionedCount = (trainingNeeds?.length ?? 0) - actionedCount;
 
@@ -423,7 +430,7 @@ export default function TNIReport() {
         'Compliance Gaps': b?.ComplianceGaps ?? 0,
         'High Priority (Skill)': b?.HighPriority ?? 0,
         'Employees Affected': b?.Employees.size ?? 0,
-        'Detection Status': detected ? 'Detected' : 'Not detected — run TNI detection',
+        'Action Record Status': detected ? 'Created' : 'Not created — qualification still shown',
       };
     });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(monthlyRows), 'Monthly Summary');
@@ -461,19 +468,27 @@ export default function TNIReport() {
                 Export
               </Button>
             )}
-            {isMulti && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleBackfill}
-                disabled={backfillMutation.isPending}
-                title="Run TNI detection for every month in the selected range"
-              >
-                <Layers className={`h-4 w-4 mr-2 ${backfillMutation.isPending ? 'animate-pulse' : ''}`} />
-                Backfill Range ({periodRanges.length})
-              </Button>
+            {isAdmin && isMulti && (
+              <TooltipProvider>
+                <UiTooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleBackfill}
+                      disabled={backfillMutation.isPending}
+                    >
+                      <Layers className={`h-4 w-4 mr-2 ${backfillMutation.isPending ? 'animate-pulse' : ''}`} />
+                      Create Action Records ({periodRanges.length} months)
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    Persists priority, status, and recommendation workflow records. It does not calculate or reveal report eligibility.
+                  </TooltipContent>
+                </UiTooltip>
+              </TooltipProvider>
             )}
-            {isMulti && (
+            {isAdmin && isMulti && (
               <Select value={detectTarget} onValueChange={setDetectMonth}>
                 <SelectTrigger className="w-36 h-9">
                   <SelectValue placeholder="Detect month" />
@@ -487,14 +502,16 @@ export default function TNIReport() {
                 </SelectContent>
               </Select>
             )}
-            <Button
-              size="sm"
-              onClick={handleDetect}
-              disabled={detectMutation.isPending || (!isMulti && !selectedPeriod)}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${detectMutation.isPending ? 'animate-spin' : ''}`} />
-              Detect TNI{isMulti ? ` (${detectTarget.slice(0,3)})` : ''}
-            </Button>
+            {isAdmin && (
+              <Button
+                size="sm"
+                onClick={handleDetect}
+                disabled={detectMutation.isPending || (!isMulti && !selectedPeriod)}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${detectMutation.isPending ? 'animate-spin' : ''}`} />
+                Create Action Record{isMulti ? ` (${detectTarget.slice(0,3)})` : ''}
+              </Button>
+            )}
           </div>
         }
       />
@@ -535,21 +552,23 @@ export default function TNIReport() {
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>
             {allEmpty
-              ? 'No TNI data detected for the selected range'
-              : `${emptyMonths.length} month${emptyMonths.length !== 1 ? 's' : ''} in this range have no TNI data`}
+              ? 'No TNI action records exist for the selected range'
+              : `${emptyMonths.length} month${emptyMonths.length !== 1 ? 's' : ''} in this range have no TNI action records`}
           </AlertTitle>
           <AlertDescription>
             <div className="mb-2">
-              Training Needs are generated on demand. The following month{emptyMonths.length !== 1 ? 's have' : ' has'} not been detected yet:{' '}
+              Qualification is calculated directly from score evidence and remains visible. The following month{emptyMonths.length !== 1 ? 's do' : ' does'} not yet have persisted priority/status/recommendation records:{' '}
               <span className="font-medium">
                 {emptyMonths.map(m => `${m.month.slice(0,3)} ${m.year}`).join(', ')}
               </span>
               .
             </div>
             <div className="text-xs text-muted-foreground">
-              {isMulti
-                ? 'Click "Backfill Range" above to run detection for every month in the selected range, or pick "Month" mode and detect one month at a time.'
-                : 'Click "Detect TNI" above to generate training needs for this month.'}
+              {isAdmin
+                ? isMulti
+                  ? 'Use “Create Action Records” only when these qualifying items should enter the TNI action workflow.'
+                  : 'Use “Create Action Record” only when qualifying items should enter the TNI action workflow.'
+                : 'An Admin can create action records when these qualifying items are ready for workflow management.'}
             </div>
           </AlertDescription>
         </Alert>
@@ -1014,7 +1033,11 @@ export default function TNIReport() {
                     {filteredNeeds.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={8 + periodRanges.length} className="text-center text-muted-foreground py-8">
-                          {searchTerm ? 'No matching results' : 'No training needs identified'}
+                           {searchTerm || gapTypeFilter !== 'all'
+                             ? 'No qualifying rows match the current filters'
+                             : trainingNeeds?.length
+                               ? `No qualifying rows match the ${empStatus} employee scope`
+                               : 'No KPI qualifies for the selected range and continuity rule'}
                         </TableCell>
                       </TableRow>
                     )}

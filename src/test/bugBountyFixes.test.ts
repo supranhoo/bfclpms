@@ -507,9 +507,9 @@ describe('BUG-028: get_kpi_journey_report maps reviewPeriod to review_period (no
 // for months in the selected range. Two contracts must hold:
 //   1) `useBackfillTrainingNeeds` exists and iterates ranges via the existing
 //      `detect_training_needs_for_period` RPC.
-//   2) `TNIReport` surfaces an empty-period alert and an "Export Detection
-//      Status" column so empty months are not mistaken for "no skill gaps".
-describe('BUG-029: TNI empty-period guidance & range backfill', () => {
+//   2) `TNIReport` explains that action records enrich, but never gate, the
+//      score-derived qualification report.
+describe('BUG-029: TNI action-record guidance', () => {
   it('useTNI exposes useBackfillTrainingNeeds calling detect_training_needs_for_period', async () => {
     const fs = await import('node:fs');
     const src = fs.readFileSync('src/hooks/useTNI.ts', 'utf-8');
@@ -519,19 +519,20 @@ describe('BUG-029: TNI empty-period guidance & range backfill', () => {
     expect(src).toMatch(/for\s*\(\s*let\s+i\s*=\s*0;\s*i\s*<\s*ranges\.length/);
   });
 
-  it('TNIReport renders empty-period alert and Detection Status export column', async () => {
+  it('TNIReport renders truthful action-record guidance', async () => {
     const fs = await import('node:fs');
     const src = fs.readFileSync('src/pages/reports/TNIReport.tsx', 'utf-8');
     // Empty-state computation
     expect(src).toMatch(/emptyMonths/);
     // Alert UI
-    expect(src).toMatch(/No TNI data detected/);
-    // Backfill action wired to the new mutation
+    expect(src).toMatch(/No TNI action records exist/);
+    // Admin-only action-record creation is wired to the range mutation.
     expect(src).toMatch(/useBackfillTrainingNeeds/);
-    expect(src).toMatch(/Backfill Range/);
+    expect(src).toMatch(/Create Action Records/);
+    expect(src).toMatch(/isAdmin && isMulti/);
     // Export annotation column
-    expect(src).toMatch(/'Detection Status'/);
-    expect(src).toMatch(/Not detected — run TNI detection/);
+    expect(src).toMatch(/'Action Record Status'/);
+    expect(src).toMatch(/Not created — qualification still shown/);
   });
 });
 

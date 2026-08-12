@@ -19157,6 +19157,7 @@ export type Database = {
           latest_score: number
           months: Json
           scored_months: number
+          weightage: number
           worst_score: number
         }[]
       }
