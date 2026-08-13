@@ -121,7 +121,19 @@ export function EvidencePreviewProvider() {
             );
           });
           const { data, error: sErr } = await Promise.race([signPromise, timeout]);
-          if (sErr || !data?.signedUrl) throw new Error(normalizeEvidenceError(sErr));
+          if (sErr || !data?.signedUrl) {
+            // ADR-256: keep the real storage status/message in the console so a
+            // denial can be traced to a KPI id, while the user still sees the
+            // normalised message.
+            console.warn('[evidence-preview] sign failed', {
+              bucket,
+              path: decodeURIComponent(path),
+              kpiId: decodeURIComponent(path).split('/')[1] ?? null,
+              status: (sErr as { statusCode?: unknown } | null)?.statusCode ?? null,
+              message: (sErr as { message?: unknown } | null)?.message ?? null,
+            });
+            throw new Error(normalizeEvidenceError(sErr));
+          }
           createdUrl = data.signedUrl;
         } else {
           // Non-storage URL — use directly
