@@ -31,10 +31,16 @@ describe("review evidence storage access (ADR-190)", () => {
 
   it("authorises via the KPI id in path segment 2, not the uploader folder", () => {
     const body = policy[policy.length - 1];
-    expect(body).toMatch(/k\.id::text = \(storage\.foldername\(objects\.name\)\)\[2\]/);
-    expect(body).toMatch(/k\.employee_id = auth\.uid\(\)/);
-    expect(body).toMatch(/audit_kpi_assignments/);
-    expect(body).toMatch(/kpi_mention_access/);
+    // The predicate may be inline (original ADR-190 form) or delegated to the
+    // SECURITY DEFINER helper `can_read_kpi_evidence` (ADR-250 perf, ADR-256
+    // parity). Either way it must key on path segment 2 = KPI id.
+    expect(body).toMatch(/\(storage\.foldername\(name\)\)\[2\]|\(storage\.foldername\(objects\.name\)\)\[2\]/);
+    const delegated = /can_read_kpi_evidence\(/.test(body);
+    if (!delegated) {
+      expect(body).toMatch(/k\.employee_id = auth\.uid\(\)/);
+      expect(body).toMatch(/audit_kpi_assignments/);
+      expect(body).toMatch(/kpi_mention_access/);
+    }
   });
 
   it("never leaves the folder-owner read policy dropped without recreating it", () => {

@@ -5320,6 +5320,20 @@ Rules:
 - Storage denials must surface a human-readable message via `normalizeEvidenceError()`; rendering a raw error object (`{}`) is a defect.
 - Guarded by `src/test/review/evidenceStorageAccess.test.ts`.
 
+### Parity amendment (ADR-256, 2026-08-13)
+
+**Evidence read access MUST equal KPI row visibility.** The set of users allowed to open a KPI's evidence file
+(`public.can_read_kpi_evidence`) must be identical to the set allowed to see the KPI row (`public.can_view_kpi_row`):
+KPI owner, `admin`, `auditor`, `hr_pms`, `management`, report-access override, reporting manager, functional manager
+(`profiles.functional_manager_id`), manager-of-manager, resolved skip-level manager (`get_skip_level_manager`),
+auditors assigned via `audit_kpi_assignments` / `audit_kpi_level_assignments`, `kpi_mention_access` holders, and
+org-KPI data owners. Anonymous callers are denied.
+
+- Any change that widens KPI-row visibility MUST widen evidence read in the same step.
+- Storage policies delegate to the helper; do not re-inline the predicate.
+- Signing failures must be logged with bucket / path / KPI id / status while the user sees the normalised message.
+- Guarded by `src/test/review/evidenceReadParity.test.ts`.
+
 ## §EMAIL-SCORE-AND-PREHEADER (ADR-191, 2026-07-28)
 
 Applies to every outbound email produced by `send-email-notification`.

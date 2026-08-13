@@ -31,3 +31,7 @@ The `review-evidence` bucket is private. The review-side dialog's **Download** a
 Evidence paths are `${uploaderId}/${kpiId}/<stage-folder>/<file>` — segment 1 is the **uploader**, not the KPI owner. Read authorisation therefore keys on the **KPI id in segment 2** via the storage policy `Review evidence readable by KPI participants` (KPI owner, reporting manager, skip manager, assigned auditor, `kpi_mention_access`). The legacy folder-owner policy `Users can view authorized evidence` must never be dropped without being recreated in the same migration.
 
 Storage denials must be rendered through `normalizeEvidenceError()` (`src/lib/review/evidenceError.ts`) — never print the raw error object. POLICY §EVIDENCE-READ-KPI-PARTICIPATION.
+
+## Read parity with KPI visibility (ADR-256)
+
+`public.can_read_kpi_evidence(kpi_id)` MUST grant exactly what `public.can_view_kpi_row` grants: owner, `admin`, `auditor`, `hr_pms`, `management`, report-access override, reporting manager, functional manager (`profiles.functional_manager_id`), manager-of-manager, resolved skip-level manager (`get_skip_level_manager`), assigned auditors, `kpi_mention_access`, org-KPI data owners. Widening KPI-row visibility without widening this helper reproduces "You do not have access to this file". Guard: `src/test/review/evidenceReadParity.test.ts`.

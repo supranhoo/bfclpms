@@ -4,6 +4,11 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-08-13 — Evidence attachments open for every KPI viewer (ADR-256)
+- **What:** `can_read_kpi_evidence` now mirrors `can_view_kpi_row`, adding Management, HR PMS, Admin, the resolved skip-level manager, the functional manager, org-KPI data owners and report-access overrides.
+- **Why:** those users saw the attachment chip but Storage refused the signed URL, surfacing as "You do not have access to this file, or it is no longer available." (files were present and intact).
+- **How:** one additive function replacement — storage policies, bucket privacy and the ADR-190 folder-owner policy unchanged; preview failures now log bucket/path/KPI id/status; parity guard `src/test/review/evidenceReadParity.test.ts`.
+
 ## 2026-08-04 — Development Report now records What / Why / How (ADR-249)
 - **What:** added `rationale` (Why it was built) and `usage_notes` (How it is used) to `dev_report_entries`, captured automatically from ADRs, changelog bullets and migrations.
 - **Why:** entries recorded only what shipped, so reviewers could not judge intent or usage without a verbal walkthrough.
