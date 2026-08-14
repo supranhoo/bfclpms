@@ -6104,3 +6104,18 @@ predecessor**.
   "Cannot determine rollback target status".
 - First-stage KPIs with no prior submission show "Awaiting your self-review for
   <period>" so an editable row is not mistaken for a locked one.
+
+## §REVIEW-EDIT-LOCK-REASON (ADR-258, 2026-08-14)
+
+A read-only or disabled state on a review surface MUST be accompanied by a
+plain-language reason.
+
+- Causes are resolved by the SSOT `src/lib/review/editLockReason.ts`
+  (`resolveEditLockReason` / `resolveSubmitBlockReason`); no surface may invent
+  its own wording.
+- Edit-lock precedence is period governance → workflow stage → org-level data
+  ownership. Only the first applicable cause is shown.
+- The Submit block reason MUST mirror the button's `disabled` expression, so a
+  tooltip can never contradict the button.
+- A "Read Only" badge or a greyed Submit button with no stated cause is a
+  defect, not an acceptable state.
