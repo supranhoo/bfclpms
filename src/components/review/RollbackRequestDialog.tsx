@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useCreateRollbackRequest } from '@/hooks/useKpiRollbackRequests';
 import { useToast } from '@/hooks/use-toast';
+import { canRequestRollback, FIRST_STAGE_ROLLBACK_MESSAGE } from '@/lib/rollbackEligibility';
 
 interface RollbackRequestDialogProps {
   open: boolean;
@@ -36,6 +37,17 @@ export function RollbackRequestDialog({
 
   const handleSubmit = async () => {
     if (!reason.trim()) return;
+
+    // ADR-257: block impossible requests from the first workflow stage.
+    if (!canRequestRollback(currentStatus, workflowStages)) {
+      toast({
+        title: 'Rollback not applicable',
+        description: FIRST_STAGE_ROLLBACK_MESSAGE,
+        variant: 'destructive',
+      });
+      onOpenChange(false);
+      return;
+    }
 
     // Pre-submit validation: ensure currentStatus exists in workflowStages
     if (!workflowStages.includes(currentStatus)) {

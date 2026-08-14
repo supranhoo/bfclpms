@@ -180,3 +180,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Employee Master Column Parity](mem://features/admin/employee-master-column-parity) — Columns chooser + import/export parity for all master attributes and custom fields (ADR-247)
 - [Development Report What/Why/How](mem://features/reports/development-report-what-why-how) — rationale + usage_notes capture rules, no-overwrite ingest, appended export columns (ADR-249)
 - [Evidence Preview & KPI Reads](mem://architecture/performance/evidence-preview-and-kpi-reads) — get_all_kpis_slim RPC mandate, streaming signed-URL previews, transient-vs-denied errors (ADR-250)
+- [Rollback first-stage guard](mem://features/review/rollback-first-stage-guard) — Rollback only from a stage with a predecessor; hidden at kra_set (ADR-257)

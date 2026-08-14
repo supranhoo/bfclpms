@@ -92,6 +92,7 @@ import { OrgKpiRatingOverrideWarning } from '@/components/review/OrgKpiRatingOve
 import { RollbackRequestBanner } from '@/components/review/RollbackRequestBanner';
 import { SentBackBanner } from '@/components/review/SentBackBanner';
 import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog';
+import { canRequestRollback } from '@/lib/rollbackEligibility';
 import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
 import { useAuditKpiAssignments } from '@/hooks/useAuditKpiAssignments';
 import { KraExportMenu } from '@/components/review/KraExportMenu';
@@ -2169,7 +2170,7 @@ export function UnifiedScorecard({
                   Close
                 </Button>
                 {/* Request Rollback button in read-only mode */}
-                {selectedKpi && selectedKpi.status !== 'approved' && !pendingRollback && (
+                {selectedKpi && canRequestRollback(selectedKpi.status, effectiveStages) && !pendingRollback && (
                   <Button
                     size="sm"
                     variant="outline"
