@@ -2169,7 +2169,7 @@ export function UnifiedScorecard({
                   Close
                 </Button>
                 {/* Request Rollback button in read-only mode */}
-                {selectedKpi && selectedKpi.status !== 'approved' && !pendingRollback && (
+                {selectedKpi && canRequestRollback(selectedKpi.status, effectiveStages) && !pendingRollback && (
                   <Button
                     size="sm"
                     variant="outline"
