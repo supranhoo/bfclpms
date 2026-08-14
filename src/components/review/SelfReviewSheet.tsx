@@ -50,6 +50,7 @@ import { Target, TrendingUp, CheckCircle2, Send, Eye, AlertCircle, BarChart3, Bu
 import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
 import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog';
 import { canRequestRollback } from '@/lib/rollbackEligibility';
+import { resolveEditLockReason, resolveSubmitBlockReason } from '@/lib/review/editLockReason';
 import { DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { SentBackBanner } from '@/components/review/SentBackBanner';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
