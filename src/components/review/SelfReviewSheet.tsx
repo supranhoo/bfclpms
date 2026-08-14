@@ -593,6 +593,14 @@ export function SelfReviewSheet({
                   </Badge>
                 )}
               </div>
+            </div>
+            {editLockReason && (
+              <p className="text-xs text-muted-foreground flex items-start gap-1 pt-1">
+                <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                <span>{editLockReason.message}</span>
+              </p>
+            )}
+            <div className="hidden">
               <div className="flex items-center gap-2">
                 <FrequencyLockBadge
                   frequency={selectedKpi?.frequency}
