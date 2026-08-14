@@ -4,6 +4,11 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-08-14 — Rollback is no longer offered at the first stage (ADR-257)
+- **What:** the "Request Rollback" button is hidden on KPIs already at the first workflow stage (`kra_set`), and any such request now fails with plain language instead of "Cannot determine rollback target status".
+- **Why:** Binay Singh (102013) July 2026 — an admin full reset had already returned the KPI to `kra_set`, so there was no earlier stage to roll back to; July 2026 itself was verified open (stage `planning`, no locks).
+- **How:** new pure SSOT `src/lib/rollbackEligibility.ts` shared by the hook, the dialog, `UnifiedScorecard` and `SelfReviewSheet`; first-stage KPIs with no prior submission now show "Awaiting your self-review for <period>". Frontend only — no schema, RLS or data change. Guard: `src/test/review/rollbackEligibility.test.ts`.
+
 ## 2026-08-13 — Evidence attachments open for every KPI viewer (ADR-256)
 - **What:** `can_read_kpi_evidence` now mirrors `can_view_kpi_row`, adding Management, HR PMS, Admin, the resolved skip-level manager, the functional manager, org-KPI data owners and report-access overrides.
 - **Why:** those users saw the attachment chip but Storage refused the signed URL, surfacing as "You do not have access to this file, or it is no longer available." (files were present and intact).
