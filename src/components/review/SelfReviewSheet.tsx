@@ -1150,18 +1150,24 @@ export function SelfReviewSheet({
                       );
                     }
 
-                    return (
+                    // ADR-258 — the disabled Submit button must say why.
+                    const submitBlockReason = resolveSubmitBlockReason({
+                      multiMonthBlocked: isMultiMonthBlocked,
+                      needsSubPeriod: needsSubPeriodForKpi,
+                      subPeriodSelected: !!selectedSubPeriod,
+                      hasAchievedValue: !!achievedValue,
+                      isNa,
+                      remarksLength: selfRemarks.trim().length,
+                      remarksMandatory: remarksMandatory.self,
+                      saving: submitReview.isPending || submitSubPeriod.isPending,
+                    });
+
+                    const submitButton = (
                       <Button
                         size="sm"
                         variant="secondary"
                         onClick={handleSubmitReview}
-                        disabled={
-                          isMultiMonthBlocked ||
-                          (needsSubPeriodForKpi && (!selectedSubPeriod || (!isNa && !achievedValue))) ||
-                          (!needsSubPeriodForKpi && !isNa && !achievedValue) ||
-                          (isNa && selfRemarks.trim().length < 50) ||
-                          submitReview.isPending || submitSubPeriod.isPending
-                        }
+                        disabled={!!submitBlockReason}
                       >
                         {(submitReview.isPending || submitSubPeriod.isPending)
                           ? 'Saving...'
@@ -1169,6 +1175,17 @@ export function SelfReviewSheet({
                             ? (currentSubPeriodSubmission ? 'Update Entry' : 'Save Entry')
                             : (isSelfReview ? 'Update' : 'Submit')}
                       </Button>
+                    );
+
+                    if (!submitBlockReason) return submitButton;
+
+                    return (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>{submitButton}</span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">{submitBlockReason}</TooltipContent>
+                      </Tooltip>
                     );
                   })()}
 
