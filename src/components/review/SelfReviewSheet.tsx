@@ -566,6 +566,15 @@ export function SelfReviewSheet({
 
   const isReadOnly = (!isKraSet && !isSelfReview) || isGovernanceLocked;
 
+  // ADR-258 — an edit lock must always state its reason.
+  const editLockReason = resolveEditLockReason({
+    governanceLocked: isGovernanceLocked,
+    pastSelfStage: !isKraSet && !isSelfReview,
+    stageLabel: selectedKpi?.status ? statusLabels[selectedKpi.status] ?? null : null,
+    orgLocked: isOrgLocked,
+    orgOwnerNames: orgKpiOwnerNames,
+  });
+
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
