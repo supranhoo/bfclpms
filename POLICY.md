@@ -6084,3 +6084,23 @@ status `identified`, and their count MUST be disclosed on the report.
 Range-scoped reads MUST page to completion — a report may never present a
 truncated result-set as complete — and a fetch failure MUST be surfaced rather
 than rendered as an empty report.
+
+
+## §KPI-ROLLBACK-FIRST-STAGE-GUARD (ADR-257, 2026-08-14)
+
+A KPI rollback request is valid **only from a workflow stage that has a
+predecessor**.
+
+- After an admin full reset or a send-back, a KPI already sits at the first
+  stage (normally `kra_set`). There is nothing to roll back to; the correct
+  action is to edit and resubmit.
+- The "Request Rollback" control MUST be hidden at the first stage in every
+  entry point (`UnifiedScorecard`, `SelfReviewSheet`), and `RollbackRequestDialog`
+  re-checks on submit so a stale render cannot create an impossible request.
+- Eligibility is resolved by the SSOT `src/lib/rollbackEligibility.ts`
+  (`canRequestRollback` / `isFirstWorkflowStage`), preferring the KPI's resolved
+  workflow stages and falling back to the canonical status list.
+- The user-facing failure message must be plain language, never the internal
+  "Cannot determine rollback target status".
+- First-stage KPIs with no prior submission show "Awaiting your self-review for
+  <period>" so an editable row is not mistaken for a locked one.
