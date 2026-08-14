@@ -50,6 +50,7 @@ import { Target, TrendingUp, CheckCircle2, Send, Eye, AlertCircle, BarChart3, Bu
 import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
 import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog';
 import { canRequestRollback } from '@/lib/rollbackEligibility';
+import { resolveEditLockReason, resolveSubmitBlockReason } from '@/lib/review/editLockReason';
 import { DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { SentBackBanner } from '@/components/review/SentBackBanner';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
@@ -565,6 +566,15 @@ export function SelfReviewSheet({
 
   const isReadOnly = (!isKraSet && !isSelfReview) || isGovernanceLocked;
 
+  // ADR-258 — an edit lock must always state its reason.
+  const editLockReason = resolveEditLockReason({
+    governanceLocked: isGovernanceLocked,
+    pastSelfStage: !isKraSet && !isSelfReview,
+    stageLabel: selectedKpi?.status ? statusLabels[selectedKpi.status] ?? null : null,
+    orgLocked: isOrgLocked,
+    orgOwnerNames: orgKpiOwnerNames,
+  });
+
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
@@ -604,6 +614,12 @@ export function SelfReviewSheet({
                 )}
               </div>
             </div>
+            {editLockReason && (
+              <p className="text-xs text-muted-foreground flex items-start gap-1 pt-1">
+                <AlertCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                <span>{editLockReason.message}</span>
+              </p>
+            )}
           </SheetHeader>
 
           {/* Main Content */}
@@ -1134,18 +1150,24 @@ export function SelfReviewSheet({
                       );
                     }
 
-                    return (
+                    // ADR-258 — the disabled Submit button must say why.
+                    const submitBlockReason = resolveSubmitBlockReason({
+                      multiMonthBlocked: isMultiMonthBlocked,
+                      needsSubPeriod: needsSubPeriodForKpi,
+                      subPeriodSelected: !!selectedSubPeriod,
+                      hasAchievedValue: !!achievedValue,
+                      isNa,
+                      remarksLength: selfRemarks.trim().length,
+                      remarksMandatory: remarksMandatory.self,
+                      saving: submitReview.isPending || submitSubPeriod.isPending,
+                    });
+
+                    const submitButton = (
                       <Button
                         size="sm"
                         variant="secondary"
                         onClick={handleSubmitReview}
-                        disabled={
-                          isMultiMonthBlocked ||
-                          (needsSubPeriodForKpi && (!selectedSubPeriod || (!isNa && !achievedValue))) ||
-                          (!needsSubPeriodForKpi && !isNa && !achievedValue) ||
-                          (isNa && selfRemarks.trim().length < 50) ||
-                          submitReview.isPending || submitSubPeriod.isPending
-                        }
+                        disabled={!!submitBlockReason}
                       >
                         {(submitReview.isPending || submitSubPeriod.isPending)
                           ? 'Saving...'
@@ -1153,6 +1175,17 @@ export function SelfReviewSheet({
                             ? (currentSubPeriodSubmission ? 'Update Entry' : 'Save Entry')
                             : (isSelfReview ? 'Update' : 'Submit')}
                       </Button>
+                    );
+
+                    if (!submitBlockReason) return submitButton;
+
+                    return (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>{submitButton}</span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">{submitBlockReason}</TooltipContent>
+                      </Tooltip>
                     );
                   })()}
 

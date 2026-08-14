@@ -4,6 +4,14 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-08-14 — Read-only rows and disabled Submit now explain themselves (ADR-258)
+
+**What:** The Submit Self Review sheet states why a KPI cannot be edited (period locked by admin, KPI already at a later stage, or org-level KPI owned by a named data owner) and why Submit is greyed out (missing achieved value, missing day/week selection, unfinished multi-month cycle, N/A justification under 50 characters, mandatory remarks).
+
+**Why:** Binay Singh (102013) reported read-only July 2026 fields while the database showed the period open and his KPIs in editable states — no one could tell which gate was firing without a database session.
+
+**How:** All causes come from one resolver, `src/lib/review/editLockReason.ts`, which mirrors the button's disabled condition, so the tooltip and the button can never disagree. POLICY §REVIEW-EDIT-LOCK-REASON.
+
 ## 2026-08-14 — Rollback is no longer offered at the first stage (ADR-257)
 - **What:** the "Request Rollback" button is hidden on KPIs already at the first workflow stage (`kra_set`), and any such request now fails with plain language instead of "Cannot determine rollback target status".
 - **Why:** Binay Singh (102013) July 2026 — an admin full reset had already returned the KPI to `kra_set`, so there was no earlier stage to roll back to; July 2026 itself was verified open (stage `planning`, no locks).
