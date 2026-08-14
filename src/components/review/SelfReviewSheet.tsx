@@ -49,6 +49,7 @@ import { KpiTrackerModal } from '@/components/dashboard/KpiTrackerModal';
 import { Target, TrendingUp, CheckCircle2, Send, Eye, AlertCircle, BarChart3, Building2, Lock, Users, User, FileCheck, Calendar, CalendarDays, AlertTriangle, Loader2, Undo2 } from 'lucide-react';
 import { usePendingRollbackRequest } from '@/hooks/useKpiRollbackRequests';
 import { RollbackRequestDialog } from '@/components/review/RollbackRequestDialog';
+import { canRequestRollback } from '@/lib/rollbackEligibility';
 import { DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { SentBackBanner } from '@/components/review/SentBackBanner';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
@@ -611,6 +612,14 @@ export function SelfReviewSheet({
             {isSentBack && (
               <SentBackBanner kpiId={selectedKpi.id} />
             )}
+            {/* ADR-257: first-stage KPI with no prior submission — make it
+                obvious the row is editable, not locked. */}
+            {isKraSet && !isSentBack && !isGovernanceLocked && (
+              <div className="flex items-center gap-2 rounded-md border border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-900 p-3 text-sm text-slate-700 dark:text-slate-300">
+                <CalendarDays className="h-4 w-4 flex-shrink-0" />
+                <span>Awaiting your self-review for {selectedPeriod} {selectedYear}.</span>
+              </div>
+            )}
             {/* Daily KPI governance bypass banner */}
             {isDailyUnlocked && !isSentBack && (!govPerms.submit_self_review || govPerms.view_only) && (
               <div className="flex items-center gap-2 rounded-md border border-blue-300 bg-blue-50 dark:border-blue-700 dark:bg-blue-950 p-3 text-sm text-blue-800 dark:text-blue-200">
@@ -1070,7 +1079,7 @@ export function SelfReviewSheet({
                   {isReadOnly ? 'Close' : (needsSubPeriodForKpi ? 'Done' : 'Cancel')}
                 </Button>
                 {/* Request Rollback button - shown when KPI is submitted (read-only) and not approved, and no pending request */}
-                {isReadOnly && selectedKpi?.status !== 'approved' && !pendingRollback && (
+                {isReadOnly && canRequestRollback(selectedKpi?.status, effectiveStages) && !pendingRollback && (
                   <Button
                     size="sm"
                     variant="outline"
