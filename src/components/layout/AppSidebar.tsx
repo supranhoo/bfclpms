@@ -46,6 +46,7 @@ import {
   GitBranch,
   Library,
   GitMerge,
+  FlaskConical,
   LayoutDashboard,
   Package,
   GraduationCap,
@@ -119,6 +120,7 @@ const getStaticMenuItems = (policyVisibleRoles: string[]) => ({
     { title: 'KPI Mapping', icon: Target, path: '/admin/kpi-mapping', menuKey: 'admin-kpi-mapping', roles: ['admin'] },
     { title: 'Weightage Matrix', icon: Percent, path: '/admin/kpi-weightage', menuKey: 'admin-weightage', roles: ['admin'] },
     { title: 'KPI Standardization', icon: GitMerge, path: '/admin/kpi-standardization', menuKey: 'admin-kpi-standardization', roles: ['admin'] },
+    { title: 'BU Performance Console (Beta)', icon: FlaskConical, path: '/admin/bu-console', menuKey: 'admin-bu-console', roles: ['admin'] },
   ],
   dataEntry: [
     // Data Entry items are grant-driven (access profile / user override / menu_access_config).
@@ -143,6 +145,7 @@ const KRA_SETTINGS_PATHS = new Set([
   '/admin/kpi-mapping',
   '/admin/kpi-weightage',
   '/admin/kpi-standardization',
+  '/admin/bu-console',
 ]);
 
 const GROUP_PARENT_KEY: Record<string, string> = {

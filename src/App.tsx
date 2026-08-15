@@ -43,6 +43,7 @@ const SystemSettings = lazy(() => import("./pages/admin/SystemSettings"));
 const WorkflowConfig = lazy(() => import("./pages/admin/WorkflowConfig"));
 const OrgKpiDataEntry = lazy(() => import("./pages/admin/OrgKpiDataEntry"));
 const OrgKpiOverview = lazy(() => import("./pages/admin/OrgKpiOverview"));
+const BuConsole = lazy(() => import("./pages/admin/BuConsole"));
 const OrgKpiEvidenceDemo = lazy(() => import("./pages/admin/OrgKpiEvidenceDemo"));
 const KRALibrary = lazy(() => import("./pages/admin/KRALibrary"));
 const TemplateBundles = lazy(() => import("./pages/admin/TemplateBundles"));
@@ -350,6 +351,11 @@ const App = () => (
                 <Route path="/admin/org-kpi-overview" element={
                   <ProtectedRoute allowedRoles={['admin']} menuKey="admin-org-kpi-overview">
                     <OrgKpiOverview />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/bu-console" element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <Suspense fallback={<PageFallback />}><BuConsole /></Suspense>
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/org-kpi-evidence-demo" element={
