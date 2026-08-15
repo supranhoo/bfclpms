@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { diffChanges, hasChanges, weightageDeviations, uniqueByEmployee } from './groupEditModel';
+import {
+  diffChanges, hasChanges, weightageDeviations, uniqueByEmployee,
+  isMultiMonthFrequency, validateCycleChange,
+} from './groupEditModel';
 import { directionConflictsWithLadder, buildScoringPayload } from '@/components/admin/kpi-form/kpiFormModel';
 
 const ALLOWED = ['kpi_title', 'weightage', 'target_value', 'r5'];
@@ -50,6 +53,43 @@ describe('uniqueByEmployee', () => {
       { employee_id: 'b', new_total: 100 },
     ];
     expect(uniqueByEmployee(rows)).toHaveLength(2);
+  });
+});
+
+// ADR-275 — a frequency change must always travel with its cycle anchor.
+describe('ADR-275 cycle anchor validation', () => {
+  it('knows which frequencies span several months', () => {
+    expect(isMultiMonthFrequency('Quarterly')).toBe(true);
+    expect(isMultiMonthFrequency('Bi-Monthly')).toBe(true);
+    expect(isMultiMonthFrequency('Monthly')).toBe(false);
+    expect(isMultiMonthFrequency(null)).toBe(false);
+  });
+
+  it('rejects a multi-month frequency with no anchor', () => {
+    expect(validateCycleChange({ frequency: 'Quarterly' })).toMatch(/cycle anchor/i);
+    expect(validateCycleChange({ frequency: 'Quarterly', frequency_cycle_start: null })).toMatch(/cycle anchor/i);
+  });
+
+  it('accepts a multi-month frequency with an anchor', () => {
+    expect(validateCycleChange({ frequency: 'Quarterly', frequency_cycle_start: 'Apr-Jun' })).toBeNull();
+  });
+
+  it('rejects an anchor on a single-month frequency', () => {
+    expect(validateCycleChange({ frequency: 'Monthly', frequency_cycle_start: 'Jan-Feb' })).toMatch(/cannot carry/i);
+    expect(validateCycleChange({ frequency: 'Monthly', frequency_cycle_start: null })).toBeNull();
+  });
+
+  it('stays quiet when the frequency is untouched', () => {
+    expect(validateCycleChange({ weightage: '10' })).toBeNull();
+  });
+
+  it('diffs the newly editable operational fields', () => {
+    const changes = diffChanges(
+      { frequency: 'Monthly', frequency_cycle_start: null, day_count_type: 'working_days', is_org_level: false },
+      { frequency: 'Quarterly', frequency_cycle_start: 'Apr-Jun', day_count_type: 'working_days', is_org_level: 'true' },
+      ['frequency', 'frequency_cycle_start', 'day_count_type', 'is_org_level'],
+    );
+    expect(changes).toEqual({ frequency: 'Quarterly', frequency_cycle_start: 'Apr-Jun', is_org_level: 'true' });
   });
 });
 

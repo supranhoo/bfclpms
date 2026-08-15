@@ -70,7 +70,7 @@ export interface BuConsoleTree {
   categories: BuConsoleCategoryNode[];
 }
 
-export interface BuConsoleEmployeeRow {
+export interface BuConsoleEmployeeRow extends BuConsoleEmployeeRowExtras {
   kpi_id: string;
   employee_id: string;
   employee_name: string | null;
@@ -95,6 +95,26 @@ export interface BuConsoleEmployeeRow {
   manager_score: number | null;
   final_score: number | null;
   final_rating: string | null;
+}
+
+/** ADR-275 — operational fields the console can now also read and tune. */
+export interface BuConsoleEmployeeRowExtras {
+  frequency_cycle_start: string | null;
+  sub_frequency: string | null;
+  day_count_type: string | null;
+  is_frequency_locked: boolean | null;
+  require_resubmit_reason: boolean | null;
+  is_org_level: boolean | null;
+  org_level_scope: string | null;
+  ref_code: string | null;
+  criteria: string | null;
+  source_of_data: string | null;
+  uom_type: string | null;
+  threshold_mode: string | null;
+  r0: string | null; r1: string | null; r2: string | null;
+  r3: string | null; r4: string | null; r5: string | null;
+  /** Field names already tuned for this employee (protected from group edits). */
+  override_fields: string[];
 }
 
 export interface BuConsoleKpiDetail {
@@ -894,6 +914,9 @@ export const GROUP_EDIT_FIELDS = [
   'weightage', 'target_value', 'uom', 'uom_type', 'frequency', 'threshold_mode',
   'qualitative_options', 'r5', 'r4', 'r3', 'r2', 'r1', 'r0',
   'kra_name', 'category_id', 'criteria', 'source_of_data',
+  // ADR-275 — cycle anchor and operational flags.
+  'frequency_cycle_start', 'day_count_type', 'is_org_level', 'org_level_scope',
+  'require_resubmit_reason', 'is_frequency_locked',
 ] as const;
 
 export type GroupEditField = (typeof GROUP_EDIT_FIELDS)[number];
@@ -916,13 +939,33 @@ export const GROUP_EDIT_FIELD_LABELS: Record<string, string> = {
   category_id: 'Category',
   criteria: 'Direction',
   source_of_data: 'Source of data',
+  frequency_cycle_start: 'Cycle anchor',
+  day_count_type: 'Day counting',
+  is_org_level: 'Organisation-level KPI',
+  org_level_scope: 'Org-level scope',
+  require_resubmit_reason: 'Reason on resubmission',
+  is_frequency_locked: 'Lock frequency after submission',
 };
 
 export const GROUP_EDIT_SKIP_LABELS: Record<string, string> = {
   final_score_locked: 'Final score approved — immutable (POLICY §88)',
   past_kra_set: 'Already in review — enable "include rows already in review" to edit',
   individual_override: 'Individually overridden — tick "reset overrides" to include',
+  cycle_anchor_conflict: 'The new cycle overlaps an existing cycle for this KPI',
+  no_change: 'Nothing changed',
+  not_found: 'This KPI row no longer exists',
 };
+
+/** ADR-275 — one row per employee whose new cycle would clash with an existing one. */
+export interface CycleAnchorConflictRow {
+  kpi_id: string;
+  employee_id: string;
+  employee_name: string | null;
+  employee_code: string | null;
+  existing_anchor: string | null;
+  new_anchor: string | null;
+  frequency: string | null;
+}
 
 export interface GroupEditPreviewRow {
   kpi_id: string;
@@ -957,6 +1000,8 @@ export interface GroupEditResult {
   detail_truncated?: boolean;
   skip_summary?: SkipSummaryEntry[];
   weightage_impact?: GroupEditWeightageRow[];
+  cycle_change?: boolean;
+  anchor_conflicts?: CycleAnchorConflictRow[];
   preview?: GroupEditPreviewRow[];
   skipped_details?: GroupWriteSkipRow[];
 }
@@ -1065,9 +1110,74 @@ export function useRowOverride() {
   });
 }
 
+/**
+ * ADR-275 — tune several employees in one undoable run.
+ * Used by the inline bulk editor in the mapped-employee table.
+ */
+export interface BulkRowOverrideRow {
+  kpi_id: string;
+  changes: Record<string, string | null>;
+}
+
+export interface BulkRowOverrideResult {
+  authorized: boolean;
+  run_id?: string | null;
+  updated?: number;
+  skipped?: { kpi_id: string; reason: string }[];
+}
+
+export function useBulkRowOverrides() {
+  const qc = useQueryClient();
+  return useMutation<BulkRowOverrideResult, Error, { rows: BulkRowOverrideRow[]; allowLocked?: boolean }>({
+    mutationFn: async (a) => {
+      const { data, error } = await supabase.rpc('bu_console_bulk_row_overrides' as any, {
+        p_rows: a.rows,
+        p_allow_locked: a.allowLocked ?? false,
+      });
+      if (error) throw error;
+      return (data ?? { authorized: false }) as unknown as BulkRowOverrideResult;
+    },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['bu-console-kpi-detail'] });
+      qc.invalidateQueries({ queryKey: ['bu-console-edit-runs'] });
+      const n = res.updated ?? 0;
+      const skipped = res.skipped?.length ?? 0;
+      if (n === 0) {
+        toast.warning(skipped ? `Nothing written — ${skipped} row(s) skipped.` : 'Nothing changed.');
+        return;
+      }
+      toast.success(
+        `${n} employee row${n === 1 ? '' : 's'} tuned` + (skipped ? ` · ${skipped} skipped` : ''),
+        { description: res.run_id ? `Run ${res.run_id.slice(0, 8)} — can be undone` : undefined },
+      );
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not save these individual edits.'),
+  });
+}
+
+/** Drops the override marker so the row follows group edits again. */
+export function useClearRowOverrides() {
+  const qc = useQueryClient();
+  return useMutation<{ authorized: boolean; cleared?: number }, Error, { kpiId: string; fields?: string[] }>({
+    mutationFn: async (a) => {
+      const { data, error } = await supabase.rpc('bu_console_clear_row_overrides' as any, {
+        p_kpi_id: a.kpiId,
+        p_fields: a.fields ?? null,
+      });
+      if (error) throw error;
+      return (data ?? { authorized: false }) as any;
+    },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['bu-console-kpi-detail'] });
+      toast.success(`${res.cleared ?? 0} field(s) will follow the group definition again.`);
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not clear the overrides.'),
+  });
+}
+
 export interface ConsoleEditRun {
   id: string;
-  scope_kind: 'group' | 'row';
+  scope_kind: 'group' | 'row' | 'row_bulk';
   kra_name: string | null;
   kpi_name: string | null;
   review_period: string | null;

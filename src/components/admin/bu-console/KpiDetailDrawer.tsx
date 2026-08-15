@@ -7,9 +7,17 @@ import { useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useBuConsoleKpiDetail, type KpiDetailArgs, type BuConsoleEmployeeRow } from '@/hooks/useBuConsole';
+import {
+  useBuConsoleKpiDetail, useBulkRowOverrides,
+  type KpiDetailArgs, type BuConsoleEmployeeRow,
+} from '@/hooks/useBuConsole';
 import { KpiTextBlocks } from '@/components/kpi/KpiText';
 import { KpiScoringScale, KpiTypeBadge } from '@/components/review/KpiScoringScale';
 import { isMixedScoringGroup, resolveKpiScoringModel } from '@/lib/kpiScoringModel';
@@ -35,11 +43,40 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
   const [approveOpen, setApproveOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [overrideRow, setOverrideRow] = useState<BuConsoleEmployeeRow | null>(null);
+  // ADR-275 — inline bulk tuning: pick rows, set a value, one undoable run.
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [bulkWeightage, setBulkWeightage] = useState('');
+  const [bulkTarget, setBulkTarget] = useState('');
+  const [bulkAllowLocked, setBulkAllowLocked] = useState(false);
+  const bulkMut = useBulkRowOverrides();
   const def = (data?.definition ?? {}) as Record<string, any>;
   const variantCount = Number(def.variant_count ?? 1);
   const mixedTypes = isMixedScoringGroup(def.uom_types);
   const scoringModel = resolveKpiScoringModel(def as any);
   const totalPages = data ? Math.max(1, Math.ceil(data.total / (data.page_size || 200))) : 1;
+  const selectedIds = Object.keys(selected).filter((id) => selected[id]);
+  const bulkChanges: Record<string, string | null> = {};
+  if (bulkWeightage.trim()) bulkChanges.weightage = bulkWeightage.trim();
+  if (bulkTarget.trim()) bulkChanges.target_value = bulkTarget.trim();
+  const canApplyBulk = selectedIds.length > 0 && Object.keys(bulkChanges).length > 0;
+
+  const applyBulk = () => {
+    if (!canApplyBulk) return;
+    bulkMut.mutate(
+      {
+        rows: selectedIds.map((kpi_id) => ({ kpi_id, changes: bulkChanges })),
+        allowLocked: bulkAllowLocked,
+      },
+      {
+        onSuccess: () => {
+          setSelected({});
+          setBulkWeightage('');
+          setBulkTarget('');
+        },
+      },
+    );
+  };
 
   return (
     <Sheet open={!!args} onOpenChange={(open) => !open && onClose()}>
@@ -113,6 +150,14 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
             >
               Edit definition for all {data.total}
             </Button>
+            <Button
+              size="sm"
+              variant={bulkMode ? 'default' : 'outline'}
+              onClick={() => { setBulkMode((v) => !v); setSelected({}); }}
+              disabled={!args || data.total === 0}
+            >
+              {bulkMode ? 'Done tuning' : 'Tune several employees'}
+            </Button>
           </div>
         )}
 
@@ -139,6 +184,9 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
             <section className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
               <Meta label="Unit" value={def.uom} />
               <Meta label="Frequency" value={def.frequency} />
+              <Meta label="Cycle anchor" value={def.frequency_cycle_start} />
+              {def.frequency === 'Daily' && <Meta label="Day counting" value={def.day_count_type} />}
+              {def.is_org_level && <Meta label="Org-level scope" value={def.org_level_scope || 'organization'} />}
               <Meta label="Variants" value={String(variantCount)} />
               <div>
                 <p className="text-xs uppercase text-muted-foreground">KPI type</p>
@@ -163,6 +211,46 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
             </section>
 
             <section>
+              {bulkMode && (
+                <div className="mb-3 space-y-3 rounded-md border p-3">
+                  <p className="text-xs text-muted-foreground">
+                    Values entered here are saved as individual overrides for the selected
+                    employees only, in one run you can undo. Leave a box blank to keep it as-is.
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Weightage</Label>
+                      <Input
+                        value={bulkWeightage}
+                        inputMode="decimal"
+                        placeholder="unchanged"
+                        onChange={(e) => setBulkWeightage(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Target</Label>
+                      <Input
+                        value={bulkTarget}
+                        inputMode="decimal"
+                        placeholder="unchanged"
+                        onChange={(e) => setBulkTarget(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-end justify-between gap-2">
+                      <div>
+                        <Label className="text-xs">Include rows in review</Label>
+                        <p className="text-[11px] text-muted-foreground">Approved scores stay immutable.</p>
+                      </div>
+                      <Switch checked={bulkAllowLocked} onCheckedChange={setBulkAllowLocked} />
+                    </div>
+                  </div>
+                  <Button size="sm" onClick={applyBulk} disabled={!canApplyBulk || bulkMut.isPending}>
+                    {bulkMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save for {selectedIds.length} selected
+                  </Button>
+                </div>
+              )}
+
               <div className="mb-2 flex items-center justify-between">
                 <h3 className="text-sm font-semibold">
                   Mapped employees <Badge variant="secondary">{data.total}</Badge>
@@ -194,6 +282,19 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      {bulkMode && (
+                        <TableHead className="w-[36px]">
+                          <Checkbox
+                            checked={data.rows.length > 0 && data.rows.every((r) => selected[r.kpi_id])}
+                            onCheckedChange={(v) => {
+                              const next: Record<string, boolean> = { ...selected };
+                              data.rows.forEach((r) => { next[r.kpi_id] = v === true; });
+                              setSelected(next);
+                            }}
+                            aria-label="Select all rows on this page"
+                          />
+                        </TableHead>
+                      )}
                       <TableHead>Employee</TableHead>
                       <TableHead>Department</TableHead>
                       {variantCount > 1 && <TableHead>Variant</TableHead>}
@@ -208,10 +309,31 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
                   <TableBody>
                     {data.rows.map(r => (
                       <TableRow key={r.kpi_id}>
+                        {bulkMode && (
+                          <TableCell>
+                            <Checkbox
+                              checked={!!selected[r.kpi_id]}
+                              onCheckedChange={(v) =>
+                                setSelected((prev) => ({ ...prev, [r.kpi_id]: v === true }))
+                              }
+                              aria-label={`Select ${r.employee_name ?? 'employee'}`}
+                            />
+                          </TableCell>
+                        )}
                         <TableCell className="font-medium">
                           {r.employee_name ?? '—'}
                           {r.employee_code && (
                             <span className="ml-1 text-xs text-muted-foreground">({r.employee_code})</span>
+                          )}
+                          {(r.override_fields?.length ?? 0) > 0 && (
+                            <Badge variant="secondary" className="ml-1 text-[10px]">
+                              tuned ({r.override_fields.length})
+                            </Badge>
+                          )}
+                          {r.frequency_cycle_start && (
+                            <span className="ml-1 text-[10px] text-muted-foreground">
+                              {r.frequency_cycle_start}
+                            </span>
                           )}
                         </TableCell>
                         <TableCell className="text-muted-foreground">{r.department_name ?? '—'}</TableCell>
@@ -240,7 +362,10 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
                     ))}
                     {data.rows.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={variantCount > 1 ? 9 : 8} className="text-center text-sm text-muted-foreground">
+                        <TableCell
+                          colSpan={(variantCount > 1 ? 9 : 8) + (bulkMode ? 1 : 0)}
+                          className="text-center text-sm text-muted-foreground"
+                        >
                           No mapped employees in this scope.
                         </TableCell>
                       </TableRow>

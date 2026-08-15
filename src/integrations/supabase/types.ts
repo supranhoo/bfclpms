@@ -17106,7 +17106,19 @@ export type Database = {
         Args: { p_changes: Json; p_kpi_id: string }
         Returns: Json
       }
+      bu_console_bulk_row_overrides: {
+        Args: { p_allow_locked?: boolean; p_rows: Json }
+        Returns: Json
+      }
       bu_console_can_read: { Args: { _uid: string }; Returns: boolean }
+      bu_console_clear_row_overrides: {
+        Args: { p_fields?: string[]; p_kpi_id: string }
+        Returns: Json
+      }
+      bu_console_cycle_anchor_conflict: {
+        Args: { p_anchor: string; p_frequency: string; p_kpi_id: string }
+        Returns: string
+      }
       bu_console_decide_merge_proposal: {
         Args: { p_approve: boolean; p_note?: string; p_proposal_id: string }
         Returns: Json
@@ -17219,6 +17231,10 @@ export type Database = {
         Returns: Json
       }
       bu_console_undo_edit_run: { Args: { p_run_id: string }; Returns: Json }
+      bu_console_validate_changes: {
+        Args: { p_changes: Json }
+        Returns: undefined
+      }
       bu_console_variant_key: {
         Args: {
           p_desc: string

@@ -15,10 +15,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, Loader2 } from 'lucide-react';
-import { useRowOverride, type BuConsoleEmployeeRow } from '@/hooks/useBuConsole';
+import {
+  useRowOverride, useClearRowOverrides, GROUP_EDIT_FIELD_LABELS, type BuConsoleEmployeeRow,
+} from '@/hooks/useBuConsole';
 import { KPI_DIRECTION_OPTIONS, directionConflictsWithLadder } from '@/components/admin/kpi-form/kpiFormModel';
-import { diffChanges, hasChanges } from './groupEditModel';
+import { diffChanges, hasChanges, isMultiMonthFrequency, validateCycleChange } from './groupEditModel';
+import { getCycleOptionsForFrequency, deriveCycleOptionFromCycleStart } from '@/lib/frequencyCycleOptions';
 
 /**
  * ADR-274a — per-employee tuning covers the same scoring inputs as the group
@@ -27,9 +31,16 @@ import { diffChanges, hasChanges } from './groupEditModel';
 const ROW_FIELDS = [
   'weightage', 'target_value', 'uom', 'frequency', 'criteria', 'source_of_data',
   'r5', 'r4', 'r3', 'r2', 'r1', 'r0',
+  // ADR-275 — the cycle anchor and day counting are per-employee tunable too.
+  'frequency_cycle_start', 'day_count_type',
 ] as const;
 
 const FREQUENCY_OPTIONS = ['Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
+
+const DAY_COUNT_OPTIONS = [
+  { value: 'working_days', label: 'Working days only' },
+  { value: 'all_days', label: 'All calendar days' },
+];
 
 interface Props {
   row: BuConsoleEmployeeRow | null;
@@ -41,6 +52,7 @@ export function RowOverrideDialog({ row, open, onOpenChange }: Props) {
   const [form, setForm] = useState<Record<string, string>>({});
   const [allowLocked, setAllowLocked] = useState(false);
   const mut = useRowOverride();
+  const clearMut = useClearRowOverrides();
 
   useEffect(() => {
     if (!open || !row) return;
@@ -58,9 +70,21 @@ export function RowOverrideDialog({ row, open, onOpenChange }: Props) {
 
   const changes = diffChanges(original, form, ROW_FIELDS as unknown as string[]);
   const ladderConflict = directionConflictsWithLadder(form.criteria, form.r5, form.r1);
+  const cycleError = validateCycleChange(changes);
+  const overrides = (row?.override_fields ?? []) as string[];
+
+  const cycleOptions = useMemo(() => {
+    const opts = getCycleOptionsForFrequency(form.frequency) ?? [];
+    const current = form.frequency_cycle_start;
+    if (current && !opts.some((o) => o.value === current)) {
+      const derived = deriveCycleOptionFromCycleStart(form.frequency, current);
+      if (derived) return [derived, ...opts];
+    }
+    return opts;
+  }, [form.frequency, form.frequency_cycle_start]);
 
   const save = () => {
-    if (!row || !hasChanges(changes)) return;
+    if (!row || !hasChanges(changes) || cycleError) return;
     mut.mutate(
       { kpiId: (row as any).kpi_id, changes, allowLocked },
       { onSuccess: () => onOpenChange(false) },
@@ -88,7 +112,15 @@ export function RowOverrideDialog({ row, open, onOpenChange }: Props) {
             <Label className="text-xs">Frequency</Label>
             <Select
               value={form.frequency || undefined}
-              onValueChange={(v) => setForm((prev) => ({ ...prev, frequency: v }))}
+              onValueChange={(v) =>
+                setForm((prev) => ({
+                  ...prev,
+                  frequency: v,
+                  frequency_cycle_start: isMultiMonthFrequency(v)
+                    ? (prev.frequency === v ? prev.frequency_cycle_start : getCycleOptionsForFrequency(v)?.[0]?.value ?? '')
+                    : '',
+                }))
+              }
             >
               <SelectTrigger><SelectValue placeholder="Unchanged" /></SelectTrigger>
               <SelectContent>
@@ -111,6 +143,38 @@ export function RowOverrideDialog({ row, open, onOpenChange }: Props) {
           <Field label="Source of data" k="source_of_data" form={form} setForm={setForm} />
         </div>
 
+        {isMultiMonthFrequency(form.frequency) && (
+          <div className="space-y-1">
+            <Label className="text-xs">Cycle anchor</Label>
+            <Select
+              value={form.frequency_cycle_start || undefined}
+              onValueChange={(v) => setForm((prev) => ({ ...prev, frequency_cycle_start: v }))}
+            >
+              <SelectTrigger><SelectValue placeholder="Pick the cycle" /></SelectTrigger>
+              <SelectContent>
+                {cycleOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.value} — {o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {form.frequency === 'Daily' && (
+          <div className="space-y-1">
+            <Label className="text-xs">Day counting</Label>
+            <Select
+              value={form.day_count_type || undefined}
+              onValueChange={(v) => setForm((prev) => ({ ...prev, day_count_type: v }))}
+            >
+              <SelectTrigger><SelectValue placeholder="Unchanged" /></SelectTrigger>
+              <SelectContent>
+                {DAY_COUNT_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         <div className="space-y-1.5">
           <Label className="text-xs uppercase text-muted-foreground">Scoring ladder</Label>
           <div className="grid gap-2 sm:grid-cols-3">
@@ -126,6 +190,36 @@ export function RowOverrideDialog({ row, open, onOpenChange }: Props) {
           )}
         </div>
 
+        {cycleError && (
+          <p className="flex items-center gap-1 text-xs text-destructive">
+            <AlertTriangle className="h-3 w-3" /> {cycleError}
+          </p>
+        )}
+
+        {overrides.length > 0 && (
+          <div className="space-y-2 rounded-md border p-3">
+            <p className="text-xs font-medium">
+              Already tuned for this employee — protected from group edits
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {overrides.map((f) => (
+                <Badge key={f} variant="secondary">{GROUP_EDIT_FIELD_LABELS[f] ?? f}</Badge>
+              ))}
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={clearMut.isPending}
+              onClick={() =>
+                row && clearMut.mutate({ kpiId: (row as any).kpi_id }, { onSuccess: () => onOpenChange(false) })
+              }
+            >
+              {clearMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Follow the group definition again
+            </Button>
+          </div>
+        )}
+
         <div className="flex items-center justify-between gap-3 rounded-md border p-3">
           <div>
             <Label className="text-xs font-medium">Allow even though the review has started</Label>
@@ -136,7 +230,7 @@ export function RowOverrideDialog({ row, open, onOpenChange }: Props) {
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={save} disabled={!hasChanges(changes) || mut.isPending}>
+          <Button onClick={save} disabled={!hasChanges(changes) || !!cycleError || mut.isPending}>
             {mut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save override
           </Button>
