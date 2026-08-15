@@ -225,6 +225,7 @@ export default function BuConsole() {
             onRefresh={() => refetch()}
             isBusy={isFetching}
             hasScope={!!scope}
+            isDirty={scopeDirty}
             hint={!scope ? 'Nothing loads until you apply a scope — this keeps large BUs responsive.' : undefined}
           />
 
@@ -262,6 +263,7 @@ export default function BuConsole() {
           )}
 
           {tree?.authorized && !isFetching && (
+            <div className={scopeDirty ? 'opacity-60 transition-opacity' : undefined} aria-busy={scopeDirty}>
             <BuConsoleTree
               categories={tree.categories}
               selectedCategoryId={categoryId}
