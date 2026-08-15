@@ -139,6 +139,9 @@ export interface BuConsoleScope {
   year: number;
   buIds: string[];
   deptIds: string[];
+  /** ADR-265 — scope may additionally be narrowed by division and reporting manager. */
+  divisionIds?: string[];
+  managerIds?: string[];
 }
 
 export function useBuConsoleTree(scope: BuConsoleScope | null) {
@@ -153,6 +156,8 @@ export function useBuConsoleTree(scope: BuConsoleScope | null) {
         p_year: scope!.year,
         p_bu_ids: scope!.buIds.length ? scope!.buIds : null,
         p_dept_ids: scope!.deptIds.length ? scope!.deptIds : null,
+        p_division_ids: scope!.divisionIds?.length ? scope!.divisionIds : null,
+        p_manager_ids: scope!.managerIds?.length ? scope!.managerIds : null,
       });
       if (error) throw error;
       return (data ?? { authorized: false, categories: [] }) as unknown as BuConsoleTree;
@@ -182,6 +187,8 @@ export function useBuConsoleKpiDetail(args: KpiDetailArgs | null) {
         p_year: args!.year,
         p_bu_ids: args!.buIds.length ? args!.buIds : null,
         p_dept_ids: args!.deptIds.length ? args!.deptIds : null,
+        p_division_ids: args!.divisionIds?.length ? args!.divisionIds : null,
+        p_manager_ids: args!.managerIds?.length ? args!.managerIds : null,
         p_page: args!.page,
         p_page_size: 200,
       });
@@ -323,6 +330,8 @@ export interface GroupWriteArgs {
   year: number;
   buIds: string[];
   deptIds: string[];
+  divisionIds?: string[];
+  managerIds?: string[];
   achievedValue: number | null;
   isNa: boolean;
   remarks: string | null;
@@ -340,6 +349,8 @@ async function callGroupWrite(a: GroupWriteArgs): Promise<GroupWriteResult> {
     p_achieved_value: a.achievedValue,
     p_bu_ids: a.buIds.length ? a.buIds : null,
     p_dept_ids: a.deptIds.length ? a.deptIds : null,
+    p_division_ids: a.divisionIds?.length ? a.divisionIds : null,
+    p_manager_ids: a.managerIds?.length ? a.managerIds : null,
     p_is_na: a.isNa,
     p_remarks: a.remarks,
     p_overwrite_policy: a.policy,
@@ -441,6 +452,8 @@ export interface GroupAdvanceArgs {
   year: number;
   buIds: string[];
   deptIds: string[];
+  divisionIds?: string[];
+  managerIds?: string[];
   targetStage: string;
   remarks: string | null;
   dryRun: boolean;
@@ -456,6 +469,8 @@ async function callGroupAdvance(a: GroupAdvanceArgs): Promise<GroupAdvanceResult
     p_target_stage: a.targetStage,
     p_bu_ids: a.buIds.length ? a.buIds : null,
     p_dept_ids: a.deptIds.length ? a.deptIds : null,
+    p_division_ids: a.divisionIds?.length ? a.divisionIds : null,
+    p_manager_ids: a.managerIds?.length ? a.managerIds : null,
     p_remarks: a.remarks,
     p_dry_run: a.dryRun,
   });
