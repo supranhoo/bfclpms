@@ -38,11 +38,17 @@ import {
   affectedCount,
   GROUP_ACTION_CONFIRM_WORD,
 } from '@/lib/review/groupPreviewSummary';
+import { KPI_TYPE_LABELS, type KpiScoringModel } from '@/lib/kpiScoringModel';
 
 interface Props {
   args: KpiDetailArgs | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * ADR-271 — the group's scoring model. Binary/tiered KPIs get their own
+   * options instead of a free numeric field.
+   */
+  scoringModel?: KpiScoringModel | null;
 }
 
 const POLICY_OPTIONS: { value: GroupWritePolicy; label: string; hint: string }[] = [
@@ -55,7 +61,7 @@ const POLICY_OPTIONS: { value: GroupWritePolicy; label: string; hint: string }[]
 const fmt = (v: number | null | undefined) =>
   v === null || v === undefined ? '—' : Number(v).toFixed(2);
 
-export function GroupValueEntryDialog({ args, open, onOpenChange }: Props) {
+export function GroupValueEntryDialog({ args, open, onOpenChange, scoringModel }: Props) {
   const [value, setValue] = useState('');
   const [isNa, setIsNa] = useState(false);
   const [remarks, setRemarks] = useState('');
@@ -66,7 +72,15 @@ export function GroupValueEntryDialog({ args, open, onOpenChange }: Props) {
   const previewMut = useGroupWritePreview();
   const commitMut = useGroupWriteCommit();
 
-  const numericValue = value.trim() === '' ? null : Number(value);
+  const isQualitative = scoringModel?.type === 'binary' || scoringModel?.type === 'tiered';
+  const selectedOption = isQualitative
+    ? scoringModel!.options.find(o => o.label === value) ?? null
+    : null;
+  // Qualitative KPIs are stored as their 0-5 rating (see ADR-271 / auditor
+  // draft hydration): never parseFloat a label.
+  const numericValue = isQualitative
+    ? (selectedOption ? selectedOption.rating : null)
+    : (value.trim() === '' ? null : Number(value));
   const valueInvalid = !isNa && (numericValue === null || Number.isNaN(numericValue));
 
   const basePayload = useMemo(() => {
@@ -133,15 +147,47 @@ export function GroupValueEntryDialog({ args, open, onOpenChange }: Props) {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="bu-group-value">Actual value</Label>
-            <Input
-              id="bu-group-value"
-              inputMode="decimal"
-              value={value}
-              disabled={isNa}
-              placeholder="e.g. 92.5"
-              onChange={(e) => { setValue(e.target.value); setPreview(null); }}
-            />
+            <Label htmlFor="bu-group-value">
+              {isQualitative ? 'Outcome' : 'Actual value'}
+              {scoringModel && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  {KPI_TYPE_LABELS[scoringModel.uomType]}
+                </span>
+              )}
+            </Label>
+            {isQualitative ? (
+              <Select
+                value={value}
+                disabled={isNa}
+                onValueChange={(v) => { setValue(v); setPreview(null); }}
+              >
+                <SelectTrigger id="bu-group-value">
+                  <SelectValue placeholder="Select outcome" />
+                </SelectTrigger>
+                <SelectContent>
+                  {scoringModel!.options.map(o => (
+                    <SelectItem key={o.label} value={o.label}>
+                      {o.label} — R{o.rating}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                id="bu-group-value"
+                inputMode="decimal"
+                value={value}
+                disabled={isNa}
+                placeholder="e.g. 92.5"
+                onChange={(e) => { setValue(e.target.value); setPreview(null); }}
+              />
+            )}
+            {scoringModel?.type === 'unconfigured' && !isNa && (
+              <p className="text-xs text-muted-foreground">
+                No scoring logic is configured for this KPI, so the value is stored without a
+                derived rating.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -197,7 +243,11 @@ export function GroupValueEntryDialog({ args, open, onOpenChange }: Props) {
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <Badge variant="secondary">{preview.will_write ?? 0} will be written</Badge>
               <Badge variant="outline">{preview.will_skip ?? 0} will be skipped</Badge>
-              {!isNa && <span className="text-muted-foreground">Value {fmt(numericValue)}</span>}
+              {!isNa && (
+                <span className="text-muted-foreground">
+                  {isQualitative ? `Outcome ${value} (R${numericValue})` : `Value ${fmt(numericValue)}`}
+                </span>
+              )}
             </div>
 
             {skipGroups.length > 0 && (
