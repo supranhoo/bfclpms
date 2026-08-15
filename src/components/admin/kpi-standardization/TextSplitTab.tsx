@@ -131,6 +131,7 @@ export function TextSplitTab({ initialSearch = '' }: { initialSearch?: string } 
               <Stat label="Clean split" value={summary.data.high} />
               <Stat label="Needs review" value={summary.data.review} />
               <Stat label="No markers" value={summary.data.unparsed} />
+              <Stat label="Suspect title" value={suspectTitles} />
               <Stat label="Legacy untouched" value={summary.data.legacy_untouched} />
             </div>
           ) : null}
@@ -165,6 +166,14 @@ export function TextSplitTab({ initialSearch = '' }: { initialSearch?: string } 
               {needsManual} KPI row{needsManual === 1 ? '' : 's'} ({needsManualGroups} distinct text
               {needsManualGroups === 1 ? '' : 's'}) have no detectable title — these can only be fixed by editing the
               text below. Each edit is saved once for every duplicate of that text.
+            </p>
+          ) : null}
+          {suspectTitles > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {suspectTitles} already-split row{suspectTitles === 1 ? '' : 's'} ({suspectGroups} distinct text
+              {suspectGroups === 1 ? '' : 's'}) still carry scoring bands, month brackets or an over-long title.
+              These show up as separate KPIs in the BU Console — pick <strong>Suspect title</strong> below to work
+              them off.
             </p>
           ) : null}
         </CardContent>
