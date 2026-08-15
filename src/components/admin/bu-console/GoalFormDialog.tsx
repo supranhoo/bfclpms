@@ -254,6 +254,7 @@ export function GoalFormDialog({ open, onOpenChange, goal, parent, year, period,
                   <SelectItem value="org">Organisation</SelectItem>
                   <SelectItem value="bu">Business unit</SelectItem>
                   <SelectItem value="department">Department</SelectItem>
+                  <SelectItem value="individual">Employee</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -276,7 +277,7 @@ export function GoalFormDialog({ open, onOpenChange, goal, parent, year, period,
                 options={buOptions}
                 placeholder="All business units"
               />
-              {entityLevel === 'department' && (
+              {(entityLevel === 'department' || entityLevel === 'individual') && (
                 <OrgFilterCombobox
                   label="Department"
                   value={deptId ?? ''}
@@ -287,6 +288,36 @@ export function GoalFormDialog({ open, onOpenChange, goal, parent, year, period,
               )}
             </div>
           )}
+
+          {entityLevel === 'individual' && (
+            <div className="space-y-2">
+              <Label>Owner</Label>
+              <EmployeeCombobox
+                employees={employees ?? []}
+                value={ownerId}
+                onChange={setOwnerId}
+                placeholder="Pick the employee who owns this KRA"
+              />
+            </div>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Starts on</Label>
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Due by</Label>
+              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            </div>
+            <OrgFilterCombobox
+              label="Aligns to (optional)"
+              value={alignsToId ?? ''}
+              onValueChange={(v) => setAlignsToId(v || null)}
+              options={alignOptions}
+              placeholder="No alignment"
+            />
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
