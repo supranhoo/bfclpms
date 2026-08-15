@@ -60,16 +60,20 @@ export function KpiTextBlocks({
   /** Collapse Formula + Scoring Logic behind a toggle (used on small screens). */
   collapsible = false,
   showTitle = false,
+  hideLegacy = false,
 }: {
   kpi: KpiLikeRow | null | undefined;
   className?: string;
   collapsible?: boolean;
   showTitle?: boolean;
+  /** Render nothing for legacy rows (when the caller already prints the raw text). */
+  hideLegacy?: boolean;
 }) {
   const parts = resolveKpiText(kpi);
   const [open, setOpen] = useState(false);
 
   if (!parts.isStructured) {
+    if (hideLegacy) return null;
     return (
       <div className={cn('whitespace-pre-wrap text-sm', className)}>
         {renderBoldKpiText(kpi?.kpi_name)}
