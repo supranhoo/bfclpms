@@ -191,20 +191,23 @@ export function useBuConsoleKpiDetail(args: KpiDetailArgs | null) {
   });
 }
 
-export function useMergeProposals(status: 'pending' | 'approved' | 'rejected' = 'pending') {
+/**
+ * ADR-264 — server-paged (200/page) with a true total. Replaces the former
+ * direct table read that silently stopped at 500 rows.
+ */
+export function useMergeProposals(status: 'pending' | 'approved' | 'rejected' = 'pending', page = 1) {
   return useQuery({
-    queryKey: ['kpi-merge-proposals', status],
+    queryKey: ['kpi-merge-proposals', status, page],
     staleTime: 60_000,
     gcTime: 5 * 60_000,
-    queryFn: async (): Promise<MergeProposal[]> => {
-      const { data, error } = await supabase
-        .from('kpi_merge_proposals' as any)
-        .select('*')
-        .eq('status', status)
-        .order('affected_employee_count', { ascending: false })
-        .limit(500);
+    queryFn: async (): Promise<MergeProposalPage> => {
+      const { data, error } = await supabase.rpc('bu_console_merge_proposal_list' as any, {
+        p_status: status,
+        p_page: page,
+        p_page_size: 200,
+      });
       if (error) throw error;
-      return (data ?? []) as unknown as MergeProposal[];
+      return (data ?? { authorized: false, rows: [], total: 0, page: 1, page_size: 200 }) as unknown as MergeProposalPage;
     },
   });
 }
