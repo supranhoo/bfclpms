@@ -21,10 +21,13 @@ export interface KpiSplitSummary {
   needs_manual?: number;
   needs_manual_groups?: number;
   pending_groups?: number;
+  /** ADR-273 — already-split rows whose stored title still looks wrong. */
+  suspect_titles?: number;
+  suspect_title_groups?: number;
   legacy_untouched: number;
 }
 
-export type KpiSplitState = 'pending' | 'structured' | 'all';
+export type KpiSplitState = 'pending' | 'structured' | 'suspect' | 'all';
 
 /** Rows applied per RPC call. The server caps at 20,000; the UI loops until done. */
 const APPLY_BATCH_SIZE = 5000;
@@ -69,10 +72,12 @@ export function useKpiSplitGroups(params: {
   confidence: KpiSplitConfidence | 'all';
   state?: KpiSplitState;
   enabled?: boolean;
+  /** ADR-273 — free-text filter on the raw KPI name (deep-link from BU Console). */
+  search?: string;
 }) {
-  const { page, pageSize, confidence, state = 'pending', enabled = true } = params;
+  const { page, pageSize, confidence, state = 'pending', enabled = true, search = '' } = params;
   return useQuery({
-    queryKey: ['kpi-split-groups', page, pageSize, confidence, state],
+    queryKey: ['kpi-split-groups', page, pageSize, confidence, state, search],
     enabled,
     queryFn: async (): Promise<KpiSplitGroupRow[]> => {
       const { data, error } = await supabase.rpc('kpi_split_grouped_dry_run', {
@@ -80,6 +85,7 @@ export function useKpiSplitGroups(params: {
         p_offset: page * pageSize,
         p_confidence: confidence === 'all' ? null : confidence,
         p_state: state,
+        p_search: search.trim() || null,
       });
       if (error) throw error;
       return (data ?? []) as unknown as KpiSplitGroupRow[];

@@ -7,6 +7,7 @@
  * Access is gated by the `feature_bu_console` admin flag.
  */
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -92,6 +93,7 @@ export default function BuConsole() {
   }, [managers, deptIds, buIds, divisionIds, buOptions]);
 
   const { data: tree, isFetching, refetch } = useBuConsoleTree(scope);
+  const navigate = useNavigate();
 
   // ADR-271 — filter selections are only committed on apply; surface the gap
   // instead of letting stale category counts look current.
@@ -268,6 +270,11 @@ export default function BuConsole() {
               categories={tree.categories}
               selectedCategoryId={categoryId}
               selectedKraKey={kraKey}
+              onFixTextSplit={(kpi) =>
+                navigate(
+                  `/admin/kpi-standardization?tab=split&q=${encodeURIComponent(kpi.kpi_name)}`,
+                )
+              }
               onSelectCategory={(id) => { setCategoryId(id); setKraKey(null); }}
               onSelectKra={setKraKey}
               onSelectKpi={(cId, kraName, kpi, variantKey) =>

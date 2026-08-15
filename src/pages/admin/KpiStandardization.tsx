@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScanSearch, BookCheck, Wrench, ShieldCheck, Activity, Sparkles, History, SplitSquareHorizontal } from 'lucide-react';
 import { BuildRegistryTab } from '@/components/admin/kpi-standardization/BuildRegistryTab';
@@ -11,7 +12,11 @@ import { HistoryUndoTab } from '@/components/admin/kpi-standardization/HistoryUn
 import { TextSplitTab } from '@/components/admin/kpi-standardization/TextSplitTab';
 
 export default function KpiStandardization() {
-  const [activeTab, setActiveTab] = useState('build');
+  const [searchParams] = useSearchParams();
+  // ADR-273 — the BU Console deep-links here with the exact KPI text to fix.
+  const deepLinkTab = searchParams.get('tab');
+  const deepLinkSearch = searchParams.get('q') ?? '';
+  const [activeTab, setActiveTab] = useState(deepLinkTab || 'build');
 
   return (
     <div className="space-y-6">
@@ -87,7 +92,7 @@ export default function KpiStandardization() {
         </TabsContent>
 
         <TabsContent value="split" className="mt-4">
-          <TextSplitTab />
+          <TextSplitTab key={deepLinkSearch} initialSearch={deepLinkSearch} />
         </TabsContent>
       </Tabs>
     </div>

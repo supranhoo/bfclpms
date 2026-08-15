@@ -53,16 +53,19 @@ function Stat({ label, value }: { label: string; value: number | string }) {
   );
 }
 
-export function TextSplitTab() {
-  const [confidence, setConfidence] = useState<KpiSplitConfidence | 'all'>('high');
-  const [state, setState] = useState<KpiSplitState>('pending');
+export function TextSplitTab({ initialSearch = '' }: { initialSearch?: string } = {}) {
+  const [confidence, setConfidence] = useState<KpiSplitConfidence | 'all'>(
+    initialSearch ? 'all' : 'high',
+  );
+  const [state, setState] = useState<KpiSplitState>(initialSearch ? 'all' : 'pending');
+  const [search, setSearch] = useState(initialSearch);
   const [page, setPage] = useState(0);
   const [editing, setEditing] = useState<KpiSplitGroupRow | null>(null);
   const [lastRunIds, setLastRunIds] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
 
   const summary = useKpiSplitSummary();
-  const preview = useKpiSplitGroups({ page, pageSize: PAGE_SIZE, confidence, state });
+  const preview = useKpiSplitGroups({ page, pageSize: PAGE_SIZE, confidence, state, search });
   const apply = useApplyKpiSplit(setProgress);
   const rollback = useRollbackKpiSplit();
   const save = useSaveKpiPartsByName();
@@ -74,6 +77,8 @@ export function TextSplitTab() {
   const pendingReview = summary.data?.pending_review ?? 0;
   const needsManual = summary.data?.needs_manual ?? 0;
   const needsManualGroups = summary.data?.needs_manual_groups ?? 0;
+  const suspectTitles = summary.data?.suspect_titles ?? 0;
+  const suspectGroups = summary.data?.suspect_title_groups ?? 0;
 
   const runApply = (conf: 'high' | 'review') => {
     setProgress(0);
@@ -126,6 +131,7 @@ export function TextSplitTab() {
               <Stat label="Clean split" value={summary.data.high} />
               <Stat label="Needs review" value={summary.data.review} />
               <Stat label="No markers" value={summary.data.unparsed} />
+              <Stat label="Suspect title" value={suspectTitles} />
               <Stat label="Legacy untouched" value={summary.data.legacy_untouched} />
             </div>
           ) : null}
@@ -162,6 +168,14 @@ export function TextSplitTab() {
               text below. Each edit is saved once for every duplicate of that text.
             </p>
           ) : null}
+          {suspectTitles > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {suspectTitles} already-split row{suspectTitles === 1 ? '' : 's'} ({suspectGroups} distinct text
+              {suspectGroups === 1 ? '' : 's'}) still carry scoring bands, month brackets or an over-long title.
+              These show up as separate KPIs in the BU Console — pick <strong>Suspect title</strong> below to work
+              them off.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -175,6 +189,13 @@ export function TextSplitTab() {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
+          <Input
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            placeholder="Search KPI text…"
+            aria-label="Search KPI text"
+            className="h-9 w-[220px]"
+          />
           <Select
             value={state}
             onValueChange={(v) => {
@@ -188,6 +209,7 @@ export function TextSplitTab() {
             <SelectContent>
               <SelectItem value="pending">Pending only</SelectItem>
               <SelectItem value="structured">Already structured</SelectItem>
+              <SelectItem value="suspect">Suspect title</SelectItem>
               <SelectItem value="all">All states</SelectItem>
             </SelectContent>
           </Select>

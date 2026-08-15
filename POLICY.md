@@ -6309,3 +6309,15 @@ other; structural parity is enforced by sharing `kpi-form/kpiFormModel.ts`,
 editing a KPI writes the structured text columns (ADR-269) and the type-correct
 scoring columns (ADR-271), and `kpi_name` is always recomposed from the
 structured parts so historical joins remain valid.
+
+## §KPI-SPLIT-TITLE-INTEGRITY (ADR-273)
+
+1. A KPI whose structured title still contains scoring bands, an incentive note, a month bracket
+   list, or exceeds 120 characters is a **mis-split**, not a distinct KPI. It must be counted as
+   outstanding work on the Text Split screen ("Suspect title") until corrected.
+2. The BU Performance Console must **flag** titles that normalise to the same text under the same
+   KRA ("Possible duplicate") and offer a direct route to correct the split. It must never merge
+   such rows automatically — a genuine definition difference stays visible as a variant.
+3. Corrections are always applied per distinct KPI text (`kpi_split_set_parts_by_name`), are
+   audited into `kpi_text_split_audit`, and remain forward-only (fiscal start year >= 2026).
+   Assessment years before July 2026 are never touched.
