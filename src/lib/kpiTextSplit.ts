@@ -72,8 +72,16 @@ export function splitKpiText(raw: string | null | undefined): KpiTextParts {
   const head2 = formulaMatch ? head.slice(0, formulaMatch.index ?? head.length) : head;
 
   const firstLine = head2.split('\n')[0];
-  const title = nullIfBlank(firstLine.trim().replace(/^-\s*/, ''));
-  const description = nullIfBlank(head2.slice(firstLine.length).trim().replace(LEAD_DESC_RE, ''));
+  let title = nullIfBlank(firstLine.trim().replace(/^-\s*/, ''));
+  let description = nullIfBlank(head2.slice(firstLine.length).trim().replace(LEAD_DESC_RE, ''));
+
+  // When the text opens straight into "Description: ...", there is no title
+  // line — keep it as the description and let a human name the KPI.
+  if (title && LEAD_DESC_RE.test(title)) {
+    const asDesc = nullIfBlank(title.replace(LEAD_DESC_RE, ''));
+    description = description ? `${asDesc}\n${description}` : asDesc;
+    title = null;
+  }
 
   let confidence: KpiSplitConfidence;
   if (formula && scoring && title && title.length <= 120) confidence = 'high';
