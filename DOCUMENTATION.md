@@ -8619,3 +8619,42 @@ rendered separately, raw `kpi_name` never printed for structured rows, empty
 parts omitted, and precedence.
 
 **Rollback.** Revert the touched components; the columns can stay populated.
+
+## ADR-270 — BU Console: the KPI layer rebuilt on the text split
+
+**Problem.** `bu_console_kpi_detail` failed with `column reference
+"business_unit_id" is ambiguous` (both `kpis` and `departments` expose it), and
+the console listed KPI nodes by the raw `kpi_name` blob, so the same metric
+appeared several times under one KRA and definition differences between
+employees were hidden behind a `max()`.
+
+**Decision.**
+- A console KPI node is keyed by the **normalised structured title**
+  (`kpi_title`, falling back to `kpi_name` for legacy rows).
+- Rows sharing a title but differing on description / formula / scoring logic /
+  target are **variants**. `bu_console_variant_key(desc, formula, scoring,
+  target)` is the single definition of a variant. Weightage differences do not
+  create a variant; they are surfaced as "N values" on the node.
+- `bu_console_tree` returns per node: `title_key`, `kpi_title`,
+  `kpi_description`, `employee_count`, `variant_count`, `weightage_values`,
+  `avg_score`, `is_structured`, and the full `variants[]` array.
+- `bu_console_kpi_detail`, `bu_console_group_write` and
+  `bu_console_group_advance` accept optional `p_title_key` and `p_variant_key`.
+  With `p_title_key` they match the whole title group; with `p_variant_key`
+  they narrow to one variant. Without either they behave exactly as before
+  (match on `kpi_name`), so old call sites are unaffected.
+- The ambiguity is fixed by qualifying `d.business_unit_id` in the detail CTE.
+
+**UI.** The KPI row shows the clean title, a description sub-line, Employees /
+Weightage / Avg score columns, and an amber "N variants" chip that expands to
+per-variant rows (each openable on its own). The drawer replaces the raw blob
+with `KpiTextBlocks` (Description / Formula / Scoring Logic), declares the
+variant count before any group action, and adds a Variant column to the
+employee table when more than one exists.
+
+**Verification (August 2026).** 2,760 in-scope rows collapse to 883 title
+nodes across 1,002 variants; 77 titles carry more than one definition variant
+and 181 carry more than one weightage.
+
+**Rollback.** Re-deploy the previous function bodies and revert the three
+components; no schema or data change was made.

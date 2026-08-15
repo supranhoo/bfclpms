@@ -6281,3 +6281,19 @@ plain-language reason.
   title > legacy first line. A row with no `kpi_title` renders exactly as it did
   before the split existed. Empty structured parts are omitted, never rendered
   as a placeholder.
+
+## §BU-CONSOLE-KPI-NODE (ADR-270)
+
+1. A BU Console KPI node is identified by its **structured title**, not by the
+   raw KPI text. Legacy rows without `kpi_title` fall back to `kpi_name` and
+   are labelled "Unsplit text".
+2. Rows behind one title that disagree on description, formula, scoring logic
+   or target are **variants**. The console must always display the variant
+   count; it may never present a single definition as if it were universal.
+3. Weightage variation does not create a variant. It must still be shown as
+   "N values" rather than a single representative number.
+4. Group value entry and group approval may be scoped to one variant. When run
+   at title level, the preview must declare how many variants the write spans
+   before the admin confirms.
+5. Fixing display or grouping never changes `kpi_name`, scores, weightage or
+   workflow status.
