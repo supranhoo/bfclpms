@@ -85,6 +85,10 @@ export default function KpiStandardization() {
         <TabsContent value="history" className="mt-4">
           <HistoryUndoTab />
         </TabsContent>
+
+        <TabsContent value="split" className="mt-4">
+          <TextSplitTab />
+        </TabsContent>
       </Tabs>
     </div>
   );
