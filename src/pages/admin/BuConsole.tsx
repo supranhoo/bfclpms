@@ -182,10 +182,10 @@ export default function BuConsole() {
       <div className="p-6">
         <Alert>
           <FlaskConical className="h-4 w-4" />
-          <AlertTitle>BU Performance Console is switched off</AlertTitle>
+          <AlertTitle>Performance Console is switched off</AlertTitle>
           <AlertDescription>
             This beta is controlled by a feature switch. Turn on
-            “BU Performance Console (Beta)” in Admin → Settings → Feature Flags to use it.
+            “Performance Console (Beta)” in Admin → Settings → Feature Flags to use it.
           </AlertDescription>
         </Alert>
       </div>
@@ -196,7 +196,7 @@ export default function BuConsole() {
     <div className="space-y-3 p-4 sm:p-6">
       <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h1 className="flex items-center gap-2 text-xl font-semibold sm:text-2xl">
-          BU Performance Console
+          Performance Console
           <Badge variant="secondary">Beta</Badge>
         </h1>
         <p className="text-sm text-muted-foreground">

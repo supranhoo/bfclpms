@@ -172,7 +172,7 @@ export function TextSplitTab({ initialSearch = '' }: { initialSearch?: string } 
             <p className="text-xs text-muted-foreground">
               {suspectTitles} already-split row{suspectTitles === 1 ? '' : 's'} ({suspectGroups} distinct text
               {suspectGroups === 1 ? '' : 's'}) still carry scoring bands, month brackets or an over-long title.
-              These show up as separate KPIs in the BU Console — pick <strong>Suspect title</strong> below to work
+              These show up as separate KPIs in the Performance Console — pick <strong>Suspect title</strong> below to work
               them off.
             </p>
           ) : null}
