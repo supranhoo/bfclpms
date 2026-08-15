@@ -18793,6 +18793,7 @@ export type Database = {
           p_confidence?: string
           p_limit?: number
           p_offset?: number
+          p_search?: string
           p_state?: string
         }
         Returns: {
@@ -18842,6 +18843,7 @@ export type Database = {
           title: string
         }[]
       }
+      kpi_title_is_suspect: { Args: { p_title: string }; Returns: boolean }
       list_annual_review_pending_reviewers: {
         Args: { p_cycle_id: string }
         Returns: {
