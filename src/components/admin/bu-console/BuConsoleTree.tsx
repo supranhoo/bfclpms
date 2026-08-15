@@ -241,10 +241,16 @@ export function BuConsoleTree({
   onSelectCategory,
   onSelectKra,
   onSelectKpi,
+  onFixTextSplit,
 }: Props) {
   const category = categories.find(c => c.category_id === selectedCategoryId) ?? null;
   const kra: BuConsoleKraNode | null =
     category?.kras.find(k => k.kra_key === selectedKraKey) ?? null;
+  // ADR-273 — computed per KRA list, so a mis-split title is visible next to
+  // the row it duplicates instead of looking like a second KPI.
+  const lookalikes = lookalikeCounts(
+    (kra?.kpis ?? []).map(k => ({ key: k.kpi_key, title: k.kpi_title || k.kpi_name })),
+  );
 
   return (
     <div className="space-y-3">
@@ -342,6 +348,8 @@ export function BuConsoleTree({
                   key={kpi.kpi_key}
                   kpi={kpi}
                   index={i + 1}
+                  lookalikeCount={lookalikes.get(kpi.kpi_key)}
+                  onFixTextSplit={onFixTextSplit}
                   onOpen={(variantKey) =>
                     onSelectKpi(category.category_id, kra.kra_name, kpi, variantKey)
                   }
