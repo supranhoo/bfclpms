@@ -35,7 +35,7 @@ export function ReviewDetailsCard({ kpi }: ReviewDetailsCardProps) {
         <div>
           <p className="text-xs text-muted-foreground uppercase tracking-wide">KPI</p>
           <KpiTitle kpi={kpi} as="p" className="text-sm font-medium" legacyFullText />
-          <KpiTextBlocks kpi={kpi} collapsible className="mt-1.5" />
+          <KpiTextBlocks kpi={kpi} collapsible hideLegacy className="mt-1.5" />
         </div>
 
         {/* Target, Criteria, Weightage */}
