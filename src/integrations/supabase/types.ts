@@ -18773,6 +18773,28 @@ export type Database = {
           total_count: number
         }[]
       }
+      kpi_split_grouped_dry_run: {
+        Args: {
+          p_confidence?: string
+          p_limit?: number
+          p_offset?: number
+          p_state?: string
+        }
+        Returns: {
+          confidence: string
+          description: string
+          formula: string
+          kpi_name: string
+          kra_sample: string
+          pending_count: number
+          row_count: number
+          sample_kpi_id: string
+          scoring_logic: string
+          structured_count: number
+          title: string
+          total_groups: number
+        }[]
+      }
       kpi_split_rollback: { Args: { p_run_id: string }; Returns: Json }
       kpi_split_set_parts: {
         Args: {
@@ -18780,6 +18802,16 @@ export type Database = {
           p_formula: string
           p_kpi_id: string
           p_scoring_logic: string
+          p_title: string
+        }
+        Returns: Json
+      }
+      kpi_split_set_parts_by_name: {
+        Args: {
+          p_description?: string
+          p_formula?: string
+          p_kpi_name: string
+          p_scoring_logic?: string
           p_title: string
         }
         Returns: Json
