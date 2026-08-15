@@ -11,6 +11,7 @@ import { KPI, ReviewSubmission } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getKpiSummaryText } from '@/lib/textFormatting';
+import { KpiTitle } from '@/components/kpi/KpiText';
 import { cn } from '@/lib/utils';
 import { canReviewKpi } from '@/lib/workflowEngine';
 import { FrequencyBadge } from '@/components/review/FrequencyBadge';
@@ -295,9 +296,11 @@ export function MobileKpiCard({
           {renderBoldKpiText(kpi.kra_name)}
         </p>
         <div className="flex items-start gap-1">
-          <p className="text-[10px] text-muted-foreground line-clamp-2 whitespace-pre-wrap flex-1 min-w-0">
-            {renderBoldKpiText(getKpiSummaryText(kpi.kpi_name))}
-          </p>
+          <KpiTitle
+            kpi={kpi}
+            as="p"
+            className="text-[10px] text-muted-foreground line-clamp-2 flex-1 min-w-0"
+          />
           <Info className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
         </div>
       </button>
