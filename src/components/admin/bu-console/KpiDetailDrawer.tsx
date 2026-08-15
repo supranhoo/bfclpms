@@ -11,6 +11,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useBuConsoleKpiDetail, type KpiDetailArgs } from '@/hooks/useBuConsole';
 import { KpiTextBlocks } from '@/components/kpi/KpiText';
+import { KpiScoringScale, KpiTypeBadge } from '@/components/review/KpiScoringScale';
+import { isMixedScoringGroup, resolveKpiScoringModel } from '@/lib/kpiScoringModel';
 import { GroupValueEntryDialog } from './GroupValueEntryDialog';
 import { GroupApprovalDialog } from './GroupApprovalDialog';
 
@@ -31,6 +33,8 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
   const [approveOpen, setApproveOpen] = useState(false);
   const def = (data?.definition ?? {}) as Record<string, any>;
   const variantCount = Number(def.variant_count ?? 1);
+  const mixedTypes = isMixedScoringGroup(def.uom_types);
+  const scoringModel = resolveKpiScoringModel(def as any);
   const totalPages = data ? Math.max(1, Math.ceil(data.total / (data.page_size || 200))) : 1;
 
   return (
@@ -69,9 +73,24 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
           </div>
         )}
 
+        {data?.authorized && mixedTypes && (
+          <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs">
+            <p className="font-medium">This title is set up with more than one KPI type.</p>
+            <p className="mt-1 text-muted-foreground">
+              Types in scope: {(def.uom_types as string[]).join(', ')}. Group value entry is
+              disabled — one value cannot mean a number and a Yes/No answer at the same time.
+            </p>
+          </div>
+        )}
+
         {data?.authorized && (
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => setEntryOpen(true)} disabled={!args || data.total === 0}>
+            <Button
+              size="sm"
+              onClick={() => setEntryOpen(true)}
+              disabled={!args || data.total === 0 || mixedTypes}
+              title={mixedTypes ? 'Mixed KPI types in this group' : undefined}
+            >
               Enter value for all {data.total} employees
             </Button>
             <Button
@@ -109,6 +128,10 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
               <Meta label="Unit" value={def.uom} />
               <Meta label="Frequency" value={def.frequency} />
               <Meta label="Variants" value={String(variantCount)} />
+              <div>
+                <p className="text-xs uppercase text-muted-foreground">KPI type</p>
+                <div className="mt-0.5"><KpiTypeBadge kpi={def as any} /></div>
+              </div>
             </section>
 
             <section className="rounded-md border p-3">
@@ -124,15 +147,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
             </section>
 
             <section>
-              <h3 className="mb-2 text-sm font-semibold">Scoring scale</h3>
-              <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
-                {(['r0', 'r1', 'r2', 'r3', 'r4', 'r5'] as const).map(k => (
-                  <div key={k} className="rounded-md border p-2">
-                    <p className="font-medium uppercase text-muted-foreground">{k}</p>
-                    <p>{def[k] ?? '—'}</p>
-                  </div>
-                ))}
-              </div>
+              <KpiScoringScale kpi={def as any} />
             </section>
 
             <section>
@@ -219,7 +234,12 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
           </div>
         )}
       </SheetContent>
-      <GroupValueEntryDialog args={args} open={entryOpen} onOpenChange={setEntryOpen} />
+      <GroupValueEntryDialog
+        args={args}
+        open={entryOpen}
+        onOpenChange={setEntryOpen}
+        scoringModel={scoringModel}
+      />
       <GroupApprovalDialog args={args} open={approveOpen} onOpenChange={setApproveOpen} />
     </Sheet>
   );
