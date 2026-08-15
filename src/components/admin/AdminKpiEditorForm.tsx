@@ -1002,7 +1002,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         if (!scope?.isMultiMonth) return null;
         return (
           <p className="text-[11px] text-muted-foreground">
-            This cycle covers {scope.label}.
+            This cycle covers {scope.cycleMonths.join(', ')} · scored in {scope.anchorMonth} {scope.anchorYear}.
           </p>
         );
       })()}
