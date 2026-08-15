@@ -8315,3 +8315,15 @@ Tests: `src/test/tni/continuityRule.test.ts`, `src/test/pip/*`.
   non-final stage can no longer be skipped. April–June 2026 @ threshold 3 /
   window 3 drops from 741 qualifying rows to 300. The rule banner states the
   minimum-scored-months requirement.
+- v2.66.259 — ADR-259/260 BU Performance Console (Beta). Admin-only page at
+  `/admin/bu-console`, gated by the `feature_bu_console` flag. Reads run
+  exclusively through SECURITY DEFINER RPCs: `bu_console_tree`
+  (Category → KRA → KPI counts for a period + BU/department scope) and
+  `bu_console_kpi_detail` (server-paged mapped-employee rows, 200/page).
+  Nothing hydrates until the user applies a scope. The KPI Library tab hosts
+  the de-duplication queue: `bu_console_generate_merge_proposals` files
+  candidates in `kpi_merge_proposals`, `bu_console_decide_merge_proposal`
+  records an admin approve/reject. Phase 1 is read-only — group value entry and
+  group approval land in later phases.
+  Files: `src/hooks/useBuConsole.ts`, `src/pages/admin/BuConsole.tsx`,
+  `src/components/admin/bu-console/*`.

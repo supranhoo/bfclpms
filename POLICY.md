@@ -6119,3 +6119,14 @@ plain-language reason.
   tooltip can never contradict the button.
 - A "Read Only" badge or a greyed Submit button with no stated cause is a
   defect, not an acceptable state.
+
+## §BU-CONSOLE-BETA (ADR-259/260)
+- The BU Performance Console is beta and stays invisible until an admin enables
+  the `feature_bu_console` switch; the route itself is admin-only.
+- The console is read-only in this phase. It never writes scores, never changes
+  a review stage, and never edits history.
+- Merge proposals are advisory records. A scan may only propose; a human admin
+  approves or rejects, and a decision never rewrites past KPI scores.
+- Every console read must go through a `bu_console_*` RPC so scope and
+  authorisation are enforced server-side, and every employee list must be
+  server-paged.
