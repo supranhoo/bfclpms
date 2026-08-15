@@ -16,6 +16,11 @@ export interface KpiSplitSummary {
   already_split: number;
   pending: number;
   pending_high: number;
+  pending_review?: number;
+  pending_unparsed?: number;
+  needs_manual?: number;
+  needs_manual_groups?: number;
+  pending_groups?: number;
   legacy_untouched: number;
 }
 
@@ -37,6 +42,49 @@ export interface KpiSplitPreviewRow {
   confidence: KpiSplitConfidence;
   already_split: boolean;
   total_count: number;
+}
+
+/**
+ * ADR-269b1 — duplicate-aware preview. One row per distinct KPI text, so a
+ * single correction covers every employee row that shares that text.
+ */
+export interface KpiSplitGroupRow {
+  kpi_name: string;
+  sample_kpi_id: string;
+  row_count: number;
+  pending_count: number;
+  structured_count: number;
+  kra_sample: string | null;
+  title: string | null;
+  description: string | null;
+  formula: string | null;
+  scoring_logic: string | null;
+  confidence: KpiSplitConfidence;
+  total_groups: number;
+}
+
+export function useKpiSplitGroups(params: {
+  page: number;
+  pageSize: number;
+  confidence: KpiSplitConfidence | 'all';
+  state?: KpiSplitState;
+  enabled?: boolean;
+}) {
+  const { page, pageSize, confidence, state = 'pending', enabled = true } = params;
+  return useQuery({
+    queryKey: ['kpi-split-groups', page, pageSize, confidence, state],
+    enabled,
+    queryFn: async (): Promise<KpiSplitGroupRow[]> => {
+      const { data, error } = await supabase.rpc('kpi_split_grouped_dry_run', {
+        p_limit: pageSize,
+        p_offset: page * pageSize,
+        p_confidence: confidence === 'all' ? null : confidence,
+        p_state: state,
+      });
+      if (error) throw error;
+      return (data ?? []) as unknown as KpiSplitGroupRow[];
+    },
+  });
 }
 
 export function useKpiSplitSummary(enabled = true) {
@@ -81,6 +129,7 @@ function useInvalidateSplit() {
   return () => {
     qc.invalidateQueries({ queryKey: ['kpi-split-summary'] });
     qc.invalidateQueries({ queryKey: ['kpi-split-preview'] });
+    qc.invalidateQueries({ queryKey: ['kpi-split-groups'] });
   };
 }
 
