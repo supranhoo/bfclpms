@@ -216,6 +216,14 @@ export default function BuConsole() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <OrgFilterCombobox
                   multiSelect
+                  label="Divisions"
+                  values={divisionIds}
+                  onValuesChange={handleDivisionChange}
+                  options={divisionOptions}
+                  placeholder="All divisions"
+                />
+                <OrgFilterCombobox
+                  multiSelect
                   label="Business Units"
                   values={buIds}
                   onValuesChange={handleBuChange}
@@ -226,9 +234,17 @@ export default function BuConsole() {
                   multiSelect
                   label="Departments"
                   values={deptIds}
-                  onValuesChange={setDeptIds}
+                  onValuesChange={handleDeptChange}
                   options={deptOptions}
                   placeholder="All departments"
+                />
+                <OrgFilterCombobox
+                  multiSelect
+                  label="Managers"
+                  values={managerIds}
+                  onValuesChange={setManagerIds}
+                  options={managerOptions}
+                  placeholder="All managers"
                 />
               </div>
               <Button onClick={applyScope} disabled={isFetching}>Load console</Button>
