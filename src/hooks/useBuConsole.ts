@@ -1110,7 +1110,6 @@ export function useRowOverride() {
   });
 }
 
-export interface ConsoleEditRun {
 /**
  * ADR-275 — tune several employees in one undoable run.
  * Used by the inline bulk editor in the mapped-employee table.
