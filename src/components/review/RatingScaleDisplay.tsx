@@ -2,6 +2,15 @@ import { Label } from '@/components/ui/label';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { KPI } from '@/hooks/useKpis';
 import { Info } from 'lucide-react';
+import { KPI_TYPE_LABELS, resolveKpiScoringModel } from '@/lib/kpiScoringModel';
+import { scoreToRatingLevel } from '@/lib/qualitativeUom';
+
+const qualitativeColor: Record<string, string> = {
+  blue: 'text-blue-600',
+  green: 'text-green-600',
+  yellow: 'text-yellow-600',
+  red: 'text-red-600',
+};
 
 interface RatingScaleDisplayProps {
   kpi: KPI | null;
@@ -64,6 +73,29 @@ function getCalculationLogic(kpi: KPI, rating: string, threshold: string): strin
 }
 
 export function RatingScaleDisplay({ kpi, compact = false }: RatingScaleDisplayProps) {
+  // ADR-271 — binary and tiered KPIs carry their own options, not R1-R5 bands.
+  const model = resolveKpiScoringModel(kpi as any);
+
+  if (kpi && (model.type === 'binary' || model.type === 'tiered')) {
+    return (
+      <div className={`${compact ? 'p-2' : 'p-3'} border rounded-lg space-y-1`}>
+        <Label className="text-xs font-medium text-muted-foreground">
+          Rating Scale · {KPI_TYPE_LABELS[model.uomType]}
+        </Label>
+        <div className="space-y-0.5 text-xs">
+          {model.options.map(o => (
+            <div key={o.label} className="flex items-center justify-between gap-2">
+              <span className="truncate">{o.label}</span>
+              <span className={`font-medium ${qualitativeColor[scoreToRatingLevel(o.rating)]}`}>
+                R{o.rating}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (!kpi || (!kpi.r5 && !kpi.r4 && !kpi.r3 && !kpi.r2 && !kpi.r1)) {
     return null;
   }
