@@ -176,6 +176,24 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
         <div className="space-y-4">
           <KpiTextSplitFields value={text} onChange={setText} hideName />
 
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Category</Label>
+              <Select value={categoryId || undefined} onValueChange={(v) => { setCategoryId(v); setPreview(null); }}>
+                <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                <SelectContent>
+                  {(categories ?? []).map((c: any) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">KRA</Label>
+              <Input value={kraName} onChange={(e) => { setKraName(e.target.value); setPreview(null); }} />
+            </div>
+          </div>
+
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label className="text-xs">Weightage (leave blank to keep each employee's own)</Label>
@@ -196,7 +214,38 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
             </div>
           </div>
 
-          <KpiScoringEditor value={scoring} onChange={(s) => { setScoring(s); setPreview(null); }} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Frequency</Label>
+              <Select value={frequency || undefined} onValueChange={(v) => { setFrequency(v); setPreview(null); }}>
+                <SelectTrigger><SelectValue placeholder="Unchanged" /></SelectTrigger>
+                <SelectContent>
+                  {FREQUENCY_OPTIONS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Source of data</Label>
+              <Input value={sourceOfData} onChange={(e) => { setSourceOfData(e.target.value); setPreview(null); }} />
+            </div>
+          </div>
+
+          <KpiScoringEditor
+            value={scoring}
+            onChange={(s) => { setScoring(s); setPreview(null); }}
+            criteria={criteria}
+            onCriteriaChange={(v) => { setCriteria(v); setPreview(null); }}
+          />
+
+          {structural && (
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                Moving the group to another category or KRA changes where these KPIs are grouped in
+                reviews and reports. Confirm before applying.
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="space-y-2 rounded-md border p-3">
             <div className="flex items-center justify-between gap-3">
