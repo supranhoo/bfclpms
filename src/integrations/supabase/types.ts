@@ -18752,7 +18752,12 @@ export type Database = {
         Returns: Json
       }
       kpi_split_dry_run: {
-        Args: { p_confidence?: string; p_limit?: number; p_offset?: number }
+        Args: {
+          p_confidence?: string
+          p_limit?: number
+          p_offset?: number
+          p_state?: string
+        }
         Returns: {
           already_split: boolean
           confidence: string
