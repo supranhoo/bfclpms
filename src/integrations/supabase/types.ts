@@ -18769,6 +18769,16 @@ export type Database = {
         }[]
       }
       kpi_split_rollback: { Args: { p_run_id: string }; Returns: Json }
+      kpi_split_set_parts: {
+        Args: {
+          p_description: string
+          p_formula: string
+          p_kpi_id: string
+          p_scoring_logic: string
+          p_title: string
+        }
+        Returns: Json
+      }
       kpi_split_summary: { Args: never; Returns: Json }
       kpi_split_text: {
         Args: { p_text: string }
