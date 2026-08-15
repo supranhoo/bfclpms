@@ -457,3 +457,243 @@ export function useGroupAdvanceCommit() {
     onError: (e: any) => toast.error(e?.message ?? 'Could not advance the group.'),
   });
 }
+
+/* ------------------------------------------------------------------
+ * ADR-263 — Goal objects (Phase 5).
+ * Goals are an additive layer: they describe *what* a KPI definition is
+ * aiming at for a scope, and can derive their current value by rolling up
+ * the mapped employee rows with weightage (never a plain average).
+ * ------------------------------------------------------------------ */
+
+export type GoalEntityLevel = 'org' | 'bu' | 'department' | 'individual';
+export type GoalProgressType = 'number' | 'currency' | 'percentage' | 'rollup';
+export type GoalTrackingMethod = 'manual' | 'rollup' | 'source';
+export type GoalSummaryRule = 'last' | 'sum' | 'avg';
+export type GoalVisibility = 'public' | 'restricted' | 'custom';
+
+export const GOAL_SUMMARY_RULE_LABELS: Record<GoalSummaryRule, string> = {
+  last: 'Latest sub-period value',
+  sum: 'Sum of sub-periods',
+  avg: 'Average of sub-periods',
+};
+
+export const GOAL_TRACKING_LABELS: Record<GoalTrackingMethod, string> = {
+  manual: 'Entered manually',
+  rollup: 'Rolled up from mapped employees',
+  source: 'Fed from a data source',
+};
+
+export interface BuGoalRow {
+  id: string;
+  definition_id: string;
+  parent_goal_id: string | null;
+  kra_name: string;
+  kpi_name: string;
+  entity_level: GoalEntityLevel;
+  business_unit_id: string | null;
+  business_unit_name: string | null;
+  department_id: string | null;
+  department_name: string | null;
+  owner_profile_id: string | null;
+  owner_name: string | null;
+  review_period: string | null;
+  review_year: number;
+  cycle_ref: string | null;
+  progress_type: GoalProgressType;
+  tracking_method: GoalTrackingMethod;
+  subperiod_summary_rule: GoalSummaryRule;
+  visibility: GoalVisibility;
+  unit: string | null;
+  start_value: number | null;
+  target_value: number | null;
+  current_value: number | null;
+  rollup_computed_at: string | null;
+}
+
+export interface BuGoalListResult {
+  authorized: boolean;
+  rows: BuGoalRow[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface GoalListArgs {
+  year: number;
+  period: string | null;
+  buIds: string[];
+  deptIds: string[];
+  page: number;
+}
+
+/** Server-paged goal list (200/page). Disabled until a scope is applied. */
+export function useBuGoals(args: GoalListArgs | null) {
+  return useQuery<BuGoalListResult>({
+    queryKey: ['bu-console-goals', args],
+    enabled: !!args,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const a = args!;
+      const { data, error } = await supabase.rpc('bu_goal_list' as any, {
+        p_year: a.year,
+        p_period: a.period,
+        p_bu_ids: a.buIds.length ? a.buIds : null,
+        p_dept_ids: a.deptIds.length ? a.deptIds : null,
+        p_page: a.page,
+        p_page_size: 200,
+      });
+      if (error) throw error;
+      return (data ?? { authorized: false, rows: [], total: 0, page: 1, page_size: 200 }) as unknown as BuGoalListResult;
+    },
+  });
+}
+
+export interface GoalUpsertArgs {
+  id?: string | null;
+  definitionId: string;
+  reviewYear: number;
+  reviewPeriod: string | null;
+  entityLevel: GoalEntityLevel;
+  businessUnitId: string | null;
+  departmentId: string | null;
+  ownerProfileId?: string | null;
+  cycleRef?: string | null;
+  progressType: GoalProgressType;
+  trackingMethod: GoalTrackingMethod;
+  subperiodSummaryRule: GoalSummaryRule;
+  visibility: GoalVisibility;
+  unit: string | null;
+  startValue: number | null;
+  targetValue: number | null;
+  currentValue: number | null;
+  parentGoalId?: string | null;
+  notes?: string | null;
+}
+
+export function useGoalUpsert() {
+  const qc = useQueryClient();
+  return useMutation<{ authorized: boolean; id?: string; error?: string }, Error, GoalUpsertArgs>({
+    mutationFn: async (a) => {
+      const { data, error } = await supabase.rpc('bu_goal_upsert' as any, {
+        p_definition_id: a.definitionId,
+        p_review_year: a.reviewYear,
+        p_id: a.id ?? null,
+        p_entity_level: a.entityLevel,
+        p_business_unit_id: a.businessUnitId,
+        p_department_id: a.departmentId,
+        p_owner_profile_id: a.ownerProfileId ?? null,
+        p_review_period: a.reviewPeriod,
+        p_cycle_ref: a.cycleRef ?? null,
+        p_progress_type: a.progressType,
+        p_tracking_method: a.trackingMethod,
+        p_subperiod_summary_rule: a.subperiodSummaryRule,
+        p_visibility: a.visibility,
+        p_unit: a.unit,
+        p_start_value: a.startValue,
+        p_target_value: a.targetValue,
+        p_current_value: a.currentValue,
+        p_parent_goal_id: a.parentGoalId ?? null,
+        p_notes: a.notes ?? null,
+      });
+      if (error) throw error;
+      return (data ?? { authorized: false }) as any;
+    },
+    onSuccess: (res) => {
+      if (!res.authorized) { toast.error('Only admins can save goals.'); return; }
+      if (res.error) { toast.error(res.error); return; }
+      qc.invalidateQueries({ queryKey: ['bu-console-goals'] });
+      toast.success('Goal saved.');
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not save the goal.'),
+  });
+}
+
+export interface GoalRollupResult {
+  authorized: boolean;
+  found?: boolean;
+  goal_id?: string;
+  persisted?: boolean;
+  summary_rule?: GoalSummaryRule;
+  tracking_method?: GoalTrackingMethod;
+  current_value: number | null;
+  target_value?: number | null;
+  row_count?: number;
+  employee_count?: number;
+  periods?: Array<{ review_period: string; weighted_value: number; row_count: number; employee_count: number }>;
+}
+
+/** Computes (and optionally stores) a goal's current value from its children. */
+export function useGoalRollup() {
+  const qc = useQueryClient();
+  return useMutation<GoalRollupResult, Error, { goalId: string; persist: boolean }>({
+    mutationFn: async ({ goalId, persist }) => {
+      const { data, error } = await supabase.rpc('bu_goal_rollup' as any, { p_goal_id: goalId, p_persist: persist });
+      if (error) throw error;
+      return (data ?? { authorized: false, current_value: null }) as unknown as GoalRollupResult;
+    },
+    onSuccess: (res, vars) => {
+      if (!res.authorized) { toast.error('You cannot roll up this goal.'); return; }
+      if (vars.persist) {
+        qc.invalidateQueries({ queryKey: ['bu-console-goals'] });
+        toast.success('Roll-up saved.');
+      }
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not roll up the goal.'),
+  });
+}
+
+export function useGoalArchive() {
+  const qc = useQueryClient();
+  return useMutation<{ authorized: boolean }, Error, string>({
+    mutationFn: async (id) => {
+      const { data, error } = await supabase.rpc('bu_goal_archive' as any, { p_id: id });
+      if (error) throw error;
+      return (data ?? { authorized: false }) as any;
+    },
+    onSuccess: (res) => {
+      if (!res.authorized) { toast.error('Only admins can archive goals.'); return; }
+      qc.invalidateQueries({ queryKey: ['bu-console-goals'] });
+      toast.success('Goal archived.');
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not archive the goal.'),
+  });
+}
+
+export interface KpiDefinitionOption {
+  id: string;
+  kra_name: string;
+  kpi_name: string;
+  uom: string | null;
+}
+
+/** Definition picker source for the goal form. Read is RLS-gated. */
+export function useKpiDefinitionOptions(search: string, enabled: boolean) {
+  return useQuery<KpiDefinitionOption[]>({
+    queryKey: ['bu-console-definitions', search],
+    enabled,
+    staleTime: 60_000,
+    queryFn: async () => {
+      let q = supabase
+        .from('kpi_definitions_master')
+        .select('id, kra_name, kpi_name, uom')
+        .eq('is_active', true)
+        .order('kpi_name')
+        .limit(100);
+      if (search.trim()) q = q.ilike('kpi_name', `%${search.trim()}%`);
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []) as KpiDefinitionOption[];
+    },
+  });
+}
+
+/** Pure helper — % progress of a goal, clamped for display. Null when unknowable. */
+export function goalProgressPercent(goal: Pick<BuGoalRow, 'start_value' | 'target_value' | 'current_value'>): number | null {
+  const { start_value: s, target_value: t, current_value: c } = goal;
+  if (t === null || t === undefined || c === null || c === undefined) return null;
+  const start = s ?? 0;
+  if (t === start) return c >= t ? 100 : 0;
+  const pct = ((c - start) / (t - start)) * 100;
+  if (!Number.isFinite(pct)) return null;
+  return Math.max(0, Math.min(100, Math.round(pct * 100) / 100));
+}
