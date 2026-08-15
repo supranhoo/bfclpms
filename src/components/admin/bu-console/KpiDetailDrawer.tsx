@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useBuConsoleKpiDetail, type KpiDetailArgs } from '@/hooks/useBuConsole';
 import { GroupValueEntryDialog } from './GroupValueEntryDialog';
+import { GroupApprovalDialog } from './GroupApprovalDialog';
 
 interface Props {
   args: KpiDetailArgs | null;
@@ -24,6 +25,7 @@ const fmt = (v: number | null | undefined) =>
 export function KpiDetailDrawer({ args, onPageChange, onClose }: Props) {
   const { data, isLoading, error } = useBuConsoleKpiDetail(args);
   const [entryOpen, setEntryOpen] = useState(false);
+  const [approveOpen, setApproveOpen] = useState(false);
   const def = (data?.definition ?? {}) as Record<string, string | null>;
   const totalPages = data ? Math.max(1, Math.ceil(data.total / (data.page_size || 200))) : 1;
 
@@ -38,9 +40,17 @@ export function KpiDetailDrawer({ args, onPageChange, onClose }: Props) {
         </SheetHeader>
 
         {data?.authorized && (
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-2">
             <Button size="sm" onClick={() => setEntryOpen(true)} disabled={!args || data.total === 0}>
               Enter value for all {data.total} employees
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setApproveOpen(true)}
+              disabled={!args || data.total === 0}
+            >
+              Group approve stage
             </Button>
           </div>
         )}
@@ -160,6 +170,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose }: Props) {
         )}
       </SheetContent>
       <GroupValueEntryDialog args={args} open={entryOpen} onOpenChange={setEntryOpen} />
+      <GroupApprovalDialog args={args} open={approveOpen} onOpenChange={setApproveOpen} />
     </Sheet>
   );
 }
