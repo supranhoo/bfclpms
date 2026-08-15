@@ -6352,3 +6352,24 @@ structural and may only move for the whole group.
 Direction and the R5..R0 ladder must agree; a contradiction is surfaced as a
 warning at edit time. Changing Category or KRA always requires the typed
 confirmation, regardless of how many rows are affected.
+
+## §KPI-CYCLE-ANCHOR-WITH-FREQUENCY (ADR-275)
+A multi-month frequency (Bi-Monthly, Quarterly, Half-Yearly, Yearly) is never
+written without its cycle anchor (`frequency_cycle_start`). Frequency and anchor
+always travel together, in the client form, in the console RPCs and in the DB
+guard `bu_console_validate_changes`. A single-month frequency must not carry an
+anchor. Any edit that would place an employee on two overlapping cycles for the
+same KPI and year is reported per employee in the preview and skipped — the
+run never fails halfway.
+
+## §PERF-CONSOLE-EDIT-COMPLETENESS (ADR-275)
+The Performance Console group editor exposes every field the console may write:
+Category, KRA, structured text, Frequency **and cycle anchor**, Day counting
+(Daily), Direction, Source of data, Weightage, Target, Unit, the scoring model,
+and the operational flags Organisation-level (with scope), Require reason on
+resubmission and Lock frequency after submission.
+Per-employee tuning exposes the same set except Category and KRA (structural,
+group-only), and additionally allows several employees to be tuned at once in a
+single undoable run. Every mapped-employee row shows which of its fields are
+individually tuned, and an admin can release them back to the group definition.
+A cycle move requires the typed confirmation, like a structural move.

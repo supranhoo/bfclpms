@@ -8776,3 +8776,45 @@ the ADR-274 RPCs and tables — existing `kpis` rows are unaffected.
   `directionConflictsWithLadder`, and `buildScoringPayload` pins numeric KPIs to
   `threshold_mode = 'absolute'` (POLICY §KPI-THRESHOLD-MODE-ABSOLUTE-ONLY).
 - Tests: `src/components/admin/bu-console/groupEditModel.test.ts`.
+
+## ADR-275 — Performance Console: finish "Edit definition for the whole group"
+
+**Problem.** The group editor could not reach the cycle anchor, so a Bi-Monthly /
+Quarterly move silently kept the old months; six further operational fields on
+`kpis` were unreachable; and mass per-employee tuning needed one dialog per row.
+
+**Server.**
+- `bu_console_editable_fields()` adds `frequency_cycle_start`, `day_count_type`,
+  `is_org_level`, `org_level_scope`, `require_resubmit_reason`,
+  `is_frequency_locked`.
+- `bu_console_validate_changes(jsonb)` — shared guard: multi-month frequency
+  requires an anchor, single-month forbids one, `day_count_type` is constrained
+  (POLICY §KPI-CYCLE-ANCHOR-WITH-FREQUENCY).
+- `bu_console_cycle_anchor_conflict(kpi_id, frequency, anchor)` mirrors
+  `enforce_intra_year_cycle_anchor_consistency` so conflicts are *listed*, not
+  raised: conflicting rows are skipped with reason `cycle_anchor_conflict` and
+  returned in `anchor_conflicts`.
+- `bu_console_group_edit_definition` keeps frequency and anchor together even
+  when only one of them survives the override filter.
+- New `bu_console_bulk_row_overrides(rows jsonb, allow_locked)` — many employees,
+  one `bu_console_edit_runs` row (`scope_kind = 'row_bulk'`), fully undoable.
+- New `bu_console_clear_row_overrides(kpi_id, fields)` — releases a row back to
+  the group definition, audited as `BU_CONSOLE_OVERRIDE_CLEARED`.
+- `bu_console_kpi_detail` returns the new fields per row plus `override_fields`.
+
+**Client.**
+- `GroupDefinitionEditDialog`: cycle anchor picker (with the POLICY §54 v3 cycle
+  scope banner), Daily day-counting, an Advanced block for the operational flags,
+  a cycle-clash list in the preview, and typed confirmation on any cycle move.
+- `RowOverrideDialog`: anchor + day counting, the list of already-tuned fields,
+  and a "follow the group definition again" reset.
+- `KpiDetailDrawer`: "Tune several employees" mode — row selection with a bulk
+  weightage / target bar, plus per-row `tuned (n)` and anchor markers.
+- `groupEditModel.validateCycleChange` / `isMultiMonthFrequency` mirror the DB
+  guard client-side.
+
+**Tests.** `src/components/admin/bu-console/groupEditModel.test.ts` (18 cases,
+incl. 6 new for anchor validation and the new field diffs).
+
+**Rollback.** Additive: the new fields can be dropped from the whitelist and the
+two new RPCs dropped; existing rows are untouched. Any run stays undoable.
