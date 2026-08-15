@@ -227,3 +227,123 @@ export function useDecideMergeProposal() {
     onError: (e: any) => toast.error(e?.message ?? 'Could not record the decision.'),
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* ADR-259 Phase 3 — one-value entry, many employees                   */
+/* ------------------------------------------------------------------ */
+
+export type GroupWritePolicy =
+  | 'safe'
+  | 'pre_review_only'
+  | 'force_pre_terminal'
+  | 'overwrite_and_stepback';
+
+export interface GroupWritePreviewRow {
+  kpi_id: string;
+  employee_id: string;
+  employee_name: string | null;
+  employee_code: string | null;
+  department_name: string | null;
+  business_unit_name: string | null;
+  weightage: number | null;
+  target_value: number | null;
+  current_status: string | null;
+  old_self_score: number | null;
+  new_self_score: number | null;
+}
+
+export interface GroupWriteSkipRow {
+  kpi_id: string;
+  employee_name?: string | null;
+  employee_code?: string | null;
+  department_name?: string | null;
+  business_unit_name?: string | null;
+  current_status?: string | null;
+  reason: string;
+}
+
+export interface GroupWriteResult {
+  authorized: boolean;
+  dry_run: boolean;
+  batch_id: string | null;
+  achieved_value?: number | null;
+  will_write?: number;
+  will_skip?: number;
+  propagated?: number;
+  skipped?: number;
+  preview?: GroupWritePreviewRow[];
+  skipped_details?: GroupWriteSkipRow[];
+}
+
+export const GROUP_WRITE_SKIP_LABELS: Record<string, string> = {
+  final_score_locked: 'Final score approved — immutable (POLICY §88)',
+  approved_immutable: 'Already approved — cannot be overwritten',
+  reviewer_locked: 'Locked at a reviewer stage',
+  not_in_kra_set: 'Past KRA-set stage (safe policy)',
+  no_scoring_bands: 'No scoring bands (R1–R5) on this KPI row',
+  not_authorized: 'You are not the data owner for this KPI',
+  kpi_not_found: 'KPI row no longer exists',
+  race_lost_during_advance: 'Row changed while saving — retry',
+};
+
+export interface GroupWriteArgs {
+  categoryId: string;
+  kraName: string;
+  kpiName: string;
+  period: string;
+  year: number;
+  buIds: string[];
+  deptIds: string[];
+  achievedValue: number | null;
+  isNa: boolean;
+  remarks: string | null;
+  policy: GroupWritePolicy;
+  dryRun: boolean;
+}
+
+async function callGroupWrite(a: GroupWriteArgs): Promise<GroupWriteResult> {
+  const { data, error } = await supabase.rpc('bu_console_group_write' as any, {
+    p_category_id: a.categoryId,
+    p_kra_name: a.kraName,
+    p_kpi_name: a.kpiName,
+    p_period: a.period,
+    p_year: a.year,
+    p_achieved_value: a.achievedValue,
+    p_bu_ids: a.buIds.length ? a.buIds : null,
+    p_dept_ids: a.deptIds.length ? a.deptIds : null,
+    p_is_na: a.isNa,
+    p_remarks: a.remarks,
+    p_overwrite_policy: a.policy,
+    p_dry_run: a.dryRun,
+  });
+  if (error) throw error;
+  return (data ?? { authorized: false, dry_run: a.dryRun, batch_id: null }) as unknown as GroupWriteResult;
+}
+
+/** Preview only — writes nothing. */
+export function useGroupWritePreview() {
+  return useMutation<GroupWriteResult, Error, Omit<GroupWriteArgs, 'dryRun'>>({
+    mutationFn: (a) => callGroupWrite({ ...a, dryRun: true }),
+    onError: (e: any) => toast.error(e?.message ?? 'Could not build the preview.'),
+  });
+}
+
+/** Commits the fan-out after the admin confirms the preview. */
+export function useGroupWriteCommit() {
+  const qc = useQueryClient();
+  return useMutation<GroupWriteResult, Error, Omit<GroupWriteArgs, 'dryRun'>>({
+    mutationFn: (a) => callGroupWrite({ ...a, dryRun: false }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['bu-console-kpi-detail'] });
+      qc.invalidateQueries({ queryKey: ['bu-console-tree'] });
+      const written = res.propagated ?? 0;
+      const skipped = res.skipped ?? 0;
+      toast.success(
+        `Value applied to ${written} employee${written === 1 ? '' : 's'}` +
+          (skipped ? ` · ${skipped} skipped` : ''),
+        { description: res.batch_id ? `Batch ${res.batch_id.slice(0, 8)}` : undefined },
+      );
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not apply the value.'),
+  });
+}
