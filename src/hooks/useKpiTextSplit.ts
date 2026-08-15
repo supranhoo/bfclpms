@@ -72,10 +72,12 @@ export function useKpiSplitGroups(params: {
   confidence: KpiSplitConfidence | 'all';
   state?: KpiSplitState;
   enabled?: boolean;
+  /** ADR-273 — free-text filter on the raw KPI name (deep-link from BU Console). */
+  search?: string;
 }) {
-  const { page, pageSize, confidence, state = 'pending', enabled = true } = params;
+  const { page, pageSize, confidence, state = 'pending', enabled = true, search = '' } = params;
   return useQuery({
-    queryKey: ['kpi-split-groups', page, pageSize, confidence, state],
+    queryKey: ['kpi-split-groups', page, pageSize, confidence, state, search],
     enabled,
     queryFn: async (): Promise<KpiSplitGroupRow[]> => {
       const { data, error } = await supabase.rpc('kpi_split_grouped_dry_run', {
@@ -83,6 +85,7 @@ export function useKpiSplitGroups(params: {
         p_offset: page * pageSize,
         p_confidence: confidence === 'all' ? null : confidence,
         p_state: state,
+        p_search: search.trim() || null,
       });
       if (error) throw error;
       return (data ?? []) as unknown as KpiSplitGroupRow[];
