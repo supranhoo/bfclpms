@@ -322,6 +322,17 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
     setQualitativeOptions(next.qualitative_options);
   };
 
+  // ADR-272 — mirror plain kpiName edits into the structured text state
+  useEffect(() => {
+    setTextState((prev) => (prev.kpi_name === kpiName ? prev : textStateFromRow({
+      kpi_name: kpiName,
+      kpi_title: prev.kpi_title || null,
+      kpi_description: prev.kpi_description || null,
+      kpi_formula: prev.kpi_formula || null,
+      kpi_scoring_logic: prev.kpi_scoring_logic || null,
+    })));
+  }, [kpiName]);
+
   const handleTextChange = (next: KpiTextState) => {
     setTextState(next);
     setKpiName(buildTextPayload(next).kpi_name);
