@@ -5,14 +5,18 @@
  * ADR-264 — the KRA and KPI lists are virtualized, so a category holding
  * thousands of rows renders (and scrolls) without dropping any of them.
  */
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ChevronRight, Users } from 'lucide-react';
+import { ChevronRight, Users, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ConsoleMetricRow } from './ConsoleMetricRow';
-import type { BuConsoleCategoryNode, BuConsoleKraNode } from '@/hooks/useBuConsole';
+import type {
+  BuConsoleCategoryNode,
+  BuConsoleKraNode,
+  BuConsoleKpiNode,
+} from '@/hooks/useBuConsole';
 
 /** Lists shorter than this render normally — virtualization only pays off past it. */
 const VIRTUALIZE_ABOVE = 40;
@@ -65,7 +69,128 @@ interface Props {
   selectedKraKey: string | null;
   onSelectCategory: (categoryId: string) => void;
   onSelectKra: (kraKey: string) => void;
-  onSelectKpi: (categoryId: string, kraName: string, kpiName: string) => void;
+  onSelectKpi: (
+    categoryId: string,
+    kraName: string,
+    kpi: BuConsoleKpiNode,
+    variantKey?: string | null,
+  ) => void;
+}
+
+const fmtScore = (v: number | null | undefined) =>
+  v === null || v === undefined ? '—' : Number(v).toFixed(2);
+
+/**
+ * ADR-270 — one row per structured KPI title. When rows behind the title
+ * disagree on definition or weightage the row says so and the variants can be
+ * expanded and opened individually; nothing is collapsed silently.
+ */
+function KpiRow({
+  kpi,
+  index,
+  onOpen,
+}: {
+  kpi: BuConsoleKpiNode;
+  index: number;
+  onOpen: (variantKey?: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const weights = kpi.weightage_values ?? [];
+  const variantCount = kpi.variant_count ?? 1;
+  const hasVariance = variantCount > 1 || weights.length > 1;
+
+  return (
+    <div>
+      <ConsoleMetricRow
+        index={index}
+        title={kpi.kpi_title || kpi.kpi_name}
+        subtitle={
+          <span className="flex flex-wrap items-center gap-1">
+            {kpi.kpi_description ? (
+              <span className="line-clamp-1 text-muted-foreground">{kpi.kpi_description}</span>
+            ) : (
+              <span className="flex items-center gap-1">
+                <Users className="h-3 w-3" />
+                {kpi.employee_count} employee{kpi.employee_count === 1 ? '' : 's'} mapped
+              </span>
+            )}
+            {kpi.is_org_level && (
+              <Badge variant="secondary" className="h-4 px-1 text-[10px]">Org-level</Badge>
+            )}
+            {!kpi.is_structured && (
+              <Badge variant="outline" className="h-4 px-1 text-[10px]">Unsplit text</Badge>
+            )}
+          </span>
+        }
+        onClick={() => onOpen(null)}
+        metrics={[
+          { label: 'Employees', value: kpi.employee_count },
+          {
+            label: 'Weightage',
+            value:
+              weights.length === 0
+                ? '—'
+                : weights.length === 1
+                  ? Number(weights[0]).toFixed(2)
+                  : `${weights.length} values`,
+          },
+          { label: 'Avg score', value: fmtScore(kpi.avg_score) },
+        ]}
+        trailing={
+          <span className="flex items-center gap-2">
+            {hasVariance && (
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label={`Show ${variantCount} variants of ${kpi.kpi_title || kpi.kpi_name}`}
+                onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setOpen(o => !o); }
+                }}
+                className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400"
+              >
+                <Layers className="h-3 w-3" />
+                {variantCount} variant{variantCount === 1 ? '' : 's'}
+              </span>
+            )}
+            <span className="flex items-center gap-1 text-xs font-medium text-primary">
+              Open <ChevronRight className="h-4 w-4" />
+            </span>
+          </span>
+        }
+      />
+
+      {open && (
+        <ul className="space-y-1 bg-muted/40 px-4 py-2">
+          {kpi.variants.map((v, vi) => (
+            <li key={v.variant_key}>
+              <button
+                type="button"
+                onClick={() => onOpen(v.variant_key)}
+                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-xs hover:bg-background"
+              >
+                <span className="min-w-0">
+                  <span className="font-medium">Variant {vi + 1}</span>
+                  <span className="ml-2 text-muted-foreground">
+                    {v.employee_count} employee{v.employee_count === 1 ? '' : 's'}
+                    {v.target_value !== null && v.target_value !== undefined
+                      ? ` · target ${v.target_value}${v.uom ? ` ${v.uom}` : ''}`
+                      : ''}
+                  </span>
+                  {(v.formula || v.scoring_logic) && (
+                    <span className="block truncate text-muted-foreground">
+                      {v.formula ? `Formula: ${v.formula}` : `Scoring: ${v.scoring_logic}`}
+                    </span>
+                  )}
+                </span>
+                <span className="shrink-0 text-primary">Open</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 export function BuConsoleTree({
@@ -169,29 +294,15 @@ export function BuConsoleTree({
             </div>
             <VirtualRows
               items={kra.kpis}
-              estimateSize={60}
+              estimateSize={64}
               maxHeightClass="max-h-[520px]"
               renderRow={(kpi, i) => (
-                <ConsoleMetricRow
+                <KpiRow
                   key={kpi.kpi_key}
+                  kpi={kpi}
                   index={i + 1}
-                  title={kpi.kpi_name}
-                  subtitle={
-                    <span className="flex items-center gap-1">
-                      <Users className="h-3 w-3" />
-                      {kpi.employee_count} employee{kpi.employee_count === 1 ? '' : 's'} mapped
-                      {kpi.is_org_level && (
-                        <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
-                          Org-level
-                        </Badge>
-                      )}
-                    </span>
-                  }
-                  onClick={() => onSelectKpi(category.category_id, kra.kra_name, kpi.kpi_name)}
-                  trailing={
-                    <span className="flex items-center gap-1 text-xs font-medium text-primary">
-                      Open <ChevronRight className="h-4 w-4" />
-                    </span>
+                  onOpen={(variantKey) =>
+                    onSelectKpi(category.category_id, kra.kra_name, kpi, variantKey)
                   }
                 />
               )}
