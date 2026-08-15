@@ -8,13 +8,10 @@
  */
 import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { ReviewPeriodSelector } from '@/components/ui/ReviewPeriodSelector';
 import { OrgFilterCombobox } from '@/components/admin/OrgFilterCombobox';
 import { useBusinessUnits, useDepartments, useDivisions } from '@/hooks/useOrganization';
 import { useManagers } from '@/hooks/useKpiFilters';
@@ -25,10 +22,11 @@ import {
   type KpiDetailArgs,
 } from '@/hooks/useBuConsole';
 import { BuConsoleTree } from '@/components/admin/bu-console/BuConsoleTree';
+import { ScopeToolbar } from '@/components/admin/bu-console/ScopeToolbar';
 import { KpiDetailDrawer } from '@/components/admin/bu-console/KpiDetailDrawer';
 import { MergeProposalsTab } from '@/components/admin/bu-console/MergeProposalsTab';
 import { GoalsTab } from '@/components/admin/bu-console/GoalsTab';
-import { FlaskConical, RefreshCw } from 'lucide-react';
+import { ChevronRight, FlaskConical } from 'lucide-react';
 
 export default function BuConsole() {
   const { data: flagEnabled, isLoading: flagLoading } = useBuConsoleFlag();
