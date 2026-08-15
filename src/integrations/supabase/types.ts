@@ -3893,6 +3893,151 @@ export type Database = {
         }
         Relationships: []
       }
+      bu_console_edit_items: {
+        Row: {
+          created_at: string
+          employee_id: string | null
+          id: string
+          kpi_id: string
+          new_values: Json
+          old_values: Json
+          reverted_at: string | null
+          run_id: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id?: string | null
+          id?: string
+          kpi_id: string
+          new_values?: Json
+          old_values?: Json
+          reverted_at?: string | null
+          run_id: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string | null
+          id?: string
+          kpi_id?: string
+          new_values?: Json
+          old_values?: Json
+          reverted_at?: string | null
+          run_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bu_console_edit_items_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "bu_console_edit_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bu_console_edit_runs: {
+        Row: {
+          affected_rows: number
+          allow_locked: boolean
+          category_id: string | null
+          changes: Json
+          created_at: string
+          id: string
+          kpi_name: string | null
+          kra_name: string | null
+          performed_by: string | null
+          reset_overrides: boolean
+          review_period: string | null
+          review_year: number | null
+          scope_kind: string
+          skipped_rows: number
+          title_key: string | null
+          undone_at: string | null
+          undone_by: string | null
+          updated_at: string
+          variant_key: string | null
+        }
+        Insert: {
+          affected_rows?: number
+          allow_locked?: boolean
+          category_id?: string | null
+          changes?: Json
+          created_at?: string
+          id?: string
+          kpi_name?: string | null
+          kra_name?: string | null
+          performed_by?: string | null
+          reset_overrides?: boolean
+          review_period?: string | null
+          review_year?: number | null
+          scope_kind?: string
+          skipped_rows?: number
+          title_key?: string | null
+          undone_at?: string | null
+          undone_by?: string | null
+          updated_at?: string
+          variant_key?: string | null
+        }
+        Update: {
+          affected_rows?: number
+          allow_locked?: boolean
+          category_id?: string | null
+          changes?: Json
+          created_at?: string
+          id?: string
+          kpi_name?: string | null
+          kra_name?: string | null
+          performed_by?: string | null
+          reset_overrides?: boolean
+          review_period?: string | null
+          review_year?: number | null
+          scope_kind?: string
+          skipped_rows?: number
+          title_key?: string | null
+          undone_at?: string | null
+          undone_by?: string | null
+          updated_at?: string
+          variant_key?: string | null
+        }
+        Relationships: []
+      }
+      bu_console_kpi_overrides: {
+        Row: {
+          created_at: string
+          field: string
+          id: string
+          kpi_id: string
+          run_id: string | null
+          set_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          field: string
+          id?: string
+          kpi_id: string
+          run_id?: string | null
+          set_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          field?: string
+          id?: string
+          kpi_id?: string
+          run_id?: string | null
+          set_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bu_console_kpi_overrides_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "bu_console_edit_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bu_goals: {
         Row: {
           business_unit_id: string | null
@@ -16957,6 +17102,10 @@ export type Database = {
         Args: { kpis_json: Json }
         Returns: number
       }
+      bu_console_apply_kpi_changes: {
+        Args: { p_changes: Json; p_kpi_id: string }
+        Returns: Json
+      }
       bu_console_can_read: { Args: { _uid: string }; Returns: boolean }
       bu_console_decide_merge_proposal: {
         Args: { p_approve: boolean; p_note?: string; p_proposal_id: string }
@@ -16966,6 +17115,8 @@ export type Database = {
         Args: { p_limit?: number; p_search?: string }
         Returns: Json
       }
+      bu_console_edit_runs_list: { Args: { p_limit?: number }; Returns: Json }
+      bu_console_editable_fields: { Args: never; Returns: string[] }
       bu_console_generate_merge_proposals: {
         Args: { p_fuzzy_threshold?: number }
         Returns: Json
@@ -16983,6 +17134,26 @@ export type Database = {
           p_period: string
           p_remarks?: string
           p_target_stage: string
+          p_title_key?: string
+          p_variant_key?: string
+          p_year: number
+        }
+        Returns: Json
+      }
+      bu_console_group_edit_definition: {
+        Args: {
+          p_allow_locked?: boolean
+          p_bu_ids?: string[]
+          p_category_id: string
+          p_changes: Json
+          p_dept_ids?: string[]
+          p_division_ids?: string[]
+          p_dry_run?: boolean
+          p_kpi_name: string
+          p_kra_name: string
+          p_manager_ids?: string[]
+          p_period: string
+          p_reset_overrides?: boolean
           p_title_key?: string
           p_variant_key?: string
           p_year: number
@@ -17032,6 +17203,10 @@ export type Database = {
         Args: { p_page?: number; p_page_size?: number; p_status?: string }
         Returns: Json
       }
+      bu_console_row_override: {
+        Args: { p_allow_locked?: boolean; p_changes: Json; p_kpi_id: string }
+        Returns: Json
+      }
       bu_console_tree: {
         Args: {
           p_bu_ids?: string[]
@@ -17043,6 +17218,7 @@ export type Database = {
         }
         Returns: Json
       }
+      bu_console_undo_edit_run: { Args: { p_run_id: string }; Returns: Json }
       bu_console_variant_key: {
         Args: {
           p_desc: string
