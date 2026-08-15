@@ -40,6 +40,8 @@ interface ScopeToolbarProps {
   onRefresh?: () => void;
   isBusy?: boolean;
   hasScope?: boolean;
+  /** ADR-271 — filters changed since the loaded scope; results below are stale. */
+  isDirty?: boolean;
   hint?: ReactNode;
 }
 
@@ -53,6 +55,7 @@ export function ScopeToolbar({
   onRefresh,
   isBusy,
   hasScope,
+  isDirty,
   hint,
 }: ScopeToolbarProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -137,8 +140,13 @@ export function ScopeToolbar({
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <Button className="min-h-11" onClick={onApply} disabled={isBusy}>
-            Load console
+          <Button
+            className="min-h-11"
+            onClick={onApply}
+            disabled={isBusy}
+            variant={isDirty ? 'default' : hasScope ? 'outline' : 'default'}
+          >
+            {isDirty && hasScope ? 'Apply filters' : 'Load console'}
           </Button>
           {hasScope && onRefresh && (
             <Button
@@ -155,6 +163,11 @@ export function ScopeToolbar({
         </div>
       </div>
 
+      {isDirty && hasScope && (
+        <p className="pt-1 text-xs font-medium text-amber-600 dark:text-amber-400" role="status">
+          Filters changed — results below still show the previously loaded scope. Apply filters to refresh.
+        </p>
+      )}
       {hint && <p className="pt-1 text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
