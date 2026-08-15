@@ -877,3 +877,241 @@ export function useGoalKraOptions(
   });
 }
 
+
+/* ------------------------------------------------------------------
+ * ADR-274 — Group KPI definition editing with per-employee overrides.
+ *
+ * One KPI title maps to many employee rows. A group edit changes the
+ * definition once for the whole mapped set; an individual override tunes a
+ * single employee row and is then protected from later group edits.
+ * Both are admin-only, both are previewed before they write, and every
+ * changed field is recorded so the run can be undone.
+ * ------------------------------------------------------------------ */
+
+/** Whitelisted, admin-editable KPI definition fields (mirrors `bu_console_editable_fields()`). */
+export const GROUP_EDIT_FIELDS = [
+  'kpi_title', 'kpi_description', 'kpi_formula', 'kpi_scoring_logic',
+  'weightage', 'target_value', 'uom', 'uom_type', 'frequency', 'threshold_mode',
+  'qualitative_options', 'r5', 'r4', 'r3', 'r2', 'r1', 'r0',
+  'kra_name', 'category_id',
+] as const;
+
+export type GroupEditField = (typeof GROUP_EDIT_FIELDS)[number];
+
+export const GROUP_EDIT_FIELD_LABELS: Record<string, string> = {
+  kpi_title: 'Title',
+  kpi_description: 'Description',
+  kpi_formula: 'Formula',
+  kpi_scoring_logic: 'Scoring logic',
+  weightage: 'Weightage',
+  target_value: 'Target',
+  uom: 'Unit',
+  uom_type: 'KPI type',
+  frequency: 'Frequency',
+  threshold_mode: 'Threshold mode',
+  qualitative_options: 'Options',
+  r5: 'Rating 5', r4: 'Rating 4', r3: 'Rating 3',
+  r2: 'Rating 2', r1: 'Rating 1', r0: 'Rating 0',
+  kra_name: 'KRA',
+  category_id: 'Category',
+};
+
+export const GROUP_EDIT_SKIP_LABELS: Record<string, string> = {
+  final_score_locked: 'Final score approved — immutable (POLICY §88)',
+  past_kra_set: 'Already in review — enable "include rows already in review" to edit',
+  individual_override: 'Individually overridden — tick "reset overrides" to include',
+};
+
+export interface GroupEditPreviewRow {
+  kpi_id: string;
+  employee_id: string;
+  employee_name: string | null;
+  employee_code: string | null;
+  department_name: string | null;
+  business_unit_name: string | null;
+  current_status: string | null;
+  variant_key: string | null;
+  weightage: number | null;
+  target_value: number | null;
+  fields: string[];
+}
+
+export interface GroupEditWeightageRow {
+  employee_id: string;
+  employee_name: string | null;
+  employee_code: string | null;
+  current_total: number | null;
+  new_total: number | null;
+}
+
+export interface GroupEditResult {
+  authorized: boolean;
+  dry_run: boolean;
+  run_id: string | null;
+  will_write?: number;
+  will_skip?: number;
+  updated?: number | null;
+  detail_limit?: number;
+  detail_truncated?: boolean;
+  skip_summary?: SkipSummaryEntry[];
+  weightage_impact?: GroupEditWeightageRow[];
+  preview?: GroupEditPreviewRow[];
+  skipped_details?: GroupWriteSkipRow[];
+}
+
+export interface GroupEditArgs {
+  categoryId: string;
+  kraName: string;
+  kpiName: string;
+  period: string;
+  year: number;
+  buIds: string[];
+  deptIds: string[];
+  divisionIds?: string[];
+  managerIds?: string[];
+  titleKey?: string | null;
+  variantKey?: string | null;
+  /** Only the fields the admin actually changed. */
+  changes: Record<string, string | null>;
+  allowLocked: boolean;
+  resetOverrides: boolean;
+  dryRun: boolean;
+}
+
+async function callGroupEdit(a: GroupEditArgs): Promise<GroupEditResult> {
+  const { data, error } = await supabase.rpc('bu_console_group_edit_definition' as any, {
+    p_category_id: a.categoryId,
+    p_kra_name: a.kraName,
+    p_kpi_name: a.kpiName,
+    p_period: a.period,
+    p_year: a.year,
+    p_changes: a.changes,
+    p_bu_ids: a.buIds.length ? a.buIds : null,
+    p_dept_ids: a.deptIds.length ? a.deptIds : null,
+    p_division_ids: a.divisionIds?.length ? a.divisionIds : null,
+    p_manager_ids: a.managerIds?.length ? a.managerIds : null,
+    p_title_key: a.titleKey ?? null,
+    p_variant_key: a.variantKey ?? null,
+    p_allow_locked: a.allowLocked,
+    p_reset_overrides: a.resetOverrides,
+    p_dry_run: a.dryRun,
+  });
+  if (error) throw error;
+  return (data ?? { authorized: false, dry_run: a.dryRun, run_id: null }) as unknown as GroupEditResult;
+}
+
+/** Preview only — changes nothing. */
+export function useGroupEditPreview() {
+  return useMutation<GroupEditResult, Error, Omit<GroupEditArgs, 'dryRun'>>({
+    mutationFn: (a) => callGroupEdit({ ...a, dryRun: true }),
+    onError: (e: any) => toast.error(e?.message ?? 'Could not build the edit preview.'),
+  });
+}
+
+/** Commits the definition edit after the admin confirms the preview. */
+export function useGroupEditCommit() {
+  const qc = useQueryClient();
+  return useMutation<GroupEditResult, Error, Omit<GroupEditArgs, 'dryRun'>>({
+    mutationFn: (a) => callGroupEdit({ ...a, dryRun: false }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['bu-console-kpi-detail'] });
+      qc.invalidateQueries({ queryKey: ['bu-console-tree'] });
+      qc.invalidateQueries({ queryKey: ['bu-console-edit-runs'] });
+      const n = res.updated ?? 0;
+      toast.success(
+        `${n} employee row${n === 1 ? '' : 's'} updated` +
+          (res.will_skip ? ` · ${res.will_skip} skipped` : ''),
+        { description: res.run_id ? `Run ${res.run_id.slice(0, 8)} — can be undone` : undefined },
+      );
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not apply the definition edit.'),
+  });
+}
+
+export interface RowOverrideResult {
+  authorized: boolean;
+  updated?: number;
+  run_id?: string | null;
+  reason?: string;
+}
+
+/** Single-employee override — the row is then excluded from later group edits. */
+export function useRowOverride() {
+  const qc = useQueryClient();
+  return useMutation<RowOverrideResult, Error, { kpiId: string; changes: Record<string, string | null>; allowLocked?: boolean }>({
+    mutationFn: async (a) => {
+      const { data, error } = await supabase.rpc('bu_console_row_override' as any, {
+        p_kpi_id: a.kpiId,
+        p_changes: a.changes,
+        p_allow_locked: a.allowLocked ?? false,
+      });
+      if (error) throw error;
+      return (data ?? { authorized: false }) as unknown as RowOverrideResult;
+    },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['bu-console-kpi-detail'] });
+      qc.invalidateQueries({ queryKey: ['bu-console-edit-runs'] });
+      if (!res.updated) {
+        toast.warning(
+          res.reason ? (GROUP_EDIT_SKIP_LABELS[res.reason] ?? 'Nothing changed.') : 'Nothing changed.',
+        );
+        return;
+      }
+      toast.success('Employee row updated — marked as an individual override.');
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not update this employee row.'),
+  });
+}
+
+export interface ConsoleEditRun {
+  id: string;
+  scope_kind: 'group' | 'row';
+  kra_name: string | null;
+  kpi_name: string | null;
+  review_period: string | null;
+  review_year: number | null;
+  fields: string[];
+  affected_rows: number;
+  skipped_rows: number;
+  performed_by_name: string | null;
+  undone_at: string | null;
+  created_at: string;
+}
+
+export function useConsoleEditRuns(enabled = false, limit = 25) {
+  return useQuery({
+    queryKey: ['bu-console-edit-runs', limit],
+    enabled,
+    staleTime: 30_000,
+    queryFn: async (): Promise<ConsoleEditRun[]> => {
+      const { data, error } = await supabase.rpc('bu_console_edit_runs_list' as any, { p_limit: limit });
+      if (error) throw error;
+      return ((data as any)?.runs ?? []) as ConsoleEditRun[];
+    },
+  });
+}
+
+export function useUndoConsoleEditRun() {
+  const qc = useQueryClient();
+  return useMutation<{ authorized: boolean; reverted?: number; conflicts?: number; reason?: string }, Error, string>({
+    mutationFn: async (runId) => {
+      const { data, error } = await supabase.rpc('bu_console_undo_edit_run' as any, { p_run_id: runId });
+      if (error) throw error;
+      return (data ?? { authorized: false }) as any;
+    },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['bu-console-kpi-detail'] });
+      qc.invalidateQueries({ queryKey: ['bu-console-tree'] });
+      qc.invalidateQueries({ queryKey: ['bu-console-edit-runs'] });
+      if (res.reason === 'already_undone') {
+        toast.info('This run was already undone.');
+        return;
+      }
+      toast.success(
+        `${res.reverted ?? 0} row${(res.reverted ?? 0) === 1 ? '' : 's'} restored` +
+          (res.conflicts ? ` · ${res.conflicts} field${res.conflicts === 1 ? '' : 's'} changed since and left as-is` : ''),
+      );
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not undo this run.'),
+  });
+}
