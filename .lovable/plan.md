@@ -53,6 +53,28 @@ Because these are separate, the same "Production Target vs Actual" definition ca
 
 A de-duplication queue proposes merges for near-identical entries (spelling, comma, extra space, casing) using the existing KPI standardization normalisation. **Every merge is a proposal an admin approves** — nothing merges automatically, and merging only re-points links, never edits historical scores.
 
+### 5. Goal object, borrowed from the Peoplebox model
+
+Peoplebox (peoplebox.ai) solves the same "one goal, many people" problem with a single generic **goal** object rather than separate company/team/individual features. We adopt the parts that fit our engine and skip the parts that clash with it.
+
+What we take:
+- **One object, an entity level on it.** A goal is created at Org / BU / Department / Individual level. Same table, same fields — the level just says who it belongs to. In our case the BU-level goal is exactly today's org KPI, so no new concept is introduced for the user.
+- **Parent link instead of a rigid tree.** Every goal can point at a parent goal. A BU "Production Target vs Actual" is the parent; the employee rows mapped to it are its children. This is what makes the console's drilldown a real hierarchy rather than a filtered list, and it gives us the alignment view for free.
+- **Goal = a metric.** `start value`, `target value`, `current value`, `unit`, plus a progress type (number / currency / percentage / rollup-only). This is the same shape as our KPI definition + formula split, so the library tables carry these fields rather than a parallel structure.
+- **Explicit tracking method** on each goal: manual entry, roll-up from children, or fed from a data source. Today everything is manual; naming the field now means the org-KPI auto-feed later is a value change, not a migration.
+- **Milestones for sub-periods.** Monthly slices under an annual goal, each with its own target, and a stated rule for how the parent summarises them (latest value vs sum vs average). Our multi-month and daily/weekly KPIs already behave this way — making the summarise rule an explicit field kills a long tail of "why is the annual number not the sum" questions.
+- **Cycles as a first-class object.** Goals attach to a named cycle with start/due dates. We already have fiscal periods and annual cycles; the console reads them, it does not create a second calendar.
+- **Visibility on the goal** — public / restricted / custom. Peoplebox's own lesson is that a goal a manager cannot see silently drops out of the review; our version resolves visibility through the existing access-profile and org-scope rules and **shows skipped goals with the reason** instead of hiding them.
+- **Owners are named on the goal.** One data-entry owner, optional additional owners. Matches the existing `org_kpi_data_owners` mapping.
+
+What we deliberately do not take:
+- **No 0–1.0 OKR grading.** Our scoring is the existing 0–5 scale with per-employee scoring bands. Goal progress feeds that; it does not replace it.
+- **No straight-average roll-up.** Peoplebox averages children into the parent. We keep our weighted calculation — each employee's weightage is the whole point.
+- **No goal-time approval chain of its own.** Approval stays the resolved per-employee workflow; the goal object carries no second approval path.
+- **No chat-tool check-ins in the beta.** Entry happens in the console; reminders continue through the existing notification engine.
+
+Net effect on the plan: the library tables from section 4 gain the metric fields (start/target/current/unit/progress type), a `parent_goal_id`, a tracking method, a summarise rule for sub-periods, and a cycle reference. Nothing else in the plan changes shape.
+
 ## Explicitly out of scope for the beta
 
 - No change to any existing review screen's behaviour.
@@ -76,6 +98,8 @@ Each phase is independently shippable and independently reversible.
 
 New objects:
 - `kpi_definitions_master`, `kpi_formulas`, `kpi_scoring_scales` (+ `kpi_definition_links` mapping `kpis` rows to the triple), `kpi_merge_proposals`. All in `public`, all with GRANTs to `authenticated`/`service_role`, RLS admin-write / role-scoped read, `created_at`/`updated_at` + update trigger.
+- Goal fields (section 5) land on `kpi_definitions_master` plus a per-scope `bu_goals` row: `entity_level` (org|bu|department|individual), `parent_goal_id UUID NULL` (self-FK), `progress_type`, `start_value`, `target_value`, `current_value`, `unit`, `tracking_method` (manual|rollup|source), `subperiod_summary_rule` (last|sum|avg), `cycle_ref` (existing period/annual cycle), `visibility`. Additive only; `individual` level continues to read from `kpis`/`review_submissions` — no employee data is copied into the new tables.
+- Roll-up is computed, never stored twice: parent `current_value` is derived from children by the declared `subperiod_summary_rule`, with our weighted logic (not an average) for employee-level aggregation.
 - RPCs (all SECURITY DEFINER, role-checked, `search_path = public`): `bu_console_tree(p_bu_ids[], p_dept_ids[], p_period, p_year)` returning category→KRA→KPI counts only; `bu_console_kpi_detail(p_kpi_key, ...)` returning the mapped-employee slice paged; `bu_console_group_write(...)` delegating to `propagate_org_kpi_value`; `bu_console_group_advance(...)` delegating to the existing stage-advance guard.
 - Join keys normalised through `normalizeKpiKey` / `public.normalize_kpi_text` on both sides, per ADR-054/057.
 
