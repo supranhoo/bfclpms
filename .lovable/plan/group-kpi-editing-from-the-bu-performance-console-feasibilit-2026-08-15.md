@@ -14,6 +14,7 @@
 **Group edit (default).** From the KPI row in the console, "Edit definition for group" opens a form with the split fields (Title / Description / Formula / Scoring Logic), scoring model (value / tiered / binary), weightage, target, UoM and frequency. Only fields you actually change are written — untouched fields are never overwritten.
 
 **Mandatory dry-run.** Before applying, show the same style of preview the group value entry already uses:
+
 - rows that will change, grouped by BU / department
 - rows that are **skipped and why**: period locked, KPI past `kra_set` (already scored), frequency locked, outside your scope. Never a silent skip.
 - for weightage changes: per-employee new totals, flagging anyone who leaves 100%.
@@ -32,13 +33,15 @@
 
 ## Risk summary
 
-| Area | Risk | Mitigation |
-| --- | --- | --- |
-| Data | Mass overwrite of live KPI text/weightage | Dry-run + only-changed-fields + audit + undo run |
-| Scoring | Weightage change breaks per-employee 100% total | Preview per-employee totals, flag deviations before apply |
+
+| Area     | Risk                                                       | Mitigation                                                |
+| -------- | ---------------------------------------------------------- | --------------------------------------------------------- |
+| Data     | Mass overwrite of live KPI text/weightage                  | Dry-run + only-changed-fields + audit + undo run          |
+| Scoring  | Weightage change breaks per-employee 100% total            | Preview per-employee totals, flag deviations before apply |
 | Workflow | Editing a KPI already scored invalidates a submitted score | Rows past `kra_set` are skipped, never silently rewritten |
-| Reports | Category/KRA move changes historical grouping | Separate explicit action, restricted to open periods |
-| Scale | Groups of hundreds of rows | Batched apply, server-side counts, progress feedback |
+| Reports  | Category/KRA move changes historical grouping              | Separate explicit action, restricted to open periods      |
+| Scale    | Groups of hundreds of rows                                 | Batched apply, server-side counts, progress feedback      |
+
 
 ## Build shape (if approved)
 
@@ -50,6 +53,7 @@
 
 ## Open questions
 
-1. Should a group edit be allowed to touch rows already at `self_review` or beyond if the admin explicitly confirms, or always hard-skip them?
-2. Should weightage changes be blocked when an employee would no longer total 100%, or allowed with the existing variance acknowledgement?
-3. Who can run group edits — admin only, or also BU heads within their own scope?
+1. Should a group edit be allowed to touch rows already at `self_review` or beyond if the admin explicitly confirms, or always hard-skip them? - Allow this. 
+2. Should weightage changes be blocked when an employee would no longer total 100%, or allowed with the existing variance acknowledgement? - allow as there will be change.
+3. Who can run group edits — admin only, or also BU heads within their own scope? for now this is Admin Only. 
+  &nbsp;

@@ -9,12 +9,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useBuConsoleKpiDetail, type KpiDetailArgs } from '@/hooks/useBuConsole';
+import { useBuConsoleKpiDetail, type KpiDetailArgs, type BuConsoleEmployeeRow } from '@/hooks/useBuConsole';
 import { KpiTextBlocks } from '@/components/kpi/KpiText';
 import { KpiScoringScale, KpiTypeBadge } from '@/components/review/KpiScoringScale';
 import { isMixedScoringGroup, resolveKpiScoringModel } from '@/lib/kpiScoringModel';
 import { GroupValueEntryDialog } from './GroupValueEntryDialog';
 import { GroupApprovalDialog } from './GroupApprovalDialog';
+import { GroupDefinitionEditDialog } from './GroupDefinitionEditDialog';
+import { RowOverrideDialog } from './RowOverrideDialog';
 
 interface Props {
   args: KpiDetailArgs | null;
@@ -31,6 +33,8 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
   const { data, isLoading, error } = useBuConsoleKpiDetail(args);
   const [entryOpen, setEntryOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [overrideRow, setOverrideRow] = useState<BuConsoleEmployeeRow | null>(null);
   const def = (data?.definition ?? {}) as Record<string, any>;
   const variantCount = Number(def.variant_count ?? 1);
   const mixedTypes = isMixedScoringGroup(def.uom_types);
@@ -100,6 +104,14 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
               disabled={!args || data.total === 0}
             >
               Group approve stage
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setEditOpen(true)}
+              disabled={!args || data.total === 0}
+            >
+              Edit definition for all {data.total}
             </Button>
           </div>
         )}
@@ -190,6 +202,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
                       <TableHead className="text-right">Actual</TableHead>
                       <TableHead className="text-right">Score</TableHead>
                       <TableHead>Stage</TableHead>
+                      <TableHead className="w-[70px]" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -218,11 +231,16 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
                         <TableCell>
                           <Badge variant="outline">{r.status ?? '—'}</Badge>
                         </TableCell>
+                        <TableCell className="text-right">
+                          <Button size="sm" variant="ghost" onClick={() => setOverrideRow(r)}>
+                            Tune
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                     {data.rows.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={variantCount > 1 ? 8 : 7} className="text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={variantCount > 1 ? 9 : 8} className="text-center text-sm text-muted-foreground">
                           No mapped employees in this scope.
                         </TableCell>
                       </TableRow>
@@ -241,6 +259,17 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
         scoringModel={scoringModel}
       />
       <GroupApprovalDialog args={args} open={approveOpen} onOpenChange={setApproveOpen} />
+      <GroupDefinitionEditDialog
+        args={args}
+        definition={def}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+      />
+      <RowOverrideDialog
+        row={overrideRow}
+        open={!!overrideRow}
+        onOpenChange={(o) => !o && setOverrideRow(null)}
+      />
     </Sheet>
   );
 }
