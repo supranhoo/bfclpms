@@ -8661,3 +8661,33 @@ components; no schema or data change was made.
 
 ## ADR-271 — KPI type awareness (v2.66.271)
 KPI scoring type resolution is centralised in `src/lib/kpiScoringModel.ts`; scoring scales render through `KpiScoringScale`. BU Console filters expose a dirty state before results are refetched. See docs/adr/ADR-271.md.
+
+## ADR-272 — Assign New KRA / Admin KPI Editor parity (v2.66.272)
+
+**Problem.** The two KPI entry points had drifted: "Assign New KRA"
+(`AdminKpiCreateDialog`) and "Admin KPI Editor" (`AdminKpiEditorForm`) each
+owned a private copy of the scoring inputs and validation, neither supported
+the structured text split (ADR-269), and the editor lacked the KRA library
+search, inline category creation and multi-month cycle note.
+
+**Design.** One shared, mode-agnostic module set under
+`src/components/admin/kpi-form/`:
+- `kpiFormModel.ts` — SSOT for state shapes (`KpiTextState`, `KpiScoringState`),
+  `buildTextPayload`, `buildScoringPayload`, `textStateFromRow`,
+  `suggestTextState` and `validateScoringState`.
+- `KpiTextSplitFields.tsx` — Title / Description / Formula / Scoring Logic with
+  a "Split text" action for legacy names. `kpi_name` is recomposed from the
+  structured parts so historical joins, reports and scorecards keep matching.
+- `KpiScoringEditor.tsx` — type-aware scoring (numeric thresholds vs binary
+  polarity vs tiered options), replacing the duplicated grids in both forms.
+
+**Parity closed.** Editor gained the KRA library search, inline category
+creation and the multi-month cycle coverage note. Assign gained the editor's
+stricter tiered/binary validation. Both gained the structured text fields and
+the shared scoring editor.
+
+**Tests.** `src/test/kpiFormModel.test.ts` covers payload nulling per type,
+legacy-name preservation, recomposition and binary/tiered validation.
+
+**Rollback.** Revert the two form components; the shared module is additive and
+no schema or data changed.

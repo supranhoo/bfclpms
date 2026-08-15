@@ -6300,3 +6300,12 @@ plain-language reason.
 
 ### §KPI-TYPE-PARITY (ADR-271)
 Any surface that displays or influences a KPI score MUST render the KPI's actual type: value-based (R0–R5 bands), binary (its own two options, including inverted safety pairs) or tiered (its own tier list). A qualitative KPI must never be shown as a bare 0–5 threshold grid, and an unconfigured KPI must say so rather than display blank bands. Qualitative inputs are stored as the selected option's 0–5 rating. Group value entry is forbidden when a grouped title mixes KPI types.
+
+### §KPI-FORM-PARITY (ADR-272)
+"Assign New KRA" and "Admin KPI Editor" are two modes of one KPI form. Any
+field, validation rule or helper available in one MUST be available in the
+other; structural parity is enforced by sharing `kpi-form/kpiFormModel.ts`,
+`KpiTextSplitFields` and `KpiScoringEditor` rather than by review. Creating or
+editing a KPI writes the structured text columns (ADR-269) and the type-correct
+scoring columns (ADR-271), and `kpi_name` is always recomposed from the
+structured parts so historical joins remain valid.

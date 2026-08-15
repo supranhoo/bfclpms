@@ -22,6 +22,20 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { UomType, QualitativeOption, validateQualitativeOptions, BINARY_OPTIONS, BINARY_OPTIONS_INVERTED, isBinaryInverted } from '@/lib/qualitativeUom';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
+import { buildCycleScopeLabel } from '@/lib/frequencyUtils';
+import { KraLibrarySearchPanel } from '@/components/admin/KraLibrarySearchPanel';
+import { useKpiTemplates } from '@/hooks/useKpiTemplates';
+import { useAllKpis } from '@/hooks/useKpis';
+import { useCreateKraCategory } from '@/hooks/useOrganization';
+import { KpiTextSplitFields } from '@/components/admin/kpi-form/KpiTextSplitFields';
+import { KpiScoringEditor } from '@/components/admin/kpi-form/KpiScoringEditor';
+import {
+  KpiTextState,
+  buildScoringPayload,
+  buildTextPayload,
+  textStateFromRow,
+  validateScoringState,
+} from '@/components/admin/kpi-form/kpiFormModel';
 import { supabase } from '@/integrations/supabase/client';
 import { isFiscalTuple } from '@/lib/fiscalWindow';
 import { toast } from 'sonner';
@@ -79,6 +93,9 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
   const { data: categories } = useKraCategories();
   const { data: profiles } = useProfiles();
   const updateKpi = useAdminUpdateKpi();
+  const { data: templates } = useKpiTemplates();
+  const { data: allKpis } = useAllKpis();
+  const createCategory = useCreateKraCategory();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -124,6 +141,15 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
     day_count_type: 'working_days' as 'working_days' | 'all_days',
     threshold_mode: 'absolute' as 'absolute' | 'ratio',
   });
+  // ADR-272 — structured KPI text (title / description / formula / scoring logic)
+  const [textState, setTextState] = useState<KpiTextState>({
+    kpi_name: '', kpi_title: '', kpi_description: '', kpi_formula: '', kpi_scoring_logic: '',
+  });
+  // ADR-272 — inline category creation, at parity with "Assign New KRA"
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState('');
+  const [customCategoryWeightage, setCustomCategoryWeightage] = useState('');
+  const [customCategoryColor, setCustomCategoryColor] = useState('#3B82F6');
   const [reason, setReason] = useState('');
   const [applyScope, setApplyScope] = useState<ApplyScope>('this_month');
   const [alsoRenameSiblings, setAlsoRenameSiblings] = useState(false);
@@ -160,6 +186,9 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         day_count_type: (kpi.day_count_type as 'working_days' | 'all_days') || 'working_days',
         threshold_mode: (kpi.threshold_mode as 'absolute' | 'ratio') || 'absolute',
       });
+      setTextState(textStateFromRow(kpi));
+      setIsCustomCategory(false);
+      setCustomCategoryName('');
       setReason('');
       setApplyScope('this_month');
       setAlsoRenameSiblings(false);
@@ -229,21 +258,56 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
     fetchTargets();
   }, [copyTargetEmployeeIds, kpi, formData.review_period, formData.review_year, formData.kra_name, formData.kpi_name]);
 
-  // Validation for tiered options
-  const tieredValidationError = formData.uom_type === 'tiered' 
-    ? validateQualitativeOptions(formData.qualitative_options) 
-    : null;
+  // ADR-272 — shared validation (tiered + binary) used by both KPI forms
+  const scoringState = {
+    uom_type: formData.uom_type,
+    threshold_mode: formData.threshold_mode,
+    qualitative_options: formData.qualitative_options,
+    r5: formData.r5, r4: formData.r4, r3: formData.r3,
+    r2: formData.r2, r1: formData.r1, r0: formData.r0,
+  };
+  const tieredValidationError = validateScoringState(scoringState);
+
+  const handleTextChange = (next: KpiTextState) => {
+    setTextState(next);
+    setFormData(prev => ({ ...prev, kpi_name: buildTextPayload(next).kpi_name }));
+  };
+
+  const handleCreateCategory = async () => {
+    const name = customCategoryName.trim();
+    if (!name) return;
+    try {
+      const created: any = await createCategory.mutateAsync({
+        name,
+        weightage: customCategoryWeightage ? parseFloat(customCategoryWeightage) : 0,
+        color: customCategoryColor,
+      });
+      if (created?.id) setFormData(prev => ({ ...prev, category_id: created.id }));
+      setIsCustomCategory(false);
+      setCustomCategoryName('');
+      setCustomCategoryWeightage('');
+      toast.success('Category created');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to create category');
+    }
+  };
 
   const handleSubmit = async () => {
     if (!kpi) return;
     
     const statusChanged = formData.status !== originalStatus;
     if (statusChanged && !reason.trim()) return;
-    if (formData.uom_type === 'tiered' && tieredValidationError) return;
+    if (tieredValidationError) {
+      toast.error(tieredValidationError);
+      return;
+    }
+
+    const textPayload = buildTextPayload(textState);
+    const scoringPayload = buildScoringPayload(scoringState);
 
     const structuralFields = {
       kra_name: formData.kra_name,
-      kpi_name: formData.kpi_name,
+      ...textPayload,
       target_value: formData.uom_type === 'numeric' ? (formData.target_value ? parseFloat(formData.target_value) : null) : null,
       uom: formData.uom || null,
       weightage: formData.weightage ? parseFloat(formData.weightage) : null,
@@ -251,20 +315,11 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
       frequency_cycle_start: (formData.frequency_cycle_start && formData.frequency_cycle_start !== 'system_default') ? formData.frequency_cycle_start : null,
       criteria: formData.uom_type === 'numeric' ? (formData.criteria || null) : null,
       source_of_data: formData.source_of_data || null,
-      r5: formData.uom_type === 'numeric' ? (formData.r5 || null) : null,
-      r4: formData.uom_type === 'numeric' ? (formData.r4 || null) : null,
-      r3: formData.uom_type === 'numeric' ? (formData.r3 || null) : null,
-      r2: formData.uom_type === 'numeric' ? (formData.r2 || null) : null,
-      r1: formData.uom_type === 'numeric' ? (formData.r1 || null) : null,
-      r0: formData.uom_type === 'numeric' ? (formData.r0 || null) : null,
+      ...scoringPayload,
       is_org_level: formData.is_org_level,
       org_level_scope: formData.is_org_level ? formData.org_level_scope : 'organization',
-      uom_type: formData.uom_type,
-      qualitative_options: formData.uom_type === 'tiered' ? formData.qualitative_options 
-        : formData.uom_type === 'binary' ? formData.qualitative_options : null,
       require_resubmit_reason: formData.require_resubmit_reason,
       day_count_type: formData.frequency === 'Daily' ? formData.day_count_type : null,
-      threshold_mode: formData.uom_type === 'numeric' ? formData.threshold_mode : null,
     };
 
     await updateKpi.mutateAsync({
@@ -272,7 +327,6 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
       employee_id: formData.employee_id,
       category_id: formData.category_id,
       kra_name: formData.kra_name,
-      kpi_name: formData.kpi_name,
       ...structuralFields,
       review_period: formData.review_period || null,
       review_year: formData.review_year ? parseInt(formData.review_year) : null,
@@ -587,6 +641,44 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
 
   return (
     <div className="space-y-4">
+      {/* ADR-272 — KRA Library search, at parity with "Assign New KRA" */}
+      <KraLibrarySearchPanel
+        templates={templates}
+        allKpis={allKpis}
+        categories={categories}
+        onSelectKpi={(catId, kra, kpiNameValue) => {
+          const source =
+            (templates || []).find(
+              (t: any) => t.is_active && t.category_id === catId && t.kra_name === kra && t.kpi_name === kpiNameValue,
+            ) ||
+            (allKpis || []).find(
+              (k: any) => k.category_id === catId && k.kra_name === kra && k.kpi_name === kpiNameValue,
+            );
+          setFormData(prev => ({
+            ...prev,
+            category_id: catId,
+            kra_name: kra,
+            kpi_name: kpiNameValue,
+            uom_type: ((source as any)?.uom_type as UomType) || prev.uom_type,
+            uom: (source as any)?.uom ?? prev.uom,
+            criteria: (source as any)?.criteria ?? prev.criteria,
+            target_value: (source as any)?.target_value != null ? String((source as any).target_value) : prev.target_value,
+            weightage: (source as any)?.weightage != null ? String((source as any).weightage) : prev.weightage,
+            frequency: (source as any)?.frequency ?? prev.frequency,
+            source_of_data: (source as any)?.source_of_data ?? prev.source_of_data,
+            r5: (source as any)?.r5 ?? prev.r5,
+            r4: (source as any)?.r4 ?? prev.r4,
+            r3: (source as any)?.r3 ?? prev.r3,
+            r2: (source as any)?.r2 ?? prev.r2,
+            r1: (source as any)?.r1 ?? prev.r1,
+            r0: (source as any)?.r0 ?? prev.r0,
+            qualitative_options: ((source as any)?.qualitative_options as QualitativeOption[]) ?? prev.qualitative_options,
+            threshold_mode: ((source as any)?.threshold_mode as 'absolute' | 'ratio') ?? prev.threshold_mode,
+          }));
+          setTextState(textStateFromRow({ ...(source as any), kpi_name: kpiNameValue }));
+        }}
+      />
+
       {/* ═══ IDENTITY ═══ */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
@@ -608,22 +700,68 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Category</Label>
-          <Select
-            value={formData.category_id}
-            onValueChange={(value) => setFormData(prev => ({ ...prev, category_id: value }))}
-          >
-            <SelectTrigger className="h-9">
-              <SelectValue placeholder="Select category" />
-            </SelectTrigger>
-            <SelectContent>
-              {categories?.map(cat => (
-                <SelectItem key={cat.id} value={cat.id}>
-                  {cat.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs">Category</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[11px]"
+              onClick={() => setIsCustomCategory(v => !v)}
+            >
+              {isCustomCategory ? 'Cancel' : '+ New'}
+            </Button>
+          </div>
+          {isCustomCategory ? (
+            <div className="space-y-2 rounded-md border p-2">
+              <Input
+                className="h-9"
+                value={customCategoryName}
+                onChange={(e) => setCustomCategoryName(e.target.value)}
+                placeholder="Category name"
+              />
+              <div className="flex gap-2">
+                <Input
+                  className="h-9"
+                  type="number"
+                  value={customCategoryWeightage}
+                  onChange={(e) => setCustomCategoryWeightage(e.target.value)}
+                  placeholder="Weightage %"
+                />
+                <Input
+                  className="h-9 w-16 p-1"
+                  type="color"
+                  value={customCategoryColor}
+                  onChange={(e) => setCustomCategoryColor(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9"
+                  disabled={!customCategoryName.trim() || createCategory.isPending}
+                  onClick={handleCreateCategory}
+                >
+                  Create
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Select
+              value={formData.category_id}
+              onValueChange={(value) => setFormData(prev => ({ ...prev, category_id: value }))}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories?.map(cat => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 
@@ -657,12 +795,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
             reviewYear={kpi?.review_year ?? null}
           />
         </div>
-        <Textarea
-          value={formData.kpi_name}
-          onChange={(e) => setFormData(prev => ({ ...prev, kpi_name: e.target.value }))}
-          rows={3}
-          className="min-h-[80px] resize-y"
-        />
+        <KpiTextSplitFields value={textState} onChange={handleTextChange} />
       </div>
 
       {/* ═══ MEASUREMENT ═══ */}
@@ -852,97 +985,28 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         </div>
       )}
 
-      {/* Tiered Options Builder */}
-      {formData.uom_type === 'tiered' && (
-        <div className="space-y-1.5">
-          <TieredOptionsBuilder
-            options={formData.qualitative_options}
-            onChange={(options) => setFormData(prev => ({ ...prev, qualitative_options: options }))}
-          />
-          {tieredValidationError && (
-            <p className="text-sm text-destructive">{tieredValidationError}</p>
-          )}
-        </div>
-      )}
+      {/* ADR-272 / ADR-271 — shared, type-aware scoring editor */}
+      <KpiScoringEditor
+        value={scoringState}
+        onChange={(next) => setFormData(prev => ({ ...prev, ...next }))}
+      />
 
-      {/* Binary polarity — compact */}
-      {formData.uom_type === 'binary' && (
-        <div className="flex items-center justify-between gap-3 p-3 border rounded-md bg-muted/30">
-          <div className="space-y-0.5">
-            <Label className="text-xs font-medium">Binary Polarity</Label>
-            <p className="text-xs text-muted-foreground">Safety KPIs: "No" should score highest</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Select
-              value={isBinaryInverted(formData.qualitative_options) ? 'inverted' : 'standard'}
-              onValueChange={(val) => {
-                setFormData(prev => ({
-                  ...prev,
-                  qualitative_options: val === 'inverted' ? BINARY_OPTIONS_INVERTED : BINARY_OPTIONS,
-                }));
-              }}
-            >
-              <SelectTrigger className="h-8 w-[160px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="standard">Standard (Yes=5)</SelectItem>
-                <SelectItem value="inverted">Inverted (No=5)</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="flex gap-2 text-xs font-medium">
-              {isBinaryInverted(formData.qualitative_options) ? (
-                <>
-                  <span className="text-destructive">Yes=R0</span>
-                  <span className="text-primary">No=R5</span>
-                </>
-              ) : (
-                <>
-                  <span className="text-primary">Yes=R5</span>
-                  <span className="text-destructive">No=R0</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ADR-272 — cycle coverage note, at parity with "Assign New KRA" */}
+      {(() => {
+        const scope = buildCycleScopeLabel(
+          formData.frequency,
+          formData.review_period,
+          formData.review_year ? parseInt(formData.review_year) : new Date().getFullYear(),
+          formData.frequency_cycle_start || null,
+        );
+        if (!scope?.isMultiMonth) return null;
+        return (
+          <p className="text-[11px] text-muted-foreground">
+            This cycle covers {scope.cycleMonths.join(', ')} · scored in {scope.anchorMonth} {scope.anchorYear}.
+          </p>
+        );
+      })()}
 
-      {/* Rating Thresholds — numeric only */}
-      {formData.uom_type === 'numeric' && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <Label className="text-xs whitespace-nowrap">Threshold Mode</Label>
-            <Select
-              value={formData.threshold_mode}
-              onValueChange={(value: 'absolute' | 'ratio') => setFormData(prev => ({ ...prev, threshold_mode: value }))}
-            >
-              <SelectTrigger className="h-8 w-[200px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="absolute">Absolute (Recommended)</SelectItem>
-                <SelectItem value="ratio">Ratio / Percentage</SelectItem>
-              </SelectContent>
-            </Select>
-            <span className="text-xs text-muted-foreground">
-              {formData.threshold_mode === 'absolute' ? 'Actual values' : '% of target'}
-            </span>
-          </div>
-          <div className="grid grid-cols-6 gap-1.5">
-            {(['r5', 'r4', 'r3', 'r2', 'r1', 'r0'] as const).map((field) => (
-              <div key={field} className="space-y-1">
-                <Label className="text-[10px] uppercase text-muted-foreground font-semibold">{field}</Label>
-                <Input
-                  className="h-8 text-xs"
-                  value={formData[field]}
-                  onChange={(e) => setFormData(prev => ({ ...prev, [field]: e.target.value }))}
-                  placeholder={formData.threshold_mode === 'absolute' ? '100' : '100%'}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* ═══ SETTINGS ═══ */}
       <SectionHeader>Settings</SectionHeader>

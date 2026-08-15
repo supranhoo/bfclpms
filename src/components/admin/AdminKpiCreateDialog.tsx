@@ -27,6 +27,17 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils';
 import { KraLibrarySearchPanel } from './KraLibrarySearchPanel';
 import { RegistryBadge } from './kpi-standardization/RegistryBadge';
+import { KpiTextSplitFields } from './kpi-form/KpiTextSplitFields';
+import { KpiScoringEditor } from './kpi-form/KpiScoringEditor';
+import {
+  KpiScoringState,
+  KpiTextState,
+  buildScoringPayload,
+  buildTextPayload,
+  textStateFromRow,
+  validateScoringState,
+} from './kpi-form/kpiFormModel';
+import { toast } from 'sonner';
 
 interface AdminKpiCreateDialogProps {
   isOpen: boolean;
@@ -106,6 +117,11 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
   const [isOrgLevel, setIsOrgLevel] = useState(false);
   const [orgLevelScope, setOrgLevelScope] = useState('organization');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+
+  // ADR-272 — structured KPI text, shared with the Admin KPI Editor
+  const [textState, setTextState] = useState<KpiTextState>({
+    kpi_name: '', kpi_title: '', kpi_description: '', kpi_formula: '', kpi_scoring_logic: '',
+  });
 
   // Period - prefer explicit defaults from props, then system settings
   const [reviewPeriod, setReviewPeriod] = useState(defaultReviewPeriod || settings.current_review_period);
@@ -285,10 +301,56 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
     [frequency, reviewPeriod, reviewYear, frequencyCycleStart]
   );
 
+  // ADR-272 — scoring state shared with the Admin KPI Editor
+  const scoringState: KpiScoringState = {
+    uom_type: uomType,
+    threshold_mode: thresholdMode,
+    qualitative_options:
+      uomType === 'binary'
+        ? (binaryInverted ? BINARY_OPTIONS_INVERTED : BINARY_OPTIONS)
+        : qualitativeOptions,
+    r5, r4, r3, r2, r1, r0,
+  };
+
+  const setScoring = (next: KpiScoringState) => {
+    setThresholdMode(next.threshold_mode);
+    setR5(next.r5); setR4(next.r4); setR3(next.r3);
+    setR2(next.r2); setR1(next.r1); setR0(next.r0);
+    if (next.uom_type === 'binary') {
+      setBinaryInverted(isBinaryInverted(next.qualitative_options));
+    }
+    setQualitativeOptions(next.qualitative_options);
+  };
+
+  // ADR-272 — mirror plain kpiName edits into the structured text state
+  useEffect(() => {
+    setTextState((prev) => (prev.kpi_name === kpiName ? prev : textStateFromRow({
+      kpi_name: kpiName,
+      kpi_title: prev.kpi_title || null,
+      kpi_description: prev.kpi_description || null,
+      kpi_formula: prev.kpi_formula || null,
+      kpi_scoring_logic: prev.kpi_scoring_logic || null,
+    })));
+  }, [kpiName]);
+
+  const handleTextChange = (next: KpiTextState) => {
+    setTextState(next);
+    setKpiName(buildTextPayload(next).kpi_name);
+  };
+
   const handleSubmit = async () => {
     if (!employeeId || !categoryId || !kraName || !kpiName) {
       return;
     }
+
+    // ADR-272 — same validation as the Admin KPI Editor
+    const scoringError = validateScoringState(scoringState);
+    if (scoringError) {
+      toast.error(scoringError);
+      return;
+    }
+    const textPayload = buildTextPayload(textState);
+    const scoringPayload = buildScoringPayload(scoringState);
 
     try {
       await createKpi.mutateAsync({
@@ -296,32 +358,24 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
           employee_id: employeeId,
           category_id: categoryId,
           kra_name: kraName,
-          kpi_name: kpiName,
+          ...textPayload,
           uom: uomType === 'numeric' ? (uom || null) : uomType,
           criteria: uomType === 'numeric' ? (criteria || null) : null,
           target_value: uomType === 'numeric' ? (targetValue ? parseFloat(targetValue) : null) : null,
           weightage: weightage ? parseFloat(weightage) : null,
           frequency: frequency || null,
           source_of_data: sourceOfData || null,
-          r5: uomType === 'numeric' ? (r5 || null) : null,
-          r4: uomType === 'numeric' ? (r4 || null) : null,
-          r3: uomType === 'numeric' ? (r3 || null) : null,
-          r2: uomType === 'numeric' ? (r2 || null) : null,
-          r1: uomType === 'numeric' ? (r1 || null) : null,
-          r0: uomType === 'numeric' ? (r0 || null) : null,
+          ...scoringPayload,
           review_period: resolvedPeriod,
           review_year: reviewYear,
           status: 'kra_set' as ReviewStatus,
           is_org_level: isOrgLevel,
           org_level_scope: isOrgLevel ? orgLevelScope as any : null,
-          uom_type: uomType,
-          qualitative_options: uomType === 'tiered' ? qualitativeOptions : (uomType === 'binary' ? (binaryInverted ? BINARY_OPTIONS_INVERTED : BINARY_OPTIONS) : null),
           sub_frequency: null,
           frequency_cycle_start: (frequencyCycleStart && frequencyCycleStart !== 'system_default') ? frequencyCycleStart : null,
           is_frequency_locked: false,
           require_resubmit_reason: requireResubmitReason,
           day_count_type: frequency === 'Daily' ? dayCountType : null,
-          threshold_mode: uomType === 'numeric' ? thresholdMode : null,
           source_template_id: selectedTemplateId || null,
         },
         errorContext: {
@@ -373,6 +427,16 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
     }
     if (source.threshold_mode) setThresholdMode(source.threshold_mode as 'absolute' | 'ratio');
     if (source.require_resubmit_reason != null) setRequireResubmitReason(source.require_resubmit_reason);
+    // ADR-272 — keep structured text in sync with the selected template/KPI
+    if (source.kpi_name) {
+      setTextState(textStateFromRow({
+        kpi_name: source.kpi_name,
+        kpi_title: source.kpi_title ?? null,
+        kpi_description: source.kpi_description ?? null,
+        kpi_formula: source.kpi_formula ?? null,
+        kpi_scoring_logic: source.kpi_scoring_logic ?? null,
+      }));
+    }
   };
 
   return (
@@ -748,57 +812,12 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                   )}
                 </div>
 
-                {/* Rating Thresholds (left column, numeric only) */}
+                {/* ADR-272 — structured KPI text (title / description / formula / logic) */}
+                <KpiTextSplitFields value={textState} onChange={handleTextChange} />
+
+                {/* ADR-272 / ADR-271 — shared, type-aware scoring editor */}
                 {uomType === 'numeric' && (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Rating Thresholds</span>
-                      <div className="flex-1 h-px bg-border" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Threshold Mode</Label>
-                      <Select value={thresholdMode} onValueChange={(v: 'absolute' | 'ratio') => setThresholdMode(v)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="absolute">Absolute (Recommended)</SelectItem>
-                          <SelectItem value="ratio">Ratio / Percentage</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        {thresholdMode === 'absolute'
-                          ? 'Thresholds are actual values (e.g., R5 = 100 means achieved ≥ 100)'
-                          : 'Thresholds are % of target (e.g., R5 = 100% means achieved ≥ target)'}
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-blue-600">R5 (Exceptional)</Label>
-                        <Input value={r5} onChange={(e) => setR5(e.target.value)} placeholder="e.g., ≥110%" className="text-sm" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-green-600">R4 (Exceeds)</Label>
-                        <Input value={r4} onChange={(e) => setR4(e.target.value)} placeholder="e.g., ≥100%" className="text-sm" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-yellow-600">R3 (Meets)</Label>
-                        <Input value={r3} onChange={(e) => setR3(e.target.value)} placeholder="e.g., ≥90%" className="text-sm" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-orange-600">R2 (Below)</Label>
-                        <Input value={r2} onChange={(e) => setR2(e.target.value)} placeholder="e.g., ≥75%" className="text-sm" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-red-600">R1 (Needs Improvement)</Label>
-                        <Input value={r1} onChange={(e) => setR1(e.target.value)} placeholder="e.g., &lt;75%" className="text-sm" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">R0 (N/A)</Label>
-                        <Input value={r0} onChange={(e) => setR0(e.target.value)} placeholder="Optional" className="text-sm" />
-                      </div>
-                    </div>
-                  </div>
+                  <KpiScoringEditor value={scoringState} onChange={setScoring} />
                 )}
 
                 {/* Period & Advanced (left column bottom) */}
@@ -1049,33 +1068,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                         </div>
                       )}
                     </div>
-                    <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Binary Polarity</Label>
-                        <Select value={binaryInverted ? 'inverted' : 'standard'} onValueChange={(v) => setBinaryInverted(v === 'inverted')}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="standard">Standard (Yes = Good)</SelectItem>
-                            <SelectItem value="inverted">Inverted (No = Good)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                          {binaryInverted
-                            ? 'Inverted: "No" scores R5 (5), "Yes" scores R0 (0) — for safety KPIs like LTI.'
-                            : 'Standard: "Yes" scores R5 (5), "No" scores R0 (0).'}
-                        </p>
-                      </div>
-                      <div className="flex gap-4">
-                        <Badge className={binaryInverted ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}>
-                          Yes = R{binaryInverted ? '0 (0)' : '5 (5)'}
-                        </Badge>
-                        <Badge className={binaryInverted ? 'bg-blue-500 text-white' : 'bg-red-500 text-white'}>
-                          No = R{binaryInverted ? '5 (5)' : '0 (0)'}
-                        </Badge>
-                      </div>
-                    </div>
+                    {/* ADR-272 / ADR-271 — shared, type-aware scoring editor */}
+                    <KpiScoringEditor value={scoringState} onChange={setScoring} />
                   </div>
                 )}
 
@@ -1110,10 +1104,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                         </Select>
                       </div>
                     </div>
-                    <TieredOptionsBuilder
-                      options={qualitativeOptions}
-                      onChange={setQualitativeOptions}
-                    />
+                    {/* ADR-272 / ADR-271 — shared, type-aware scoring editor */}
+                    <KpiScoringEditor value={scoringState} onChange={setScoring} />
                   </div>
                 )}
 
