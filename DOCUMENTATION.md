@@ -8691,3 +8691,38 @@ legacy-name preservation, recomposition and binary/tiered validation.
 
 **Rollback.** Revert the two form components; the shared module is additive and
 no schema or data changed.
+
+## ADR-273 — Mis-split KPI titles must not masquerade as distinct KPIs (v2.66.273)
+
+**Context.** In the BU Performance Console, "Power generation from 45 MWh/AFBC" appeared as two
+rows. Cause: one group's raw text never split cleanly, so the whole string (incentive note, month
+brackets, scoring ladder) was stored in `kpi_title`. The console groups on `kpi_title`, so the two
+groups could not merge. A second, genuine difference also existed: the two texts carry different
+scoring ladders, which correctly remains a variant, not a duplicate.
+
+**Backend.**
+- `public.kpi_title_is_suspect(text)` (IMMUTABLE) — a stored title is suspect when it is longer than
+  120 chars, contains a scoring band (`= 0..5`, "scoring logic", "formula:"), or contains a month
+  bracket such as `(Aug-Sep,...)`.
+- `kpi_split_grouped_dry_run` gains `p_search text` (ILIKE on the raw `kpi_name`) and a new
+  `p_state = 'suspect'` (already split AND suspect title). Signature change applied via
+  DROP + CREATE to avoid an ambiguous overload.
+- `kpi_split_summary` now returns `suspect_titles` and `suspect_title_groups`.
+- Read-only; forward-only guard (fiscal start year >= 2026) unchanged. No KPI data was modified.
+
+**Frontend.**
+- `src/components/admin/bu-console/lookalikeTitles.ts` — `normalizeConsoleTitle` /
+  `lookalikeCounts`: pure, client-side detection of titles that only differ by scoring text,
+  incentive note or month brackets. Detection **flags**, never merges.
+- `BuConsoleTree.tsx` — amber "Possible duplicate" chip with an explanatory tooltip, plus a
+  "Fix text split" action on look-alike or unsplit rows that deep-links to
+  `/admin/kpi-standardization?tab=split&q=<kpi_name>`.
+- `KpiStandardization.tsx` — honours `?tab=` and `?q=`; `TextSplitTab` accepts `initialSearch`,
+  exposes a search box, a "Suspect title" state filter and a "Suspect title" summary stat.
+
+**Tests.** `src/components/admin/bu-console/lookalikeTitles.test.ts` (5 cases: normalisation,
+clean-title identity, blank input, flagged pair, no grouping without titles).
+
+**Rollback.** Frontend changes are additive and behind no data write. The DB change can be reverted
+by restoring the previous 4-argument `kpi_split_grouped_dry_run` and the previous
+`kpi_split_summary` body; `kpi_title_is_suspect` is then unused and can be dropped.
