@@ -268,6 +268,11 @@ export default function BuConsole() {
               categories={tree.categories}
               selectedCategoryId={categoryId}
               selectedKraKey={kraKey}
+              onFixTextSplit={(kpi) =>
+                navigate(
+                  `/admin/kpi-standardization?tab=split&q=${encodeURIComponent(kpi.kpi_name)}`,
+                )
+              }
               onSelectCategory={(id) => { setCategoryId(id); setKraKey(null); }}
               onSelectKra={setKraKey}
               onSelectKpi={(cId, kraName, kpi, variantKey) =>
