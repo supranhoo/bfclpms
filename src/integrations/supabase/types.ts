@@ -9009,7 +9009,11 @@ export type Database = {
           frequency: string | null
           id: string
           is_active: boolean | null
+          kpi_description: string | null
+          kpi_formula: string | null
           kpi_name: string
+          kpi_scoring_logic: string | null
+          kpi_title: string | null
           kra_name: string
           qualitative_options: Json | null
           r0: string | null
@@ -9038,7 +9042,11 @@ export type Database = {
           frequency?: string | null
           id?: string
           is_active?: boolean | null
+          kpi_description?: string | null
+          kpi_formula?: string | null
           kpi_name: string
+          kpi_scoring_logic?: string | null
+          kpi_title?: string | null
           kra_name: string
           qualitative_options?: Json | null
           r0?: string | null
@@ -9067,7 +9075,11 @@ export type Database = {
           frequency?: string | null
           id?: string
           is_active?: boolean | null
+          kpi_description?: string | null
+          kpi_formula?: string | null
           kpi_name?: string
+          kpi_scoring_logic?: string | null
+          kpi_title?: string | null
           kra_name?: string
           qualitative_options?: Json | null
           r0?: string | null
@@ -9096,6 +9108,48 @@ export type Database = {
           },
         ]
       }
+      kpi_text_split_audit: {
+        Row: {
+          after_parts: Json
+          before_parts: Json | null
+          confidence: string
+          created_at: string
+          id: string
+          kpi_id: string
+          kpi_name: string
+          performed_by: string | null
+          review_period: string | null
+          review_year: number | null
+          run_id: string
+        }
+        Insert: {
+          after_parts: Json
+          before_parts?: Json | null
+          confidence: string
+          created_at?: string
+          id?: string
+          kpi_id: string
+          kpi_name: string
+          performed_by?: string | null
+          review_period?: string | null
+          review_year?: number | null
+          run_id: string
+        }
+        Update: {
+          after_parts?: Json
+          before_parts?: Json | null
+          confidence?: string
+          created_at?: string
+          id?: string
+          kpi_id?: string
+          kpi_name?: string
+          performed_by?: string | null
+          review_period?: string | null
+          review_year?: number | null
+          run_id?: string
+        }
+        Relationships: []
+      }
       kpis: {
         Row: {
           business_unit_id: string | null
@@ -9112,8 +9166,12 @@ export type Database = {
           is_issued: boolean | null
           is_org_level: boolean | null
           kpi_definition_id: string | null
+          kpi_description: string | null
+          kpi_formula: string | null
           kpi_group_type: string
           kpi_name: string
+          kpi_scoring_logic: string | null
+          kpi_title: string | null
           kra_name: string
           level_id: string | null
           location_id: string | null
@@ -9157,8 +9215,12 @@ export type Database = {
           is_issued?: boolean | null
           is_org_level?: boolean | null
           kpi_definition_id?: string | null
+          kpi_description?: string | null
+          kpi_formula?: string | null
           kpi_group_type?: string
           kpi_name: string
+          kpi_scoring_logic?: string | null
+          kpi_title?: string | null
           kra_name: string
           level_id?: string | null
           location_id?: string | null
@@ -9202,8 +9264,12 @@ export type Database = {
           is_issued?: boolean | null
           is_org_level?: boolean | null
           kpi_definition_id?: string | null
+          kpi_description?: string | null
+          kpi_formula?: string | null
           kpi_group_type?: string
           kpi_name?: string
+          kpi_scoring_logic?: string | null
+          kpi_title?: string | null
           kra_name?: string
           level_id?: string | null
           location_id?: string | null
@@ -18676,6 +18742,43 @@ export type Database = {
       kpi_cell_detail: {
         Args: { p_emp_id: string; p_kpi_id: string }
         Returns: Json
+      }
+      kpi_fiscal_start_year: {
+        Args: { p_period: string; p_year: number }
+        Returns: number
+      }
+      kpi_split_apply: {
+        Args: { p_confidence?: string; p_ids?: string[]; p_limit?: number }
+        Returns: Json
+      }
+      kpi_split_dry_run: {
+        Args: { p_confidence?: string; p_limit?: number; p_offset?: number }
+        Returns: {
+          already_split: boolean
+          confidence: string
+          description: string
+          formula: string
+          kpi_id: string
+          kpi_name: string
+          kra_name: string
+          review_period: string
+          review_year: number
+          scoring_logic: string
+          title: string
+          total_count: number
+        }[]
+      }
+      kpi_split_rollback: { Args: { p_run_id: string }; Returns: Json }
+      kpi_split_summary: { Args: never; Returns: Json }
+      kpi_split_text: {
+        Args: { p_text: string }
+        Returns: {
+          confidence: string
+          description: string
+          formula: string
+          scoring_logic: string
+          title: string
+        }[]
       }
       list_annual_review_pending_reviewers: {
         Args: { p_cycle_id: string }
