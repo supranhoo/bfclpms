@@ -148,6 +148,8 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
   // ADR-272 — inline category creation, at parity with "Assign New KRA"
   const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [customCategoryName, setCustomCategoryName] = useState('');
+  const [customCategoryWeightage, setCustomCategoryWeightage] = useState('');
+  const [customCategoryColor, setCustomCategoryColor] = useState('#3B82F6');
   const [reason, setReason] = useState('');
   const [applyScope, setApplyScope] = useState<ApplyScope>('this_month');
   const [alsoRenameSiblings, setAlsoRenameSiblings] = useState(false);
@@ -275,10 +277,15 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
     const name = customCategoryName.trim();
     if (!name) return;
     try {
-      const created: any = await createCategory.mutateAsync({ name } as any);
+      const created: any = await createCategory.mutateAsync({
+        name,
+        weightage: customCategoryWeightage ? parseFloat(customCategoryWeightage) : 0,
+        color: customCategoryColor,
+      });
       if (created?.id) setFormData(prev => ({ ...prev, category_id: created.id }));
       setIsCustomCategory(false);
       setCustomCategoryName('');
+      setCustomCategoryWeightage('');
       toast.success('Category created');
     } catch (err: any) {
       toast.error(err?.message || 'Failed to create category');
