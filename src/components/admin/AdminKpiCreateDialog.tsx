@@ -416,6 +416,16 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
     }
     if (source.threshold_mode) setThresholdMode(source.threshold_mode as 'absolute' | 'ratio');
     if (source.require_resubmit_reason != null) setRequireResubmitReason(source.require_resubmit_reason);
+    // ADR-272 — keep structured text in sync with the selected template/KPI
+    if (source.kpi_name) {
+      setTextState(textStateFromRow({
+        kpi_name: source.kpi_name,
+        kpi_title: source.kpi_title ?? null,
+        kpi_description: source.kpi_description ?? null,
+        kpi_formula: source.kpi_formula ?? null,
+        kpi_scoring_logic: source.kpi_scoring_logic ?? null,
+      }));
+    }
   };
 
   return (
