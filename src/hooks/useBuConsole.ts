@@ -347,3 +347,113 @@ export function useGroupWriteCommit() {
     onError: (e: any) => toast.error(e?.message ?? 'Could not apply the value.'),
   });
 }
+/* ------------------------------------------------------------------ */
+/* ADR-262 Phase 4 — group stage approval                              */
+/* ------------------------------------------------------------------ */
+
+/** Stages the console can complete in bulk. Final approval stays per-employee. */
+export const GROUP_ADVANCE_STAGES: { value: string; label: string }[] = [
+  { value: 'self_review', label: 'Self review' },
+  { value: 'manager_check', label: 'Manager check' },
+  { value: 'functional_manager_check', label: 'Functional manager check' },
+  { value: 'audit', label: 'Audit' },
+  { value: 'skip_level_check', label: 'Skip-level check' },
+  { value: 'hr_pms_review', label: 'HR PMS review' },
+  { value: 'management_review', label: 'Management review' },
+];
+
+export const GROUP_ADVANCE_SKIP_LABELS: Record<string, string> = {
+  final_score_locked: 'Final score approved — immutable (POLICY §88)',
+  final_approval_not_supported: 'Next stage is final approval — not allowed from the console (beta)',
+  stage_mismatch: 'Not waiting at this stage right now',
+  stage_not_in_workflow: 'This stage is not part of the employee’s workflow',
+  status_not_in_workflow: 'Current status is not part of the resolved workflow',
+  terminal_stage: 'Already at the last stage of the workflow',
+  no_workflow: 'No workflow resolved for this employee',
+  no_submission: 'No submission row yet — enter a value first',
+  not_scored: 'No score to carry forward',
+};
+
+export interface GroupAdvancePreviewRow {
+  kpi_id: string;
+  employee_id: string;
+  employee_name: string | null;
+  employee_code: string | null;
+  department_name: string | null;
+  business_unit_name: string | null;
+  weightage: number | null;
+  current_status: string | null;
+  next_status: string | null;
+  carry_forward_score: number | null;
+  is_na: boolean;
+}
+
+export interface GroupAdvanceResult {
+  authorized: boolean;
+  dry_run: boolean;
+  batch_id: string | null;
+  target_stage?: string;
+  will_advance?: number;
+  will_skip?: number;
+  advanced?: number;
+  skipped?: number;
+  preview?: GroupAdvancePreviewRow[];
+  skipped_details?: GroupWriteSkipRow[];
+}
+
+export interface GroupAdvanceArgs {
+  categoryId: string;
+  kraName: string;
+  kpiName: string;
+  period: string;
+  year: number;
+  buIds: string[];
+  deptIds: string[];
+  targetStage: string;
+  remarks: string | null;
+  dryRun: boolean;
+}
+
+async function callGroupAdvance(a: GroupAdvanceArgs): Promise<GroupAdvanceResult> {
+  const { data, error } = await supabase.rpc('bu_console_group_advance' as any, {
+    p_category_id: a.categoryId,
+    p_kra_name: a.kraName,
+    p_kpi_name: a.kpiName,
+    p_period: a.period,
+    p_year: a.year,
+    p_target_stage: a.targetStage,
+    p_bu_ids: a.buIds.length ? a.buIds : null,
+    p_dept_ids: a.deptIds.length ? a.deptIds : null,
+    p_remarks: a.remarks,
+    p_dry_run: a.dryRun,
+  });
+  if (error) throw error;
+  return (data ?? { authorized: false, dry_run: a.dryRun, batch_id: null }) as unknown as GroupAdvanceResult;
+}
+
+/** Preview only — advances nothing. */
+export function useGroupAdvancePreview() {
+  return useMutation<GroupAdvanceResult, Error, Omit<GroupAdvanceArgs, 'dryRun'>>({
+    mutationFn: (a) => callGroupAdvance({ ...a, dryRun: true }),
+    onError: (e: any) => toast.error(e?.message ?? 'Could not build the approval preview.'),
+  });
+}
+
+/** Commits the stage advance after the admin confirms the preview. */
+export function useGroupAdvanceCommit() {
+  const qc = useQueryClient();
+  return useMutation<GroupAdvanceResult, Error, Omit<GroupAdvanceArgs, 'dryRun'>>({
+    mutationFn: (a) => callGroupAdvance({ ...a, dryRun: false }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['bu-console-kpi-detail'] });
+      qc.invalidateQueries({ queryKey: ['bu-console-tree'] });
+      const moved = res.advanced ?? 0;
+      const skipped = res.skipped ?? 0;
+      toast.success(
+        `${moved} employee${moved === 1 ? '' : 's'} moved forward` + (skipped ? ` · ${skipped} skipped` : ''),
+        { description: res.batch_id ? `Batch ${res.batch_id.slice(0, 8)}` : undefined },
+      );
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not advance the group.'),
+  });
+}
