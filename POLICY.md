@@ -6297,3 +6297,6 @@ plain-language reason.
    before the admin confirms.
 5. Fixing display or grouping never changes `kpi_name`, scores, weightage or
    workflow status.
+
+### §KPI-TYPE-PARITY (ADR-271)
+Any surface that displays or influences a KPI score MUST render the KPI's actual type: value-based (R0–R5 bands), binary (its own two options, including inverted safety pairs) or tiered (its own tier list). A qualitative KPI must never be shown as a bare 0–5 threshold grid, and an unconfigured KPI must say so rather than display blank bands. Qualitative inputs are stored as the selected option's 0–5 rating. Group value entry is forbidden when a grouped title mixes KPI types.

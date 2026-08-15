@@ -8658,3 +8658,6 @@ and 181 carry more than one weightage.
 
 **Rollback.** Re-deploy the previous function bodies and revert the three
 components; no schema or data change was made.
+
+## ADR-271 — KPI type awareness (v2.66.271)
+KPI scoring type resolution is centralised in `src/lib/kpiScoringModel.ts`; scoring scales render through `KpiScoringScale`. BU Console filters expose a dirty state before results are refetched. See docs/adr/ADR-271.md.
