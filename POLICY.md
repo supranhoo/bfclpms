@@ -6190,3 +6190,13 @@ plain-language reason.
 - A group action affecting more than 2,000 employees requires a typed
   confirmation before it commits.
 - Long console lists are virtualized, never sliced.
+
+### §BU-CONSOLE-SCOPE-FILTERS (ADR-265)
+
+- The BU Performance Console scope supports four organisational filters, all
+  multi-select and cascading: Division → Business Unit → Department → Manager.
+- Filtering is applied server-side inside the console RPCs, so drilldowns,
+  group value entry and group advancement always act on exactly the scoped
+  population — never on a client-trimmed subset.
+- Manager scope means the employee's reporting manager. Narrowing a parent
+  filter clears any child selections that fall outside it.
