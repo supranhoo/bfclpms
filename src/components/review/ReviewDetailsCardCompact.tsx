@@ -3,6 +3,7 @@ import { Label } from '@/components/ui/label';
 import { KPI } from '@/hooks/useKpis';
 import { Target, Scale, Percent, TrendingUp } from 'lucide-react';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
+import { KpiTitle, KpiTextBlocks } from '@/components/kpi/KpiText';
 
 interface ReviewDetailsCardCompactProps {
   kpi: KPI;
@@ -29,7 +30,8 @@ export function ReviewDetailsCardCompact({ kpi }: ReviewDetailsCardCompactProps)
             <span className="text-xs text-muted-foreground">•</span>
             <span className="text-sm font-medium whitespace-pre-wrap">{renderBoldKpiText(kpi.kra_name)}</span>
           </div>
-          <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{renderBoldKpiText(kpi.kpi_name)}</p>
+          <KpiTitle kpi={kpi} as="p" className="text-sm text-muted-foreground mt-1" legacyFullText />
+          <KpiTextBlocks kpi={kpi} collapsible hideLegacy className="mt-1.5" />
         </div>
       </div>
 
