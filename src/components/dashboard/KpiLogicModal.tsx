@@ -16,6 +16,7 @@ import { Pencil, Save, X, Bug, ChevronDown, Calculator } from 'lucide-react';
 import type { KPI } from '@/hooks/useKpis';
 import { parseThreshold, calculateRating, ratingToLevel, levelToText } from '@/lib/ratingCalculation';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
+import { KpiTitle, KpiTextBlocks } from '@/components/kpi/KpiText';
 
 interface KpiLogicModalProps {
   isOpen: boolean;
@@ -191,7 +192,8 @@ export function KpiLogicModal({ isOpen, onClose, kpi }: KpiLogicModalProps) {
             ) : (
               <>
                 <span className="text-xs text-muted-foreground block mb-1">KPI Name</span>
-                <p className="text-foreground whitespace-pre-wrap">{renderBoldKpiText(kpi.kpi_name)}</p>
+                <KpiTitle kpi={kpi} as="p" className="text-foreground font-medium" legacyFullText />
+                <KpiTextBlocks kpi={kpi} hideLegacy className="mt-2" />
               </>
             )}
           </div>
