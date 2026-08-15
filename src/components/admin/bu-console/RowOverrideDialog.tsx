@@ -14,11 +14,22 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Loader2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { useRowOverride, type BuConsoleEmployeeRow } from '@/hooks/useBuConsole';
+import { KPI_DIRECTION_OPTIONS, directionConflictsWithLadder } from '@/components/admin/kpi-form/kpiFormModel';
 import { diffChanges, hasChanges } from './groupEditModel';
 
-const ROW_FIELDS = ['weightage', 'target_value', 'uom', 'r5', 'r4', 'r3', 'r2', 'r1', 'r0'] as const;
+/**
+ * ADR-274a — per-employee tuning covers the same scoring inputs as the group
+ * editor, minus the structural category / KRA move which must stay group-wide.
+ */
+const ROW_FIELDS = [
+  'weightage', 'target_value', 'uom', 'frequency', 'criteria', 'source_of_data',
+  'r5', 'r4', 'r3', 'r2', 'r1', 'r0',
+] as const;
+
+const FREQUENCY_OPTIONS = ['Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
 
 interface Props {
   row: BuConsoleEmployeeRow | null;
@@ -46,6 +57,7 @@ export function RowOverrideDialog({ row, open, onOpenChange }: Props) {
   }, [row]);
 
   const changes = diffChanges(original, form, ROW_FIELDS as unknown as string[]);
+  const ladderConflict = directionConflictsWithLadder(form.criteria, form.r5, form.r1);
 
   const save = () => {
     if (!row || !hasChanges(changes)) return;
@@ -71,6 +83,34 @@ export function RowOverrideDialog({ row, open, onOpenChange }: Props) {
           <Field label="Unit" k="uom" form={form} setForm={setForm} />
         </div>
 
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Frequency</Label>
+            <Select
+              value={form.frequency || undefined}
+              onValueChange={(v) => setForm((prev) => ({ ...prev, frequency: v }))}
+            >
+              <SelectTrigger><SelectValue placeholder="Unchanged" /></SelectTrigger>
+              <SelectContent>
+                {FREQUENCY_OPTIONS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Direction</Label>
+            <Select
+              value={form.criteria || undefined}
+              onValueChange={(v) => setForm((prev) => ({ ...prev, criteria: v }))}
+            >
+              <SelectTrigger><SelectValue placeholder="Unchanged" /></SelectTrigger>
+              <SelectContent>
+                {KPI_DIRECTION_OPTIONS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <Field label="Source of data" k="source_of_data" form={form} setForm={setForm} />
+        </div>
+
         <div className="space-y-1.5">
           <Label className="text-xs uppercase text-muted-foreground">Scoring ladder</Label>
           <div className="grid gap-2 sm:grid-cols-3">
@@ -78,6 +118,12 @@ export function RowOverrideDialog({ row, open, onOpenChange }: Props) {
               <Field key={k} label={k.toUpperCase()} k={k} form={form} setForm={setForm} />
             ))}
           </div>
+          {ladderConflict && (
+            <p className="flex items-center gap-1 text-xs text-destructive">
+              <AlertTriangle className="h-3 w-3" />
+              The ladder runs against the chosen direction. Check the thresholds.
+            </p>
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-3 rounded-md border p-3">

@@ -893,7 +893,7 @@ export const GROUP_EDIT_FIELDS = [
   'kpi_title', 'kpi_description', 'kpi_formula', 'kpi_scoring_logic',
   'weightage', 'target_value', 'uom', 'uom_type', 'frequency', 'threshold_mode',
   'qualitative_options', 'r5', 'r4', 'r3', 'r2', 'r1', 'r0',
-  'kra_name', 'category_id',
+  'kra_name', 'category_id', 'criteria', 'source_of_data',
 ] as const;
 
 export type GroupEditField = (typeof GROUP_EDIT_FIELDS)[number];
@@ -914,6 +914,8 @@ export const GROUP_EDIT_FIELD_LABELS: Record<string, string> = {
   r2: 'Rating 2', r1: 'Rating 1', r0: 'Rating 0',
   kra_name: 'KRA',
   category_id: 'Category',
+  criteria: 'Direction',
+  source_of_data: 'Source of data',
 };
 
 export const GROUP_EDIT_SKIP_LABELS: Record<string, string> = {

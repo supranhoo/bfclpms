@@ -7,18 +7,26 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TieredOptionsBuilder } from '@/components/admin/TieredOptionsBuilder';
 import { isBinaryInverted } from '@/lib/qualitativeUom';
-import { KpiScoringState, ThresholdMode, binaryOptionsFor, validateScoringState } from './kpiFormModel';
+import {
+  KpiScoringState, binaryOptionsFor, validateScoringState,
+  KPI_DIRECTION_OPTIONS, directionConflictsWithLadder,
+} from './kpiFormModel';
 
 interface Props {
   value: KpiScoringState;
   onChange: (next: KpiScoringState) => void;
+  /** ADR-274a — optional direction control (`kpis.criteria`). */
+  criteria?: string;
+  onCriteriaChange?: (next: string) => void;
 }
 
 const R_FIELDS = ['r5', 'r4', 'r3', 'r2', 'r1', 'r0'] as const;
 
-export function KpiScoringEditor({ value, onChange }: Props) {
+export function KpiScoringEditor({ value, onChange, criteria, onCriteriaChange }: Props) {
   const set = (patch: Partial<KpiScoringState>) => onChange({ ...value, ...patch });
   const error = validateScoringState(value);
+  const showDirection = typeof onCriteriaChange === 'function';
+  const ladderConflict = showDirection && directionConflictsWithLadder(criteria, value.r5, value.r1);
 
   if (value.uom_type === 'binary') {
     const inverted = isBinaryInverted(value.qualitative_options);
@@ -74,23 +82,31 @@ export function KpiScoringEditor({ value, onChange }: Props) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-3">
-        <Label className="text-xs whitespace-nowrap">Threshold Mode</Label>
-        <Select
-          value={value.threshold_mode}
-          onValueChange={(v: ThresholdMode) => set({ threshold_mode: v })}
-        >
-          <SelectTrigger className="h-8 w-[200px] text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="absolute">Absolute (Recommended)</SelectItem>
-            <SelectItem value="ratio">Ratio / Percentage</SelectItem>
-          </SelectContent>
-        </Select>
+        {showDirection && (
+          <>
+            <Label className="text-xs whitespace-nowrap">Direction</Label>
+            <Select value={criteria || undefined} onValueChange={(v) => onCriteriaChange!(v)}>
+              <SelectTrigger className="h-8 w-[190px] text-xs">
+                <SelectValue placeholder="Select direction" />
+              </SelectTrigger>
+              <SelectContent>
+                {KPI_DIRECTION_OPTIONS.map((opt) => (
+                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </>
+        )}
         <span className="text-xs text-muted-foreground">
-          {value.threshold_mode === 'absolute' ? 'Actual values' : '% of target'}
+          Thresholds are actual values (absolute)
+          {value.threshold_mode === 'ratio' && ' — this KPI still carries the legacy ratio mode'}
         </span>
       </div>
+      {ladderConflict && (
+        <p className="text-xs text-destructive">
+          The ladder runs the other way (R5 {value.r5} vs R1 {value.r1}). Check the direction or the thresholds.
+        </p>
+      )}
       <div className="grid grid-cols-6 gap-1.5">
         {R_FIELDS.map((field) => (
           <div key={field} className="space-y-1">
@@ -99,11 +115,12 @@ export function KpiScoringEditor({ value, onChange }: Props) {
               className="h-8 text-xs"
               value={value[field]}
               onChange={(e) => set({ [field]: e.target.value } as Partial<KpiScoringState>)}
-              placeholder={value.threshold_mode === 'absolute' ? '100' : '100%'}
+              placeholder="100"
             />
           </div>
         ))}
       </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 }
