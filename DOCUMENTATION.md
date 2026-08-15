@@ -8350,3 +8350,29 @@ Tests: `src/test/tni/continuityRule.test.ts`, `src/test/pip/*`.
   `KpiDetailDrawer`. Hooks `useGroupWritePreview` / `useGroupWriteCommit`.
   Rollback: the console remains feature-flagged; the RPC is additive and
   droppable; batches revert through the existing audit path.
+- v2.66.261 — ADR-262 BU Console Phase 4: group stage approval.
+  New SECURITY DEFINER RPC `bu_console_group_advance(p_category_id, p_kra_name,
+  p_kpi_name, p_period, p_year, p_target_stage, p_bu_ids, p_dept_ids,
+  p_remarks, p_dry_run)`.
+  * Resolves each employee's own workflow chain via `get_employee_workflow`
+    (period-aware precedence: employee → department → pms_grade → default) and
+    advances only rows whose *next* stage equals `p_target_stage`. Status stays
+    the canonical "last COMPLETED stage".
+  * Carries the effective score into the target stage column using the
+    universal cascade (management → hr_pms → skip_level → auditor →
+    functional_manager → manager → self); ratings are derived by the existing
+    `auto_compute_rating_and_clamp_scores` trigger, not recomputed here.
+  * `p_dry_run = true` (default) writes nothing and returns
+    `{ will_advance, will_skip, preview[], skipped[] }`. Skip taxonomy:
+    `final_score_locked`, `final_approval_not_supported`, `stage_mismatch`,
+    `stage_not_in_workflow`, `status_not_in_workflow`, `terminal_stage`,
+    `no_workflow`, `no_submission`, `not_scored`.
+  * `approved` is never a bulk target — final approval stays per-employee and
+    approved rows are hard-blocked (POLICY §88). Commit stamps a shared
+    `batch_id` plus `BU_CONSOLE_GROUP_ADVANCE` audit rows per KPI.
+  UI: `GroupApprovalDialog.tsx` (stage picker, remarks, preview table of
+  current → next stage with carried score, grouped skip reasons) launched from
+  `KpiDetailDrawer`. Hooks `useGroupAdvancePreview` / `useGroupAdvanceCommit`.
+  Tests: `src/components/admin/bu-console/groupApproval.test.ts`.
+  Rollback: feature-flagged and additive; the RPC can be dropped and batches
+  reverted through the audit batch_id.

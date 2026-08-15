@@ -6147,3 +6147,16 @@ plain-language reason.
 - Every console read must go through a `bu_console_*` RPC so scope and
   authorisation are enforced server-side, and every employee list must be
   server-paged.
+- Phase 4 (ADR-262) adds group stage approval via `bu_console_group_advance`.
+  It is preview-first on the same terms as group write: the admin sees who moves
+  forward, the score carried into the stage, and every skipped employee with a
+  stated reason before anything commits.
+- Group approval respects each employee's own resolved workflow. A row advances
+  only when the stage the admin chose is exactly that employee's next stage; a
+  stage absent from an employee's chain is skipped, never injected.
+- The console can never grant final approval. `approved` is not offered as a
+  bulk stage and approved rows are immutable (POLICY §88); the last stage stays
+  a per-employee decision by the named reviewer.
+- An unscored, non-N/A row is never advanced — it is skipped as `not_scored`.
+- Every committed advance stamps a shared `batch_id` and a
+  `BU_CONSOLE_GROUP_ADVANCE` audit row per KPI.
