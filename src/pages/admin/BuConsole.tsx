@@ -207,7 +207,7 @@ export default function BuConsole() {
       <Tabs defaultValue="console">
         <TabsList>
           <TabsTrigger value="console">Console</TabsTrigger>
-          <TabsTrigger value="goals">Goals</TabsTrigger>
+          <TabsTrigger value="goals">KRA Tree</TabsTrigger>
           <TabsTrigger value="library">KPI Library</TabsTrigger>
         </TabsList>
 
