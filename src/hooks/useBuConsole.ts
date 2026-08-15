@@ -826,12 +826,3 @@ export function useGoalKraOptions(
   });
 }
 
-function legacyProgress(goal: Pick<BuGoalRow, 'start_value' | 'target_value' | 'current_value'>): number | null {
-  const { start_value: s, target_value: t, current_value: c } = goal;
-  if (t === null || t === undefined || c === null || c === undefined) return null;
-  const start = s ?? 0;
-  if (t === start) return c >= t ? 100 : 0;
-  const pct = ((c - start) / (t - start)) * 100;
-  if (!Number.isFinite(pct)) return null;
-  return Math.max(0, Math.min(100, Math.round(pct * 100) / 100));
-}
