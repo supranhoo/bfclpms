@@ -88,7 +88,7 @@ export function GroupValueEntryDialog({ args, open, onOpenChange }: Props) {
 
   const reset = () => {
     setValue(''); setIsNa(false); setRemarks('');
-    setPolicy('pre_review_only'); setPreview(null);
+    setPolicy('pre_review_only'); setPreview(null); setConfirmText('');
     previewMut.reset(); commitMut.reset();
   };
 
@@ -100,6 +100,7 @@ export function GroupValueEntryDialog({ args, open, onOpenChange }: Props) {
   const runPreview = async () => {
     if (!basePayload) return;
     const res = await previewMut.mutateAsync(basePayload);
+    setConfirmText('');
     setPreview(res);
   };
 
