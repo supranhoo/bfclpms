@@ -65,7 +65,7 @@ export function useKpiTemplates() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data as KpiTemplate[];
+      return data as unknown as KpiTemplate[];
     },
   });
 }

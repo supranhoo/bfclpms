@@ -6241,3 +6241,22 @@ plain-language reason.
 - Console surfaces display only measured values. A metric with no underlying
   data renders "—" and is never substituted with a placeholder number.
 - Colours come from semantic design tokens only — no hardcoded palettes.
+
+## §KPI-TEXT-SPLIT-FORWARD-ONLY (ADR-269)
+
+- Structured KPI text (Title, Description, Formula, Scoring Logic) applies **only**
+  from the assessment year starting July 2026 (fiscal start year >= 2026). KPIs of
+  earlier assessment years are never read, rewritten or re-rendered by this feature.
+- `kpi_name` is an immutable matching key (Org KPI value joins, aliases, duplicate
+  prevention). The split is additive: it only populates the four structured columns
+  and never modifies `kpi_name`.
+- Display resolution is single-sourced: if a structured Title exists, structured
+  parts are shown; otherwise the legacy free-text rendering is used. There is no
+  third rendering path.
+- Splitting, manual correction and rollback are admin-only, executed through
+  fiscal-gated RPCs, and every write records before/after parts in
+  `kpi_text_split_audit` with a run id that can be reverted.
+- Only "clean split" rows (title + formula + scoring detected) may be applied in
+  bulk. Rows without a detectable title — including text that opens with
+  "Description:" — are flagged for human review and must be named manually.
+- Review, scoring, weightage and workflow mechanics are unchanged by the split.
