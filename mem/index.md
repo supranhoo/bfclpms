@@ -183,3 +183,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Rollback first-stage guard](mem://features/review/rollback-first-stage-guard) — Rollback only from a stage with a predecessor; hidden at kra_set (ADR-257)
 - [BU Console Goal Objects](mem://features/admin/bu-console-goal-objects) — bu_goals scope rows, weighted roll-up, stored sub-period summary rule (ADR-263)
 - [KPI Type Parity](mem://features/review/kpi-type-parity) — Binary/tiered/value-based scoring parity across all review surfaces (ADR-271)
+- [Performance Console Group Edit](mem://features/admin/performance-console-group-edit) — Editable field whitelist, frequency+cycle anchor pairing, override/bulk-override rules (ADR-274/275)
