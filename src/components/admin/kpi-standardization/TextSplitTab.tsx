@@ -189,6 +189,13 @@ export function TextSplitTab({ initialSearch = '' }: { initialSearch?: string } 
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
+          <Input
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            placeholder="Search KPI text…"
+            aria-label="Search KPI text"
+            className="h-9 w-[220px]"
+          />
           <Select
             value={state}
             onValueChange={(v) => {
@@ -202,6 +209,7 @@ export function TextSplitTab({ initialSearch = '' }: { initialSearch?: string } 
             <SelectContent>
               <SelectItem value="pending">Pending only</SelectItem>
               <SelectItem value="structured">Already structured</SelectItem>
+              <SelectItem value="suspect">Suspect title</SelectItem>
               <SelectItem value="all">All states</SelectItem>
             </SelectContent>
           </Select>
