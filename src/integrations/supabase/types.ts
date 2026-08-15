@@ -16871,6 +16871,10 @@ export type Database = {
         Args: { p_approve: boolean; p_note?: string; p_proposal_id: string }
         Returns: Json
       }
+      bu_console_definition_search: {
+        Args: { p_limit?: number; p_search?: string }
+        Returns: Json
+      }
       bu_console_generate_merge_proposals: {
         Args: { p_fuzzy_threshold?: number }
         Returns: Json
@@ -16919,6 +16923,10 @@ export type Database = {
           p_period: string
           p_year: number
         }
+        Returns: Json
+      }
+      bu_console_merge_proposal_list: {
+        Args: { p_page?: number; p_page_size?: number; p_status?: string }
         Returns: Json
       }
       bu_console_tree: {
