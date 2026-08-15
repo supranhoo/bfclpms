@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { KPI } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
+import { KpiTextBlocks, isStructuredKpi } from '@/components/kpi/KpiText';
+import { resolveKpiText } from '@/lib/kpiTextSplit';
 import { getCycleLabel } from '@/lib/frequencyUtils';
 import { Clock, Building2, Users, User, Lock, Settings, ClipboardEdit, Undo2, Trash2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -54,7 +56,11 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   const { data: variantPairs = [] } = useCanonicalVariantPairs(kpi);
   const canonical = canonicalPair(variantPairs);
   const displayKra = canonical?.kra_name ?? kpi.kra_name;
-  const displayKpi = canonical?.kpi_name ?? kpi.kpi_name;
+  // ADR-269b precedence: canonical registry name > structured title > raw text.
+  const structuredParts = resolveKpiText(kpi);
+  const displayKpi =
+    canonical?.kpi_name ??
+    (structuredParts.isStructured && structuredParts.title ? structuredParts.title : kpi.kpi_name);
 
   const categoryName = kpi.kra_categories?.name || 'Uncategorized';
   const categoryColor = kpi.kra_categories?.color || '#6B7280';
@@ -239,6 +245,16 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
       <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed whitespace-pre-wrap">
         {renderBoldKpiText(displayKpi)}
       </p>
+      {isStructuredKpi(kpi) ? (
+        <>
+          <KpiTextBlocks kpi={kpi} collapsible hideLegacy className="mt-2" />
+          {isAdmin ? (
+            <Badge variant="outline" className="mt-2 text-[10px] font-normal text-muted-foreground">
+              Structured
+            </Badge>
+          ) : null}
+        </>
+      ) : null}
 
       {(isAdmin || canDeleteKra) && (
         <div className="flex justify-end gap-1.5 mt-2">
