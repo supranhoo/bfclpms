@@ -237,7 +237,10 @@ export function useGenerateMergeProposals() {
           : 'Scan complete — no new duplicates found.',
       );
     },
-    onError: (e: any) => toast.error(e?.message ?? 'Could not scan for duplicates.'),
+    onError: (e: any) =>
+      toast.error('Duplicate scan could not run', {
+        description: e?.message ?? 'Unexpected error while scanning for duplicate KPI names.',
+      }),
   });
 }
 
