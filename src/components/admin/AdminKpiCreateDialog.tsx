@@ -301,6 +301,32 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
     [frequency, reviewPeriod, reviewYear, frequencyCycleStart]
   );
 
+  // ADR-272 — scoring state shared with the Admin KPI Editor
+  const scoringState: KpiScoringState = {
+    uom_type: uomType,
+    threshold_mode: thresholdMode,
+    qualitative_options:
+      uomType === 'binary'
+        ? (binaryInverted ? BINARY_OPTIONS_INVERTED : BINARY_OPTIONS)
+        : qualitativeOptions,
+    r5, r4, r3, r2, r1, r0,
+  };
+
+  const setScoring = (next: KpiScoringState) => {
+    setThresholdMode(next.threshold_mode);
+    setR5(next.r5); setR4(next.r4); setR3(next.r3);
+    setR2(next.r2); setR1(next.r1); setR0(next.r0);
+    if (next.uom_type === 'binary') {
+      setBinaryInverted(isBinaryInverted(next.qualitative_options));
+    }
+    setQualitativeOptions(next.qualitative_options);
+  };
+
+  const handleTextChange = (next: KpiTextState) => {
+    setTextState(next);
+    setKpiName(buildTextPayload(next).kpi_name);
+  };
+
   const handleSubmit = async () => {
     if (!employeeId || !categoryId || !kraName || !kpiName) {
       return;
