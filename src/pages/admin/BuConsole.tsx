@@ -93,6 +93,7 @@ export default function BuConsole() {
   }, [managers, deptIds, buIds, divisionIds, buOptions]);
 
   const { data: tree, isFetching, refetch } = useBuConsoleTree(scope);
+  const navigate = useNavigate();
 
   // ADR-271 — filter selections are only committed on apply; surface the gap
   // instead of letting stale category counts look current.
