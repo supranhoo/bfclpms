@@ -182,3 +182,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Evidence Preview & KPI Reads](mem://architecture/performance/evidence-preview-and-kpi-reads) — get_all_kpis_slim RPC mandate, streaming signed-URL previews, transient-vs-denied errors (ADR-250)
 - [Rollback first-stage guard](mem://features/review/rollback-first-stage-guard) — Rollback only from a stage with a predecessor; hidden at kra_set (ADR-257)
 - [BU Console Goal Objects](mem://features/admin/bu-console-goal-objects) — bu_goals scope rows, weighted roll-up, stored sub-period summary rule (ADR-263)
+- [KPI Type Parity](mem://features/review/kpi-type-parity) — Binary/tiered/value-based scoring parity across all review surfaces (ADR-271)
