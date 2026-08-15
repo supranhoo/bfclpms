@@ -12,6 +12,41 @@ import { composeKpiName, splitKpiText } from '@/lib/kpiTextSplit';
 
 export type ThresholdMode = 'absolute' | 'ratio';
 
+/**
+ * ADR-274a / POLICY §KPI-THRESHOLD-MODE-ABSOLUTE-ONLY.
+ *
+ * `ratio` is legacy: no live KPI row uses it and no new KPI may be written
+ * with it. The scoring engine keeps its ratio branch so historical rows score
+ * identically, but every form writes `absolute` for numeric KPIs.
+ */
+export const DEFAULT_THRESHOLD_MODE: ThresholdMode = 'absolute';
+
+/** Scoring direction, stored on `kpis.criteria`. */
+export const KPI_DIRECTION_OPTIONS = [
+  'Higher is Better',
+  'Lower is Better',
+  'Equal to Target',
+] as const;
+export type KpiDirection = (typeof KPI_DIRECTION_OPTIONS)[number];
+
+/**
+ * True when the direction contradicts the R5..R0 ladder — e.g. "Higher is
+ * Better" with a descending ladder. Mirrors the Scoring Health Check rule.
+ */
+export function directionConflictsWithLadder(
+  direction: string | null | undefined,
+  r5: string | null | undefined,
+  r1: string | null | undefined,
+): boolean {
+  const a = parseFloat(String(r5 ?? '').replace('%', ''));
+  const b = parseFloat(String(r1 ?? '').replace('%', ''));
+  if (!isFinite(a) || !isFinite(b) || a === b) return false;
+  const d = (direction ?? '').toLowerCase();
+  if (d.includes('lower')) return a > b;
+  if (d.includes('higher')) return a < b;
+  return false;
+}
+
 export interface KpiScoringState {
   uom_type: UomType;
   threshold_mode: ThresholdMode;
@@ -42,7 +77,8 @@ export function buildScoringPayload(state: KpiScoringState) {
   const numeric = state.uom_type === 'numeric';
   return {
     uom_type: state.uom_type,
-    threshold_mode: numeric ? state.threshold_mode : null,
+    // Forward-only: numeric KPIs are always written as absolute (ADR-274a).
+    threshold_mode: numeric ? DEFAULT_THRESHOLD_MODE : null,
     r5: numeric ? trimOrNull(state.r5) : null,
     r4: numeric ? trimOrNull(state.r4) : null,
     r3: numeric ? trimOrNull(state.r3) : null,
