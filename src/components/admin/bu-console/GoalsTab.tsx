@@ -193,10 +193,11 @@ export function GoalsTab({ year, period, buIds, deptIds, buOptions, deptOptions,
 
       <ConfirmDestructiveDialog
         open={!!archiveTarget}
-        onOpenChange={(o) => { if (!o) setArchiveTarget(null); }}
+        onCancel={() => setArchiveTarget(null)}
         title="Archive this goal?"
         description={`“${archiveTarget?.kpi_name ?? ''}” will be hidden from the console. No review data or scores are affected.`}
         confirmLabel="Archive goal"
+        isLoading={archive.isPending}
         onConfirm={() => {
           if (archiveTarget) archive.mutate(archiveTarget.id);
           setArchiveTarget(null);
