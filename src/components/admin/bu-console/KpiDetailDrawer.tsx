@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Link } from 'react-router-dom';
 import { useBuConsoleKpiDetail, type KpiDetailArgs } from '@/hooks/useBuConsole';
 
 interface Props {
@@ -112,7 +111,6 @@ export function KpiDetailDrawer({ args, onPageChange, onClose }: Props) {
                       <TableHead className="text-right">Actual</TableHead>
                       <TableHead className="text-right">Score</TableHead>
                       <TableHead>Stage</TableHead>
-                      <TableHead />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -134,16 +132,11 @@ export function KpiDetailDrawer({ args, onPageChange, onClose }: Props) {
                         <TableCell>
                           <Badge variant="outline">{r.status ?? '—'}</Badge>
                         </TableCell>
-                        <TableCell className="text-right">
-                          <Button asChild size="sm" variant="ghost">
-                            <Link to={`/employee/${r.employee_id}`}>View</Link>
-                          </Button>
-                        </TableCell>
                       </TableRow>
                     ))}
                     {data.rows.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
                           No mapped employees in this scope.
                         </TableCell>
                       </TableRow>
