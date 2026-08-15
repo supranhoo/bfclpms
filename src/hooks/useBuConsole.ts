@@ -189,7 +189,7 @@ export function useMergeProposals(status: 'pending' | 'approved' | 'rejected' = 
 export function useGenerateMergeProposals() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (fuzzyThreshold = 0.55) => {
+    mutationFn: async (fuzzyThreshold: number = 0.55) => {
       const { data, error } = await supabase.rpc('bu_console_generate_merge_proposals' as any, {
         p_fuzzy_threshold: fuzzyThreshold,
       });
