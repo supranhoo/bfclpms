@@ -256,21 +256,51 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
     fetchTargets();
   }, [copyTargetEmployeeIds, kpi, formData.review_period, formData.review_year, formData.kra_name, formData.kpi_name]);
 
-  // Validation for tiered options
-  const tieredValidationError = formData.uom_type === 'tiered' 
-    ? validateQualitativeOptions(formData.qualitative_options) 
-    : null;
+  // ADR-272 — shared validation (tiered + binary) used by both KPI forms
+  const scoringState = {
+    uom_type: formData.uom_type,
+    threshold_mode: formData.threshold_mode,
+    qualitative_options: formData.qualitative_options,
+    r5: formData.r5, r4: formData.r4, r3: formData.r3,
+    r2: formData.r2, r1: formData.r1, r0: formData.r0,
+  };
+  const tieredValidationError = validateScoringState(scoringState);
+
+  const handleTextChange = (next: KpiTextState) => {
+    setTextState(next);
+    setFormData(prev => ({ ...prev, kpi_name: buildTextPayload(next).kpi_name }));
+  };
+
+  const handleCreateCategory = async () => {
+    const name = customCategoryName.trim();
+    if (!name) return;
+    try {
+      const created: any = await createCategory.mutateAsync({ name } as any);
+      if (created?.id) setFormData(prev => ({ ...prev, category_id: created.id }));
+      setIsCustomCategory(false);
+      setCustomCategoryName('');
+      toast.success('Category created');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to create category');
+    }
+  };
 
   const handleSubmit = async () => {
     if (!kpi) return;
     
     const statusChanged = formData.status !== originalStatus;
     if (statusChanged && !reason.trim()) return;
-    if (formData.uom_type === 'tiered' && tieredValidationError) return;
+    if (tieredValidationError) {
+      toast.error(tieredValidationError);
+      return;
+    }
+
+    const textPayload = buildTextPayload(textState);
+    const scoringPayload = buildScoringPayload(scoringState);
 
     const structuralFields = {
       kra_name: formData.kra_name,
-      kpi_name: formData.kpi_name,
+      ...textPayload,
       target_value: formData.uom_type === 'numeric' ? (formData.target_value ? parseFloat(formData.target_value) : null) : null,
       uom: formData.uom || null,
       weightage: formData.weightage ? parseFloat(formData.weightage) : null,
@@ -278,20 +308,11 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
       frequency_cycle_start: (formData.frequency_cycle_start && formData.frequency_cycle_start !== 'system_default') ? formData.frequency_cycle_start : null,
       criteria: formData.uom_type === 'numeric' ? (formData.criteria || null) : null,
       source_of_data: formData.source_of_data || null,
-      r5: formData.uom_type === 'numeric' ? (formData.r5 || null) : null,
-      r4: formData.uom_type === 'numeric' ? (formData.r4 || null) : null,
-      r3: formData.uom_type === 'numeric' ? (formData.r3 || null) : null,
-      r2: formData.uom_type === 'numeric' ? (formData.r2 || null) : null,
-      r1: formData.uom_type === 'numeric' ? (formData.r1 || null) : null,
-      r0: formData.uom_type === 'numeric' ? (formData.r0 || null) : null,
+      ...scoringPayload,
       is_org_level: formData.is_org_level,
       org_level_scope: formData.is_org_level ? formData.org_level_scope : 'organization',
-      uom_type: formData.uom_type,
-      qualitative_options: formData.uom_type === 'tiered' ? formData.qualitative_options 
-        : formData.uom_type === 'binary' ? formData.qualitative_options : null,
       require_resubmit_reason: formData.require_resubmit_reason,
       day_count_type: formData.frequency === 'Daily' ? formData.day_count_type : null,
-      threshold_mode: formData.uom_type === 'numeric' ? formData.threshold_mode : null,
     };
 
     await updateKpi.mutateAsync({
@@ -299,7 +320,6 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
       employee_id: formData.employee_id,
       category_id: formData.category_id,
       kra_name: formData.kra_name,
-      kpi_name: formData.kpi_name,
       ...structuralFields,
       review_period: formData.review_period || null,
       review_year: formData.review_year ? parseInt(formData.review_year) : null,
