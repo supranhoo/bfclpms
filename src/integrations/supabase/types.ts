@@ -7881,6 +7881,71 @@ export type Database = {
           },
         ]
       }
+      kpi_definition_links: {
+        Row: {
+          created_at: string
+          definition_id: string | null
+          formula_id: string | null
+          id: string
+          kpi_id: string
+          link_source: string
+          linked_by: string | null
+          scale_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          definition_id?: string | null
+          formula_id?: string | null
+          id?: string
+          kpi_id: string
+          link_source?: string
+          linked_by?: string | null
+          scale_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          definition_id?: string | null
+          formula_id?: string | null
+          id?: string
+          kpi_id?: string
+          link_source?: string
+          linked_by?: string | null
+          scale_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_definition_links_definition_id_fkey"
+            columns: ["definition_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_definitions_master"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_definition_links_formula_id_fkey"
+            columns: ["formula_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_formulas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_definition_links_kpi_id_fkey"
+            columns: ["kpi_id"]
+            isOneToOne: true
+            referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_definition_links_scale_id_fkey"
+            columns: ["scale_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_scoring_scales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       kpi_definitions: {
         Row: {
           canonical_kpi_name: string
@@ -7912,6 +7977,116 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kpi_definitions_master: {
+        Row: {
+          business_unit_id: string | null
+          category_id: string | null
+          created_at: string
+          created_by: string | null
+          current_value: number | null
+          cycle_ref: string | null
+          department_id: string | null
+          description: string | null
+          entity_level: Database["public"]["Enums"]["kpi_goal_entity_level"]
+          frequency: string | null
+          id: string
+          is_active: boolean
+          kpi_name: string
+          kra_name: string
+          parent_goal_id: string | null
+          progress_type: Database["public"]["Enums"]["kpi_goal_progress_type"]
+          start_value: number | null
+          subperiod_summary_rule: Database["public"]["Enums"]["kpi_goal_summary_rule"]
+          target_value: number | null
+          tracking_method: Database["public"]["Enums"]["kpi_goal_tracking_method"]
+          uom: string | null
+          uom_type: string | null
+          updated_at: string
+          visibility: Database["public"]["Enums"]["kpi_goal_visibility"]
+        }
+        Insert: {
+          business_unit_id?: string | null
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_value?: number | null
+          cycle_ref?: string | null
+          department_id?: string | null
+          description?: string | null
+          entity_level?: Database["public"]["Enums"]["kpi_goal_entity_level"]
+          frequency?: string | null
+          id?: string
+          is_active?: boolean
+          kpi_name: string
+          kra_name: string
+          parent_goal_id?: string | null
+          progress_type?: Database["public"]["Enums"]["kpi_goal_progress_type"]
+          start_value?: number | null
+          subperiod_summary_rule?: Database["public"]["Enums"]["kpi_goal_summary_rule"]
+          target_value?: number | null
+          tracking_method?: Database["public"]["Enums"]["kpi_goal_tracking_method"]
+          uom?: string | null
+          uom_type?: string | null
+          updated_at?: string
+          visibility?: Database["public"]["Enums"]["kpi_goal_visibility"]
+        }
+        Update: {
+          business_unit_id?: string | null
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_value?: number | null
+          cycle_ref?: string | null
+          department_id?: string | null
+          description?: string | null
+          entity_level?: Database["public"]["Enums"]["kpi_goal_entity_level"]
+          frequency?: string | null
+          id?: string
+          is_active?: boolean
+          kpi_name?: string
+          kra_name?: string
+          parent_goal_id?: string | null
+          progress_type?: Database["public"]["Enums"]["kpi_goal_progress_type"]
+          start_value?: number | null
+          subperiod_summary_rule?: Database["public"]["Enums"]["kpi_goal_summary_rule"]
+          target_value?: number | null
+          tracking_method?: Database["public"]["Enums"]["kpi_goal_tracking_method"]
+          uom?: string | null
+          uom_type?: string | null
+          updated_at?: string
+          visibility?: Database["public"]["Enums"]["kpi_goal_visibility"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_definitions_master_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_definitions_master_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_definitions_master_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_definitions_master_parent_goal_id_fkey"
+            columns: ["parent_goal_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_definitions_master"
             referencedColumns: ["id"]
           },
         ]
@@ -7979,6 +8154,42 @@ export type Database = {
         }
         Relationships: []
       }
+      kpi_formulas: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          expression: string | null
+          id: string
+          is_active: boolean
+          name: string
+          source_of_data: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          expression?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          source_of_data?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          expression?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          source_of_data?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       kpi_mention_access: {
         Row: {
           created_at: string
@@ -8007,6 +8218,81 @@ export type Database = {
             columns: ["kpi_id"]
             isOneToOne: false
             referencedRelation: "kpis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      kpi_merge_proposals: {
+        Row: {
+          affected_employee_count: number
+          affected_kpi_count: number
+          canonical_kpi_name: string
+          canonical_kra_name: string
+          category_id: string | null
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          id: string
+          match_type: string
+          similarity: number | null
+          status: Database["public"]["Enums"]["kpi_merge_proposal_status"]
+          target_definition_id: string | null
+          updated_at: string
+          variant_kpi_name: string
+          variant_kra_name: string
+        }
+        Insert: {
+          affected_employee_count?: number
+          affected_kpi_count?: number
+          canonical_kpi_name: string
+          canonical_kra_name: string
+          category_id?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          match_type?: string
+          similarity?: number | null
+          status?: Database["public"]["Enums"]["kpi_merge_proposal_status"]
+          target_definition_id?: string | null
+          updated_at?: string
+          variant_kpi_name: string
+          variant_kra_name: string
+        }
+        Update: {
+          affected_employee_count?: number
+          affected_kpi_count?: number
+          canonical_kpi_name?: string
+          canonical_kra_name?: string
+          category_id?: string | null
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          match_type?: string
+          similarity?: number | null
+          status?: Database["public"]["Enums"]["kpi_merge_proposal_status"]
+          target_definition_id?: string | null
+          updated_at?: string
+          variant_kpi_name?: string
+          variant_kra_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_merge_proposals_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kpi_merge_proposals_target_definition_id_fkey"
+            columns: ["target_definition_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_definitions_master"
             referencedColumns: ["id"]
           },
         ]
@@ -8463,6 +8749,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      kpi_scoring_scales: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          criteria: string | null
+          id: string
+          is_active: boolean
+          name: string
+          qualitative_options: Json | null
+          r0: string | null
+          r1: string | null
+          r2: string | null
+          r3: string | null
+          r4: string | null
+          r5: string | null
+          threshold_mode: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          criteria?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          qualitative_options?: Json | null
+          r0?: string | null
+          r1?: string | null
+          r2?: string | null
+          r3?: string | null
+          r4?: string | null
+          r5?: string | null
+          threshold_mode?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          criteria?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          qualitative_options?: Json | null
+          r0?: string | null
+          r1?: string | null
+          r2?: string | null
+          r3?: string | null
+          r4?: string | null
+          r5?: string | null
+          threshold_mode?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       kpi_standardization_actions: {
         Row: {
@@ -19294,6 +19634,12 @@ export type Database = {
       dev_report_entry_type: "feature" | "bug" | "timeline"
       iac_scope_type: "global" | "company" | "business_unit" | "department"
       increment_method_type: "full" | "prorated_doj" | "custom"
+      kpi_goal_entity_level: "org" | "bu" | "department" | "individual"
+      kpi_goal_progress_type: "number" | "currency" | "percentage" | "rollup"
+      kpi_goal_summary_rule: "last" | "sum" | "avg"
+      kpi_goal_tracking_method: "manual" | "rollup" | "source"
+      kpi_goal_visibility: "public" | "restricted" | "custom"
+      kpi_merge_proposal_status: "pending" | "approved" | "rejected"
       kpi_status: "open" | "submitted" | "approved_by_manager" | "locked"
       observation_type: "positive" | "concern" | "neutral"
       pip_milestone_status: "pending" | "met" | "partially_met" | "not_met"
@@ -19576,6 +19922,12 @@ export const Constants = {
       dev_report_entry_type: ["feature", "bug", "timeline"],
       iac_scope_type: ["global", "company", "business_unit", "department"],
       increment_method_type: ["full", "prorated_doj", "custom"],
+      kpi_goal_entity_level: ["org", "bu", "department", "individual"],
+      kpi_goal_progress_type: ["number", "currency", "percentage", "rollup"],
+      kpi_goal_summary_rule: ["last", "sum", "avg"],
+      kpi_goal_tracking_method: ["manual", "rollup", "source"],
+      kpi_goal_visibility: ["public", "restricted", "custom"],
+      kpi_merge_proposal_status: ["pending", "approved", "rejected"],
       kpi_status: ["open", "submitted", "approved_by_manager", "locked"],
       observation_type: ["positive", "concern", "neutral"],
       pip_milestone_status: ["pending", "met", "partially_met", "not_met"],
