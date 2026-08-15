@@ -22,6 +22,20 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { UomType, QualitativeOption, validateQualitativeOptions, BINARY_OPTIONS, BINARY_OPTIONS_INVERTED, isBinaryInverted } from '@/lib/qualitativeUom';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
 import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
+import { buildCycleScopeLabel } from '@/lib/frequencyUtils';
+import { KraLibrarySearchPanel } from '@/components/admin/KraLibrarySearchPanel';
+import { useKpiTemplates } from '@/hooks/useKpiTemplates';
+import { useAllKpis } from '@/hooks/useKpis';
+import { useCreateKraCategory } from '@/hooks/useOrganization';
+import { KpiTextSplitFields } from '@/components/admin/kpi-form/KpiTextSplitFields';
+import { KpiScoringEditor } from '@/components/admin/kpi-form/KpiScoringEditor';
+import {
+  KpiTextState,
+  buildScoringPayload,
+  buildTextPayload,
+  textStateFromRow,
+  validateScoringState,
+} from '@/components/admin/kpi-form/kpiFormModel';
 import { supabase } from '@/integrations/supabase/client';
 import { isFiscalTuple } from '@/lib/fiscalWindow';
 import { toast } from 'sonner';
