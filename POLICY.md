@@ -6335,3 +6335,20 @@ structured parts so historical joins remain valid.
 5. The legacy `kpi_name` text is never rewritten by the console, so historical joins, reports and Org
    KPI matching stay intact.
 6. Every group edit and override is audited with a run id and is undoable.
+
+## §KPI-THRESHOLD-MODE-ABSOLUTE-ONLY (ADR-274a)
+Numeric KPI thresholds are always **absolute** actual values. The legacy
+"Ratio / Percentage" mode is retired: it is no longer offered in any form and
+every write sets `threshold_mode = 'absolute'` for numeric KPIs (null for
+binary / tiered). Scoring keeps its ratio branch only so historical rows score
+exactly as before. Verified: 0 of 20,698 KPI rows use `ratio`.
+
+## §BU-CONSOLE-GROUP-EDIT — completeness (ADR-274a)
+The group definition editor must expose every field the console is allowed to
+write: Category, KRA, structured text, Frequency, Direction (`criteria`),
+Source of data, Weightage, Target, Unit and the scoring model. Per-employee
+tuning exposes the same fields **except** Category and KRA, which are
+structural and may only move for the whole group.
+Direction and the R5..R0 ladder must agree; a contradiction is surfaced as a
+warning at edit time. Changing Category or KRA always requires the typed
+confirmation, regardless of how many rows are affected.

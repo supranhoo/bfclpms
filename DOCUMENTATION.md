@@ -8763,3 +8763,16 @@ list, duplicate employee collapse).
 
 **Rollback.** Frontend is additive; hiding the two buttons disables the feature. Server side, drop
 the ADR-274 RPCs and tables — existing `kpis` rows are unaffected.
+
+### ADR-274a — Complete the BU Console KPI definition editor
+- `bu_console_editable_fields()` now also whitelists `criteria` and `source_of_data`.
+- `bu_console_kpi_detail` returns per-row `criteria`, `source_of_data`, `r0..r5`
+  and a group definition carrying `category_id`, `kra_name`, `target_value`,
+  `source_of_data` so the dialogs can seed from real values.
+- `GroupDefinitionEditDialog` adds Category, KRA, Frequency, Direction and
+  Source of data; structural moves (category / KRA) force typed confirmation.
+- `RowOverrideDialog` gains Frequency, Direction and Source of data.
+- `kpiFormModel` exports `KPI_DIRECTION_OPTIONS` and
+  `directionConflictsWithLadder`, and `buildScoringPayload` pins numeric KPIs to
+  `threshold_mode = 'absolute'` (POLICY §KPI-THRESHOLD-MODE-ABSOLUTE-ONLY).
+- Tests: `src/components/admin/bu-console/groupEditModel.test.ts`.
