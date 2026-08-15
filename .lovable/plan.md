@@ -1,69 +1,142 @@
-# Peoplebox-style Alignment & Conversations (Beta) — ADR-276
+# ADR-276 — Objective Tree: one clean KRA/KPI cascade (Org → BU → Dept → Employee)
 
-I cannot watch video or listen to audio. I read the video's page instead: it is the **Peoplebox quick demo** — a unified platform for OKRs (cross-functional goal alignment), reviews auto-populated from goal data, 1:1s and check-ins, and engagement surveys. This plan covers the two capabilities you picked — **OKR alignment layer** and **1:1s / check-ins** — as a **flag-gated beta**, with zero impact on the running annual cycle.
+Reference: the Peoplebox "My Goals" screen you shared. What makes it readable is not the
+feature set — it is the **single indented tree with one row per objective**, and everything
+else compressed into that row: title, due date, aligned-count chip, level badge, owner
+avatar, status chip, progress bar, percentage. Nothing else on screen. Updating progress is
+one small popover on the row (value, status, optional context note), not a page.
 
-## What already exists (verified)
+Our current Goals tab is a separate table with its own vocabulary, which is why it reads as
+cluttered and disconnected. This plan replaces it.
 
-- `bu_goals` already models Category → KRA → Goal → Sub-goal with `parent_goal_id`, `depth`, `entity_level` (org / bu / department / individual), `owner_profile_id`, weighted roll-up, `tracking_method` (manual / rollup / source), visibility and archiving.
-- Goals are served by the paged `bu_goal_list` RPC and rendered in the Performance Console `GoalsTab`, scoped by year / period / BU / department / category.
-- The console is already behind an admin feature flag (`admin_feature_flags`).
-- There is **no** 1:1, check-in, agenda or action-item capability anywhere in the app.
+## Naming decision (locked)
 
-So the OKR layer is an extension of what exists, not a rebuild. 1:1s and check-ins are new.
+- Drop the word **goal** from the UI entirely. KRA and goal mean the same thing here.
+- The tree is called the **KRA Tree**; each row is a **KRA** (a parent/aggregate objective)
+  or a **KPI** (a measurable leaf with a target).
+- Levels reuse the words we already use: **Organisation / Business Unit / Department /
+  Employee** — the same four levels as `entity_level` on `bu_goals` today
+  (org / bu / department / individual), so no data migration is needed for the level idea.
+- The table stays `bu_goals` internally (renaming a live table buys nothing); every label,
+  route, tab and heading says KRA / KPI.
 
-## Risk & Impact Report
+## The one screen
 
-- **Data impact:** additive only. Three new tables plus a few nullable columns on `bu_goals`. No change to `kpis`, `annual_review_*`, scores, or any review table. No historical data rewritten.
-- **Workflow impact:** none for the annual cycle. Goals stay descriptive — they never grade anyone and never feed a review score. 1:1s and check-ins are private manager/employee records with no workflow stage.
-- **UI/UX:** two new tabs inside the Performance Console (Alignment, Conversations) plus one employee-facing "My 1:1s" page. Existing screens untouched except the console tab bar.
-- **Regression risk:** low. Everything sits behind the beta flag; when off, no new query runs.
-- **Scalability:** every list is server-paged through an RPC (same contract as `bu_goal_list`, 200/page). No client-side full-table loads. The alignment tree loads one level at a time with child-count badges.
-- **Rollback:** flag off hides the feature instantly; migrations are additive, so the new tables can be dropped without touching existing data.
+```text
+KRA  Achieve FY27 organisation production target       Org   AK   BEHIND    44%
+ └ KRA  CPP power generation                            BU    RS   AT RISK   45%
+    └ KPI  45 MW AFBC — 300,000 MT            3 mapped  Dept  SK   ON TRACK  60%
+    └ KPI  45 MW WHRB — 260,000 MT            5 mapped  Dept  MP   ON TRACK  72%
+    └ KPI  8 MW — 60,000 MT                             Emp   JD   NOT SET    0%
+```
 
-## Phase 1 — OKR alignment layer
+Row anatomy, copied from the reference:
 
-Turns today's flat, scope-filtered goal list into a real cascade.
+- caret to expand/collapse; indentation is the only structure cue (no cards, no boxes)
+- title on the left, cycle/due underneath in small muted text
+- "N mapped" chip where a KPI pulls from employee KPI rows (their "N aligned goals")
+- level badge with an icon, owner avatar, status chip, thin progress bar, big % on the right
+- click the row → right-side drawer with detail; click the progress area → **Check-in popover**
 
-1. **Alignment link** — add `aligns_to_goal_id` to `bu_goals`, distinct from `parent_goal_id` (which stays the structural Category/KRA nesting). This is what lets a department goal align up to a BU goal and a BU goal to a company goal, across categories — the cross-functional part of the demo.
-2. **Goal period + health** — add `start_date`, `end_date`, and `status` (on_track / at_risk / off_track / achieved / dropped), auto-derived from progress vs time elapsed and manually overridable with a reason.
-3. **Alignment tree view** — new **Alignment** tab: company → BU → department → individual, each node showing owner, weighted progress bar, health chip, and count of aligned children. Children load on demand via a paged RPC. Filters reuse the existing multi-select cascading scope toolbar (ADR-229 filter standard).
-4. **Auto progress from existing data** — extend roll-up so a goal with `tracking_method = 'rollup'` pulls from mapped employee KPI actuals for the period. Recompute on demand plus the existing nightly job pattern; `rollup_computed_at` already exists and is surfaced as a staleness marker.
-5. **Alignment gaps panel** — goals with no aligned parent, owners with no goal, and goals whose child weights do not sum to 100. Read-only diagnostics, deep-linked to the fix screens.
+**Check-in popover** (exactly the reference interaction): current value `of` target, a status
+select (On track / At risk / Behind / Achieved / Dropped), an optional context note with
+@mention support reusing our existing mention infrastructure, Cancel / Check in. One click,
+no navigation, stays on the tree.
+
+## Mapping, the same way we map KRA
+
+A KRA/KPI row is mapped to exactly one level, and the picker mirrors the KRA assignment flow
+people already know:
+
+| Level | Scope fields | Progress source |
+|---|---|---|
+| Organisation | company | roll-up of child rows |
+| Business Unit | business unit | roll-up of children, or employee KPI rows in that BU |
+| Department | BU + department | roll-up of children, or employee KPI rows in that dept |
+| Employee | owner profile | employee KPI rows for that person, or manual check-in |
+
+- Every row has one **owner** (a profile) — that is who checks in and who the avatar shows.
+- **Alignment** is a new `aligns_to_id` link, separate from the structural `parent_goal_id`,
+  so a department KPI can align up to a BU KRA in a different category — cross-functional
+  alignment, and the source of the "N aligned" chip.
+- Depth is no longer capped at one level; the tree allows Org → BU → Dept → Employee (max 4)
+  with a server-side cycle guard.
+
+## What gets removed to kill the clutter
+
+- The standalone Goals tab, its table layout, and the words goal / sub-goal in the UI.
+- Duplicate scope controls: the tree uses the console's existing multi-select cascading
+  scope toolbar (ADR-229 standard) and a cycle selector, nothing more.
+- Columns that repeat what the badge already says (tracking method, summary rule, source)
+  move into the detail drawer instead of the row.
+
+## Phase 1 — KRA Tree (replaces the Goals tab)
+
+1. Schema (additive): `aligns_to_id`, `status`, `start_date`, `end_date`, `owner_profile_id`
+   already exists. Allow depth up to 4 with a cycle guard in `bu_goal_upsert`.
+2. New paged RPC `kra_tree_list` — returns one level at a time with child counts, owner name,
+   resolved progress, status, and mapped-employee count. No client-side full loads.
+3. `KraTree` component: virtualised rows, expand-on-demand, sticky header row of column
+   labels, mobile layout collapsing badges under the title.
+4. Status derivation: on track / at risk / behind computed from progress vs elapsed cycle
+   time, overridable manually with a stored reason; "Not set" when there is nothing to
+   measure (never a fake 0%).
+5. Create/edit dialog reshaped as the KRA mapping flow: Level → Scope → Owner → Category/KRA
+   → optional KPI link → target/unit → alignment parent.
 
 ## Phase 2 — Check-ins
 
-Lightweight periodic goal updates between formal reviews.
-
-- New table `goal_check_ins`: goal, author, period key, current value, status, blocker note, timestamp. One row per goal per period (unique key = idempotent, safe to re-run).
-- A goal owner posts a check-in from the Alignment tree or a **My Goals** card; the check-in writes back `current_value` and `status` through an RPC (RPC-only writes, per the safety baseline).
-- Cadence (weekly / fortnightly / monthly) is configured per cycle in admin settings — no hardcoded cadence.
-- Overdue check-ins raise a badge in the console and feed the existing notification dispatch queue (batched, honouring inactive-recipient suppression).
+- New table `kra_check_ins`: row id, author, period key, value, status, context note,
+  timestamp; one row per objective per period (idempotent).
+- Written only through an RPC, which also updates `current_value`/`status` on the objective.
+- Cadence (weekly / fortnightly / monthly) configured per cycle in admin settings.
+- Row shows "Updated 3 Jun" like the reference; overdue check-ins get a subtle marker and
+  feed the existing batched notification queue.
+- History of check-ins is visible in the detail drawer as a small sparkline + list.
 
 ## Phase 3 — 1:1s
 
-- New tables `one_on_ones` (manager, employee, scheduled_at, status) and `one_on_one_items` (talking point / note / action item, owner, due date, done flag, author).
-- **Conversations** tab in the console for managers: upcoming and past 1:1s across the team, open action items, and a "no 1:1 in N days" nudge list.
-- **My 1:1s** page for employees: a shared agenda both sides can add to before the meeting, a private-notes field visible only to its author, and action items carried forward automatically to the next 1:1 until closed.
-- Auto-populated agenda: each 1:1 opens pre-filled with the employee's at-risk goals, overdue check-ins and open KPI queries — the "reduce admin work" part of the demo.
+- Tables `one_on_ones` (manager, employee, scheduled_at, status) and `one_on_one_items`
+  (talking point / note / action item, owner, due date, done, author).
+- **My 1:1s** page for employees and a manager view listing upcoming/past 1:1s and open
+  action items.
+- Agenda auto-fills with the employee's at-risk KRAs, overdue check-ins and open KPI queries.
+- Private notes visible only to their author; action items carry forward until closed.
 
-## Phase 4 — Feed it back into reviews (optional, after 1–3 land)
+## Risk & Impact
 
-A read-only panel on the annual review form showing the employee's goal outcomes, check-in history and 1:1 action-item completion for the cycle. Purely contextual — it does not alter any score, weight or workflow stage.
+- **Data:** additive columns plus two new tables. `bu_goals` currently holds no production
+  data worth preserving in its old shape, and no review, KPI or score table is touched.
+- **Workflow:** none. A KRA/KPI row in this tree states intent and tracks progress; it never
+  grades anyone and never feeds a review score or workflow stage.
+- **UI/UX:** the Goals tab is replaced by the KRA Tree inside the Performance Console; one
+  new employee page for 1:1s. No other screen changes.
+- **Regression:** everything stays behind the console beta flag, with a separate flag for
+  check-ins and 1:1s.
+- **Scalability:** level-by-level paged RPCs, virtualised rows, no unbounded reads.
+- **Rollback:** flag off; the added columns and new tables can be dropped without touching
+  existing data.
 
 ## Security
 
-- All new tables: RLS enabled, explicit GRANTs, writes through `SECURITY DEFINER` RPCs only.
-- 1:1 content readable by exactly the two participants plus admin / HR-PMS; private notes by the author alone. Goal visibility honours the existing `kpi_goal_visibility` enum.
-- Every mutation writes to the canonical audit log.
+- New tables: RLS on, explicit GRANTs, writes via `SECURITY DEFINER` RPCs only.
+- Tree reads gated by `bu_console_can_read`; employees see their own and their chain's rows.
+- 1:1 content readable only by the two participants plus admin / HR-PMS; private notes by the
+  author alone. Every mutation writes to the canonical audit log.
 
-## Technical notes
+## Tests and docs
 
-- Migrations: additive columns on `bu_goals`; new tables `goal_check_ins`, `one_on_ones`, `one_on_one_items`; new RPCs `bu_goal_alignment_tree`, `bu_goal_alignment_gaps`, `goal_check_in_upsert`, `one_on_one_upsert`, `one_on_one_item_upsert` — all paged and authorization-gated like `bu_console_can_read`.
-- Frontend: new tabs under `src/components/admin/bu-console/`, hooks added to `useBuConsole.ts`, employee page under `src/pages/`.
-- Flag: reuse `admin_feature_flags` with a new key so Alignment and Conversations can be switched on independently of the console itself.
-- Tests: unit tests for alignment roll-up maths, health derivation, check-in idempotency and action-item carry-forward, with mock data covering happy path and failure states.
-- Docs: ADR-276, DOCUMENTATION.md and POLICY.md updated in the same step (§GOAL-ALIGNMENT-NON-GRADING, §CONVERSATION-PRIVACY).
+- Unit tests: roll-up maths across 4 levels, alignment cycle guard, status derivation,
+  check-in idempotency, action-item carry-forward — happy path and failure states.
+- ADR-276 supersedes the goal-shape sections of ADR-263 and ADR-267; POLICY gains
+  §KRA-TREE-NON-GRADING and §CONVERSATION-PRIVACY; DOCUMENTATION.md version history updated
+  in the same step.
 
-## Suggested build order
+## Two things worth confirming before build
 
-Phase 1 first (foundation, reuses the most existing code), then Phase 2, then Phase 3. Phase 4 only after you have seen the first three in use.
+1. **Who may create an Org/BU-level KRA?** Proposal: admin and BU head create at their level
+   and below; managers create employee-level rows for their team; employees can only check in.
+2. **Cycle basis** — proposal: reuse the existing fiscal July–June cycle and review periods
+   rather than introducing free-date OKR cycles, so the tree lines up with everything else.
+
+If you are fine with both proposals, no further input is needed to start Phase 1.
