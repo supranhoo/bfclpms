@@ -791,57 +791,9 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                   )}
                 </div>
 
-                {/* Rating Thresholds (left column, numeric only) */}
+                {/* ADR-272 / ADR-271 — shared, type-aware scoring editor */}
                 {uomType === 'numeric' && (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Rating Thresholds</span>
-                      <div className="flex-1 h-px bg-border" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-sm font-medium">Threshold Mode</Label>
-                      <Select value={thresholdMode} onValueChange={(v: 'absolute' | 'ratio') => setThresholdMode(v)}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="absolute">Absolute (Recommended)</SelectItem>
-                          <SelectItem value="ratio">Ratio / Percentage</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-muted-foreground">
-                        {thresholdMode === 'absolute'
-                          ? 'Thresholds are actual values (e.g., R5 = 100 means achieved ≥ 100)'
-                          : 'Thresholds are % of target (e.g., R5 = 100% means achieved ≥ target)'}
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-blue-600">R5 (Exceptional)</Label>
-                        <Input value={r5} onChange={(e) => setR5(e.target.value)} placeholder="e.g., ≥110%" className="text-sm" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-green-600">R4 (Exceeds)</Label>
-                        <Input value={r4} onChange={(e) => setR4(e.target.value)} placeholder="e.g., ≥100%" className="text-sm" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-yellow-600">R3 (Meets)</Label>
-                        <Input value={r3} onChange={(e) => setR3(e.target.value)} placeholder="e.g., ≥90%" className="text-sm" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-orange-600">R2 (Below)</Label>
-                        <Input value={r2} onChange={(e) => setR2(e.target.value)} placeholder="e.g., ≥75%" className="text-sm" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-red-600">R1 (Needs Improvement)</Label>
-                        <Input value={r1} onChange={(e) => setR1(e.target.value)} placeholder="e.g., &lt;75%" className="text-sm" />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-muted-foreground">R0 (N/A)</Label>
-                        <Input value={r0} onChange={(e) => setR0(e.target.value)} placeholder="Optional" className="text-sm" />
-                      </div>
-                    </div>
-                  </div>
+                  <KpiScoringEditor value={scoringState} onChange={setScoring} />
                 )}
 
                 {/* Period & Advanced (left column bottom) */}
