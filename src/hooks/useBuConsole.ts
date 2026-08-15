@@ -204,6 +204,11 @@ export interface KpiDetailArgs extends BuConsoleScope {
   kraName: string;
   kpiName: string;
   page: number;
+  /** ADR-270 — group by structured title when present. */
+  titleKey?: string | null;
+  kpiTitle?: string | null;
+  /** Narrow every read/write to one variant of the title group. */
+  variantKey?: string | null;
 }
 
 export function useBuConsoleKpiDetail(args: KpiDetailArgs | null) {
@@ -225,6 +230,8 @@ export function useBuConsoleKpiDetail(args: KpiDetailArgs | null) {
         p_manager_ids: args!.managerIds?.length ? args!.managerIds : null,
         p_page: args!.page,
         p_page_size: 200,
+        p_title_key: args!.titleKey ?? null,
+        p_variant_key: args!.variantKey ?? null,
       });
       if (error) throw error;
       return (data ?? { authorized: false, total: 0, page: 1, page_size: 200, definition: {}, rows: [] }) as unknown as BuConsoleKpiDetail;
@@ -374,6 +381,8 @@ export interface GroupWriteArgs {
   remarks: string | null;
   policy: GroupWritePolicy;
   dryRun: boolean;
+  titleKey?: string | null;
+  variantKey?: string | null;
 }
 
 async function callGroupWrite(a: GroupWriteArgs): Promise<GroupWriteResult> {
@@ -392,6 +401,8 @@ async function callGroupWrite(a: GroupWriteArgs): Promise<GroupWriteResult> {
     p_remarks: a.remarks,
     p_overwrite_policy: a.policy,
     p_dry_run: a.dryRun,
+    p_title_key: a.titleKey ?? null,
+    p_variant_key: a.variantKey ?? null,
   });
   if (error) throw error;
   return (data ?? { authorized: false, dry_run: a.dryRun, batch_id: null }) as unknown as GroupWriteResult;
@@ -474,6 +485,7 @@ export interface GroupAdvanceResult {
   will_skip?: number;
   advanced?: number;
   skipped?: number;
+  variant_count?: number;
   detail_limit?: number;
   detail_truncated?: boolean;
   skip_summary?: SkipSummaryEntry[];
@@ -494,6 +506,8 @@ export interface GroupAdvanceArgs {
   targetStage: string;
   remarks: string | null;
   dryRun: boolean;
+  titleKey?: string | null;
+  variantKey?: string | null;
 }
 
 async function callGroupAdvance(a: GroupAdvanceArgs): Promise<GroupAdvanceResult> {
@@ -510,6 +524,8 @@ async function callGroupAdvance(a: GroupAdvanceArgs): Promise<GroupAdvanceResult
     p_manager_ids: a.managerIds?.length ? a.managerIds : null,
     p_remarks: a.remarks,
     p_dry_run: a.dryRun,
+    p_title_key: a.titleKey ?? null,
+    p_variant_key: a.variantKey ?? null,
   });
   if (error) throw error;
   return (data ?? { authorized: false, dry_run: a.dryRun, batch_id: null }) as unknown as GroupAdvanceResult;
