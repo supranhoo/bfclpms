@@ -1111,6 +1111,72 @@ export function useRowOverride() {
 }
 
 export interface ConsoleEditRun {
+/**
+ * ADR-275 — tune several employees in one undoable run.
+ * Used by the inline bulk editor in the mapped-employee table.
+ */
+export interface BulkRowOverrideRow {
+  kpi_id: string;
+  changes: Record<string, string | null>;
+}
+
+export interface BulkRowOverrideResult {
+  authorized: boolean;
+  run_id?: string | null;
+  updated?: number;
+  skipped?: { kpi_id: string; reason: string }[];
+}
+
+export function useBulkRowOverrides() {
+  const qc = useQueryClient();
+  return useMutation<BulkRowOverrideResult, Error, { rows: BulkRowOverrideRow[]; allowLocked?: boolean }>({
+    mutationFn: async (a) => {
+      const { data, error } = await supabase.rpc('bu_console_bulk_row_overrides' as any, {
+        p_rows: a.rows,
+        p_allow_locked: a.allowLocked ?? false,
+      });
+      if (error) throw error;
+      return (data ?? { authorized: false }) as unknown as BulkRowOverrideResult;
+    },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['bu-console-kpi-detail'] });
+      qc.invalidateQueries({ queryKey: ['bu-console-edit-runs'] });
+      const n = res.updated ?? 0;
+      const skipped = res.skipped?.length ?? 0;
+      if (n === 0) {
+        toast.warning(skipped ? `Nothing written — ${skipped} row(s) skipped.` : 'Nothing changed.');
+        return;
+      }
+      toast.success(
+        `${n} employee row${n === 1 ? '' : 's'} tuned` + (skipped ? ` · ${skipped} skipped` : ''),
+        { description: res.run_id ? `Run ${res.run_id.slice(0, 8)} — can be undone` : undefined },
+      );
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not save these individual edits.'),
+  });
+}
+
+/** Drops the override marker so the row follows group edits again. */
+export function useClearRowOverrides() {
+  const qc = useQueryClient();
+  return useMutation<{ authorized: boolean; cleared?: number }, Error, { kpiId: string; fields?: string[] }>({
+    mutationFn: async (a) => {
+      const { data, error } = await supabase.rpc('bu_console_clear_row_overrides' as any, {
+        p_kpi_id: a.kpiId,
+        p_fields: a.fields ?? null,
+      });
+      if (error) throw error;
+      return (data ?? { authorized: false }) as any;
+    },
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['bu-console-kpi-detail'] });
+      toast.success(`${res.cleared ?? 0} field(s) will follow the group definition again.`);
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not clear the overrides.'),
+  });
+}
+
+export interface ConsoleEditRun {
   id: string;
   scope_kind: 'group' | 'row' | 'row_bulk';
   kra_name: string | null;
