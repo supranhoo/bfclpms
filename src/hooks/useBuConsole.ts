@@ -70,7 +70,7 @@ export interface BuConsoleTree {
   categories: BuConsoleCategoryNode[];
 }
 
-export interface BuConsoleEmployeeRow {
+export interface BuConsoleEmployeeRow extends BuConsoleEmployeeRowExtras {
   kpi_id: string;
   employee_id: string;
   employee_name: string | null;
