@@ -27,6 +27,17 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { cn } from '@/lib/utils';
 import { KraLibrarySearchPanel } from './KraLibrarySearchPanel';
 import { RegistryBadge } from './kpi-standardization/RegistryBadge';
+import { KpiTextSplitFields } from './kpi-form/KpiTextSplitFields';
+import { KpiScoringEditor } from './kpi-form/KpiScoringEditor';
+import {
+  KpiScoringState,
+  KpiTextState,
+  buildScoringPayload,
+  buildTextPayload,
+  textStateFromRow,
+  validateScoringState,
+} from './kpi-form/kpiFormModel';
+import { toast } from 'sonner';
 
 interface AdminKpiCreateDialogProps {
   isOpen: boolean;
@@ -106,6 +117,11 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
   const [isOrgLevel, setIsOrgLevel] = useState(false);
   const [orgLevelScope, setOrgLevelScope] = useState('organization');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+
+  // ADR-272 — structured KPI text, shared with the Admin KPI Editor
+  const [textState, setTextState] = useState<KpiTextState>({
+    kpi_name: '', kpi_title: '', kpi_description: '', kpi_formula: '', kpi_scoring_logic: '',
+  });
 
   // Period - prefer explicit defaults from props, then system settings
   const [reviewPeriod, setReviewPeriod] = useState(defaultReviewPeriod || settings.current_review_period);
