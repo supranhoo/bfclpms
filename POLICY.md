@@ -6259,6 +6259,14 @@ plain-language reason.
 - Only "clean split" rows (title + formula + scoring detected) may be applied in
   bulk. Rows without a detectable title — including text that opens with
   "Description:" — are flagged for human review and must be named manually.
+- **Duplicate-aware correction (ADR-269b1).** The admin queue is grouped by the
+  exact KPI text, not by employee row: one manual correction is written to every
+  FY 2026-27+ row that shares that text, in a single audited run
+  (`kpi_split_set_parts_by_name`). Admins must never be asked to fix the same
+  text row by row.
+- "Needs review" rows that do carry a detectable title are applyable in bulk as a
+  separate, explicitly labelled action; only rows with no detectable title
+  require manual naming.
 - Review, scoring, weightage and workflow mechanics are unchanged by the split.
 - **No apply ceiling and no repeat work.** Bulk apply is idempotent: the RPC skips
   rows that already carry structured text, and the admin screen loops batches
