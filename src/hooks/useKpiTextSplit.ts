@@ -21,10 +21,13 @@ export interface KpiSplitSummary {
   needs_manual?: number;
   needs_manual_groups?: number;
   pending_groups?: number;
+  /** ADR-273 — already-split rows whose stored title still looks wrong. */
+  suspect_titles?: number;
+  suspect_title_groups?: number;
   legacy_untouched: number;
 }
 
-export type KpiSplitState = 'pending' | 'structured' | 'all';
+export type KpiSplitState = 'pending' | 'structured' | 'suspect' | 'all';
 
 /** Rows applied per RPC call. The server caps at 20,000; the UI loops until done. */
 const APPLY_BATCH_SIZE = 5000;
