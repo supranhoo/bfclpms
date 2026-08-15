@@ -89,6 +89,29 @@ export interface MergeProposal {
   created_at: string;
 }
 
+/**
+ * ADR-264 — every console surface that can exceed its display cap must expose
+ * the true total and label the cut. Shared shape for the paged RPCs.
+ */
+export interface MergeProposalPage {
+  authorized: boolean;
+  rows: MergeProposal[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+/** Detail lists in group previews are capped; counts never are. */
+export interface SkipSummaryEntry {
+  reason: string;
+  count: number;
+}
+
+export const GROUP_PREVIEW_DETAIL_LIMIT = 500;
+
+/** Above this many affected employees a group action needs a typed confirmation. */
+export const GROUP_ACTION_CONFIRM_THRESHOLD = 2000;
+
 /** Beta gate — the console stays hidden until an admin flips the flag. */
 export function useBuConsoleFlag() {
   return useQuery({
@@ -168,20 +191,23 @@ export function useBuConsoleKpiDetail(args: KpiDetailArgs | null) {
   });
 }
 
-export function useMergeProposals(status: 'pending' | 'approved' | 'rejected' = 'pending') {
+/**
+ * ADR-264 — server-paged (200/page) with a true total. Replaces the former
+ * direct table read that silently stopped at 500 rows.
+ */
+export function useMergeProposals(status: 'pending' | 'approved' | 'rejected' = 'pending', page = 1) {
   return useQuery({
-    queryKey: ['kpi-merge-proposals', status],
+    queryKey: ['kpi-merge-proposals', status, page],
     staleTime: 60_000,
     gcTime: 5 * 60_000,
-    queryFn: async (): Promise<MergeProposal[]> => {
-      const { data, error } = await supabase
-        .from('kpi_merge_proposals' as any)
-        .select('*')
-        .eq('status', status)
-        .order('affected_employee_count', { ascending: false })
-        .limit(500);
+    queryFn: async (): Promise<MergeProposalPage> => {
+      const { data, error } = await supabase.rpc('bu_console_merge_proposal_list' as any, {
+        p_status: status,
+        p_page: page,
+        p_page_size: 200,
+      });
       if (error) throw error;
-      return (data ?? []) as unknown as MergeProposal[];
+      return (data ?? { authorized: false, rows: [], total: 0, page: 1, page_size: 200 }) as unknown as MergeProposalPage;
     },
   });
 }
@@ -271,6 +297,9 @@ export interface GroupWriteResult {
   will_skip?: number;
   propagated?: number;
   skipped?: number;
+  detail_limit?: number;
+  detail_truncated?: boolean;
+  skip_summary?: SkipSummaryEntry[];
   preview?: GroupWritePreviewRow[];
   skipped_details?: GroupWriteSkipRow[];
 }
@@ -397,6 +426,9 @@ export interface GroupAdvanceResult {
   will_skip?: number;
   advanced?: number;
   skipped?: number;
+  detail_limit?: number;
+  detail_truncated?: boolean;
+  skip_summary?: SkipSummaryEntry[];
   preview?: GroupAdvancePreviewRow[];
   skipped_details?: GroupWriteSkipRow[];
 }
@@ -666,23 +698,30 @@ export interface KpiDefinitionOption {
   uom: string | null;
 }
 
-/** Definition picker source for the goal form. Read is RLS-gated. */
+export interface KpiDefinitionSearchResult {
+  authorized: boolean;
+  rows: KpiDefinitionOption[];
+  /** True number of active definitions matching the search, even when `rows` is capped. */
+  total: number;
+  limit: number;
+}
+
+/**
+ * Definition picker source for the goal form.
+ * ADR-264 — returns the true match count so the UI can say when the list was cut.
+ */
 export function useKpiDefinitionOptions(search: string, enabled: boolean) {
-  return useQuery<KpiDefinitionOption[]>({
+  return useQuery<KpiDefinitionSearchResult>({
     queryKey: ['bu-console-definitions', search],
     enabled,
     staleTime: 60_000,
     queryFn: async () => {
-      let q = supabase
-        .from('kpi_definitions_master')
-        .select('id, kra_name, kpi_name, uom')
-        .eq('is_active', true)
-        .order('kpi_name')
-        .limit(100);
-      if (search.trim()) q = q.ilike('kpi_name', `%${search.trim()}%`);
-      const { data, error } = await q;
+      const { data, error } = await supabase.rpc('bu_console_definition_search' as any, {
+        p_search: search.trim() || null,
+        p_limit: 100,
+      });
       if (error) throw error;
-      return (data ?? []) as KpiDefinitionOption[];
+      return (data ?? { authorized: false, rows: [], total: 0, limit: 100 }) as unknown as KpiDefinitionSearchResult;
     },
   });
 }

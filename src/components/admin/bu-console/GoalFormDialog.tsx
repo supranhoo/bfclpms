@@ -77,9 +77,14 @@ export function GoalFormDialog({ open, onOpenChange, goal, year, period, buOptio
     setNotes('');
   }, [open, goal, period]);
 
+  const definitionRows = definitions?.rows ?? [];
+  const definitionTotal = definitions?.total ?? 0;
+  /** ADR-264 — the picker is capped server-side; say so instead of hiding matches. */
+  const definitionsTruncated = definitionTotal > definitionRows.length;
+
   const definitionOptions = useMemo(
-    () => (definitions ?? []).map(d => ({ value: d.id, label: `${d.kpi_name} — ${d.kra_name}` })),
-    [definitions],
+    () => definitionRows.map(d => ({ value: d.id, label: `${d.kpi_name} — ${d.kra_name}` })),
+    [definitionRows],
   );
 
   const canSave = !!definitionId && !upsert.isPending;
@@ -134,6 +139,11 @@ export function GoalFormDialog({ open, onOpenChange, goal, year, period, buOptio
               options={definitionOptions}
               placeholder="Pick a definition"
             />
+            {definitionsTruncated && (
+              <p className="text-xs text-muted-foreground">
+                Showing the first {definitionRows.length} of {definitionTotal} matching definitions — keep typing to narrow the list.
+              </p>
+            )}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

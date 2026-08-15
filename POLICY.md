@@ -6180,3 +6180,13 @@ plain-language reason.
   read roles (admin, auditor, management, HR PMS) may view and preview.
 - Progress that cannot be computed is shown as "not measurable yet". A missing
   target or current value must never render as 0%.
+
+## §BU-CONSOLE-NO-SILENT-TRUNCATION (ADR-264)
+- Any count shown to a user for a group action is the true server count. A
+  rendered list may be capped, but the cap must be stated on screen ("showing
+  the first N of M") and never used as the count.
+- Skip reasons are reported for every skipped employee, not only for those in
+  the visible detail list.
+- A group action affecting more than 2,000 employees requires a typed
+  confirmation before it commits.
+- Long console lists are virtualized, never sliced.

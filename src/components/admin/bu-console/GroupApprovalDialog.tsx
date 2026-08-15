@@ -13,11 +13,13 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import {
   useGroupAdvancePreview,
   useGroupAdvanceCommit,
@@ -26,6 +28,15 @@ import {
   type GroupAdvanceResult,
   type KpiDetailArgs,
 } from '@/hooks/useBuConsole';
+import {
+  resolveSkipSummary,
+  previewTruncation,
+  skippedTruncation,
+  needsTypedConfirmation,
+  confirmationSatisfied,
+  affectedCount,
+  GROUP_ACTION_CONFIRM_WORD,
+} from '@/lib/review/groupPreviewSummary';
 
 interface Props {
   args: KpiDetailArgs | null;
@@ -40,6 +51,7 @@ export function GroupApprovalDialog({ args, open, onOpenChange }: Props) {
   const [stage, setStage] = useState<string>('manager_check');
   const [remarks, setRemarks] = useState('');
   const [preview, setPreview] = useState<GroupAdvanceResult | null>(null);
+  const [confirmText, setConfirmText] = useState('');
 
   const previewMut = useGroupAdvancePreview();
   const commitMut = useGroupAdvanceCommit();
@@ -60,7 +72,7 @@ export function GroupApprovalDialog({ args, open, onOpenChange }: Props) {
   }, [args, stage, remarks]);
 
   const reset = () => {
-    setStage('manager_check'); setRemarks(''); setPreview(null);
+    setStage('manager_check'); setRemarks(''); setPreview(null); setConfirmText('');
     previewMut.reset(); commitMut.reset();
   };
 
@@ -71,6 +83,7 @@ export function GroupApprovalDialog({ args, open, onOpenChange }: Props) {
 
   const runPreview = async () => {
     if (!basePayload) return;
+    setConfirmText('');
     setPreview(await previewMut.mutateAsync(basePayload));
   };
 
@@ -80,14 +93,14 @@ export function GroupApprovalDialog({ args, open, onOpenChange }: Props) {
     handleClose(false);
   };
 
-  const skipGroups = useMemo(() => {
-    const rows = preview?.skipped_details ?? [];
-    const map = new Map<string, number>();
-    rows.forEach(r => map.set(r.reason, (map.get(r.reason) ?? 0) + 1));
-    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
-  }, [preview]);
+  const skipGroups = useMemo(() => resolveSkipSummary(preview), [preview]);
+  const previewNote = useMemo(() => previewTruncation(preview), [preview]);
+  const skippedNote = useMemo(() => skippedTruncation(preview), [preview]);
+  const affected = affectedCount(preview);
+  const bigScope = needsTypedConfirmation(preview);
+  const confirmed = confirmationSatisfied(preview, confirmText);
 
-  const canCommit = (preview?.will_advance ?? 0) > 0 && !commitMut.isPending;
+  const canCommit = affected > 0 && !commitMut.isPending && confirmed;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -137,12 +150,16 @@ export function GroupApprovalDialog({ args, open, onOpenChange }: Props) {
 
             {skipGroups.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {skipGroups.map(([reason, count]) => (
+                {skipGroups.map(({ reason, count }) => (
                   <Badge key={reason} variant="outline" className="font-normal">
                     {GROUP_ADVANCE_SKIP_LABELS[reason] ?? reason}: {count}
                   </Badge>
                 ))}
               </div>
+            )}
+
+            {previewNote.message && (
+              <p className="text-xs text-muted-foreground">{previewNote.message}</p>
             )}
 
             <div className="max-h-72 overflow-y-auto rounded-md border">
@@ -189,8 +206,11 @@ export function GroupApprovalDialog({ args, open, onOpenChange }: Props) {
             {(preview.skipped_details ?? []).length > 0 && (
               <details className="rounded-md border p-3 text-sm">
                 <summary className="cursor-pointer font-medium">
-                  Skipped employees ({preview.skipped_details!.length})
+                  Skipped employees ({preview.will_skip ?? preview.skipped_details!.length})
                 </summary>
+                {skippedNote.message && (
+                  <p className="mt-2 text-xs text-muted-foreground">{skippedNote.message}</p>
+                )}
                 <ul className="mt-2 space-y-1 text-muted-foreground">
                   {preview.skipped_details!.map((s, i) => (
                     <li key={`${s.kpi_id}-${i}`}>
@@ -199,6 +219,24 @@ export function GroupApprovalDialog({ args, open, onOpenChange }: Props) {
                   ))}
                 </ul>
               </details>
+            )}
+
+            {bigScope && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="space-y-2">
+                  <p>
+                    This will advance <strong>{affected}</strong> employees in one go. Type{' '}
+                    <strong>{GROUP_ACTION_CONFIRM_WORD}</strong> to confirm.
+                  </p>
+                  <Input
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    placeholder={GROUP_ACTION_CONFIRM_WORD}
+                    className="max-w-[200px]"
+                  />
+                </AlertDescription>
+              </Alert>
             )}
           </div>
         )}
@@ -209,9 +247,19 @@ export function GroupApprovalDialog({ args, open, onOpenChange }: Props) {
             {previewMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Preview
           </Button>
-          <Button onClick={runCommit} disabled={!canCommit} title={!preview ? 'Run the preview first' : undefined}>
+          <Button
+            onClick={runCommit}
+            disabled={!canCommit}
+            title={
+              !preview
+                ? 'Run the preview first'
+                : bigScope && !confirmed
+                  ? `Type ${GROUP_ACTION_CONFIRM_WORD} to confirm this large approval`
+                  : undefined
+            }
+          >
             {commitMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Approve {preview?.will_advance ?? 0} employees
+            Approve {affected} employees
           </Button>
         </DialogFooter>
       </DialogContent>

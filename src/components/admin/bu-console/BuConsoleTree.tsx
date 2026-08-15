@@ -1,13 +1,63 @@
 /**
  * ADR-259 — Category folders → KRA list → KPI list drilldown.
  * Pure presentation: it receives an already-loaded tree and reports selection.
+ *
+ * ADR-264 — the KRA and KPI lists are virtualized, so a category holding
+ * thousands of rows renders (and scrolls) without dropping any of them.
  */
+import { useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ChevronRight, Folder, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { BuConsoleCategoryNode, BuConsoleKraNode } from '@/hooks/useBuConsole';
+
+/** Lists shorter than this render normally — virtualization only pays off past it. */
+const VIRTUALIZE_ABOVE = 40;
+
+function VirtualRows<T>({
+  items,
+  estimateSize,
+  renderRow,
+  maxHeightClass,
+}: {
+  items: T[];
+  estimateSize: number;
+  renderRow: (item: T, index: number) => React.ReactNode;
+  maxHeightClass: string;
+}) {
+  const parentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => estimateSize,
+    overscan: 12,
+  });
+
+  if (items.length <= VIRTUALIZE_ABOVE) {
+    return <div className="divide-y">{items.map((item, i) => renderRow(item, i))}</div>;
+  }
+
+  return (
+    <div ref={parentRef} className={cn('overflow-y-auto', maxHeightClass)}>
+      <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+        {virtualizer.getVirtualItems().map(v => (
+          <div
+            key={v.key}
+            ref={virtualizer.measureElement}
+            data-index={v.index}
+            className="absolute left-0 top-0 w-full border-b"
+            style={{ transform: `translateY(${v.start}px)` }}
+          >
+            {renderRow(items[v.index], v.index)}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 interface Props {
   categories: BuConsoleCategoryNode[];
@@ -61,9 +111,13 @@ export function BuConsoleTree({
       {/* KRA list */}
       {category && (
         <Card>
-          <CardContent className="p-0 divide-y">
-            {category.kras.map(k => (
-              <button
+          <CardContent className="p-0">
+            <VirtualRows
+              items={category.kras}
+              estimateSize={52}
+              maxHeightClass="max-h-[420px]"
+              renderRow={(k) => (
+                <button
                 key={k.kra_key}
                 type="button"
                 onClick={() => onSelectKra(k.kra_key)}
@@ -77,8 +131,9 @@ export function BuConsoleTree({
                   <Badge variant="outline">{k.kpi_count} KPIs</Badge>
                   <ChevronRight className="h-4 w-4" />
                 </span>
-              </button>
-            ))}
+                </button>
+              )}
+            />
           </CardContent>
         </Card>
       )}
@@ -86,9 +141,13 @@ export function BuConsoleTree({
       {/* KPI list */}
       {category && kra && (
         <Card>
-          <CardContent className="p-0 divide-y">
-            {kra.kpis.map(kpi => (
-              <div
+          <CardContent className="p-0">
+            <VirtualRows
+              items={kra.kpis}
+              estimateSize={64}
+              maxHeightClass="max-h-[520px]"
+              renderRow={(kpi) => (
+                <div
                 key={kpi.kpi_key}
                 className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
               >
@@ -107,8 +166,9 @@ export function BuConsoleTree({
                 >
                   Open
                 </Button>
-              </div>
-            ))}
+                </div>
+              )}
+            />
           </CardContent>
         </Card>
       )}
