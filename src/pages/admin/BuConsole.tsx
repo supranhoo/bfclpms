@@ -283,6 +283,7 @@ export default function BuConsole() {
                 })
               }
             />
+            </div>
           )}
         </TabsContent>
 
