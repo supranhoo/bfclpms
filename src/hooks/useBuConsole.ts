@@ -97,6 +97,26 @@ export interface BuConsoleEmployeeRow {
   final_rating: string | null;
 }
 
+/** ADR-275 — operational fields the console can now also read and tune. */
+export interface BuConsoleEmployeeRowExtras {
+  frequency_cycle_start: string | null;
+  sub_frequency: string | null;
+  day_count_type: string | null;
+  is_frequency_locked: boolean | null;
+  require_resubmit_reason: boolean | null;
+  is_org_level: boolean | null;
+  org_level_scope: string | null;
+  ref_code: string | null;
+  criteria: string | null;
+  source_of_data: string | null;
+  uom_type: string | null;
+  threshold_mode: string | null;
+  r0: string | null; r1: string | null; r2: string | null;
+  r3: string | null; r4: string | null; r5: string | null;
+  /** Field names already tuned for this employee (protected from group edits). */
+  override_fields: string[];
+}
+
 export interface BuConsoleKpiDetail {
   authorized: boolean;
   total: number;
