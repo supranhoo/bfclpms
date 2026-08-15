@@ -9,6 +9,34 @@
 
 export type ChangeSet = Record<string, string | null>;
 
+/** Frequencies whose cycle spans more than one month (POLICY §54 v3). */
+export const MULTI_MONTH_FREQS = ['Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'] as const;
+
+export const isMultiMonthFrequency = (freq?: string | null): boolean =>
+  !!freq && (MULTI_MONTH_FREQS as readonly string[]).includes(freq.trim());
+
+/**
+ * ADR-275 — a frequency change is only valid together with its cycle anchor:
+ * without it the engine cannot tell Jan-Feb from Feb-Mar, and the percolation
+ * trigger would back-fill the wrong months. Mirrors
+ * `public.bu_console_validate_changes`.
+ */
+export function validateCycleChange(changes: ChangeSet): string | null {
+  const freq = changes.frequency;
+  if (freq == null) return null;
+  const anchorGiven = Object.prototype.hasOwnProperty.call(changes, 'frequency_cycle_start');
+  const anchor = changes.frequency_cycle_start ?? null;
+
+  if (isMultiMonthFrequency(freq)) {
+    if (!anchorGiven || !anchor) {
+      return `A ${freq} KPI needs a cycle anchor (e.g. Jan-Feb) — pick the cycle before previewing.`;
+    }
+    return null;
+  }
+  if (anchor) return `A ${freq} KPI cannot carry a multi-month cycle anchor.`;
+  return null;
+}
+
 const norm = (v: unknown): string | null => {
   if (v === null || v === undefined) return null;
   if (typeof v === 'object') return JSON.stringify(v);
