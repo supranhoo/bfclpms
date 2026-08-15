@@ -698,23 +698,30 @@ export interface KpiDefinitionOption {
   uom: string | null;
 }
 
-/** Definition picker source for the goal form. Read is RLS-gated. */
+export interface KpiDefinitionSearchResult {
+  authorized: boolean;
+  rows: KpiDefinitionOption[];
+  /** True number of active definitions matching the search, even when `rows` is capped. */
+  total: number;
+  limit: number;
+}
+
+/**
+ * Definition picker source for the goal form.
+ * ADR-264 — returns the true match count so the UI can say when the list was cut.
+ */
 export function useKpiDefinitionOptions(search: string, enabled: boolean) {
-  return useQuery<KpiDefinitionOption[]>({
+  return useQuery<KpiDefinitionSearchResult>({
     queryKey: ['bu-console-definitions', search],
     enabled,
     staleTime: 60_000,
     queryFn: async () => {
-      let q = supabase
-        .from('kpi_definitions_master')
-        .select('id, kra_name, kpi_name, uom')
-        .eq('is_active', true)
-        .order('kpi_name')
-        .limit(100);
-      if (search.trim()) q = q.ilike('kpi_name', `%${search.trim()}%`);
-      const { data, error } = await q;
+      const { data, error } = await supabase.rpc('bu_console_definition_search' as any, {
+        p_search: search.trim() || null,
+        p_limit: 100,
+      });
       if (error) throw error;
-      return (data ?? []) as KpiDefinitionOption[];
+      return (data ?? { authorized: false, rows: [], total: 0, limit: 100 }) as unknown as KpiDefinitionSearchResult;
     },
   });
 }
