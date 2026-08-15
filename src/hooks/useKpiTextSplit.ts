@@ -216,3 +216,31 @@ export function useSaveKpiParts() {
     onSuccess: invalidate,
   });
 }
+
+/**
+ * Saves a correction once for every FY 2026-27+ KPI row that shares the exact
+ * same source text (ADR-269b1) — duplicates are never fixed one by one.
+ */
+export function useSaveKpiPartsByName() {
+  const invalidate = useInvalidateSplit();
+  return useMutation({
+    mutationFn: async (vars: {
+      kpiName: string;
+      title: string | null;
+      description: string | null;
+      formula: string | null;
+      scoring_logic: string | null;
+    }) => {
+      const { data, error } = await supabase.rpc('kpi_split_set_parts_by_name', {
+        p_kpi_name: vars.kpiName,
+        p_title: vars.title,
+        p_description: vars.description,
+        p_formula: vars.formula,
+        p_scoring_logic: vars.scoring_logic,
+      });
+      if (error) throw error;
+      return data as unknown as { run_id: string; updated: number };
+    },
+    onSuccess: invalidate,
+  });
+}
