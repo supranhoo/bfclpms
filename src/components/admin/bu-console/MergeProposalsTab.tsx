@@ -21,9 +21,15 @@ type StatusTab = 'pending' | 'approved' | 'rejected';
 
 export function MergeProposalsTab() {
   const [status, setStatus] = useState<StatusTab>('pending');
-  const { data, isLoading } = useMergeProposals(status);
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = useMergeProposals(status, page);
   const generate = useGenerateMergeProposals();
   const decide = useDecideMergeProposal();
+
+  const rows = data?.rows ?? [];
+  const total = data?.total ?? 0;
+  const pageSize = data?.page_size ?? 200;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <Card>
@@ -43,7 +49,7 @@ export function MergeProposalsTab() {
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Tabs value={status} onValueChange={(v) => setStatus(v as StatusTab)}>
+        <Tabs value={status} onValueChange={(v) => { setStatus(v as StatusTab); setPage(1); }}>
           <TabsList>
             <TabsTrigger value="pending">Pending</TabsTrigger>
             <TabsTrigger value="approved">Approved</TabsTrigger>
@@ -71,7 +77,7 @@ export function MergeProposalsTab() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(data ?? []).map(p => (
+                {rows.map(p => (
                   <TableRow key={p.id}>
                     <TableCell>
                       <p className="font-medium">{p.canonical_kpi_name}</p>
@@ -113,7 +119,7 @@ export function MergeProposalsTab() {
                     )}
                   </TableRow>
                 ))}
-                {(data ?? []).length === 0 && (
+                {rows.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={status === 'pending' ? 6 : 5} className="text-center text-sm text-muted-foreground">
                       Nothing in this list. Run a scan to look for duplicates.
@@ -122,6 +128,20 @@ export function MergeProposalsTab() {
                 )}
               </TableBody>
             </Table>
+          </div>
+        )}
+
+        {!isLoading && total > 0 && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">
+              Showing {rows.length} of {total} proposal{total === 1 ? '' : 's'} · page {data?.page ?? 1} of {totalPages}
+            </span>
+            {totalPages > 1 && (
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</Button>
+                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Next</Button>
+              </div>
+            )}
           </div>
         )}
       </CardContent>
