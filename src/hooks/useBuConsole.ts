@@ -1112,7 +1112,7 @@ export function useRowOverride() {
 
 export interface ConsoleEditRun {
   id: string;
-  scope_kind: 'group' | 'row';
+  scope_kind: 'group' | 'row' | 'row_bulk';
   kra_name: string | null;
   kpi_name: string | null;
   review_period: string | null;
