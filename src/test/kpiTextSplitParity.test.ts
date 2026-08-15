@@ -16,7 +16,7 @@ const CASES = [
       title: 'Adherence to JIADA land allotment, possession and lease deed execution as per approved timeline, measured by days delayed',
       description: null,
       formula: '(Actual completion date – Approved deadline date) in days',
-      scoringLogic: 'Rating 5: No delay, Rating 0: Any delay',
+      scoring_logic: 'Rating 5: No delay, Rating 0: Any delay',
       confidence: 'review',
     },
   },
@@ -28,7 +28,7 @@ const CASES = [
       title: null,
       description: 'Measures the effectiveness of the employee confirmation process.',
       formula: 'Number of missed assessments and confirmations.',
-      scoringLogic: '(Scoring: 5 for zero missouts, 0 for 1 or more missouts)',
+      scoring_logic: '(Scoring: 5 for zero missouts, 0 for 1 or more missouts)',
       confidence: 'review',
     },
   },
@@ -41,7 +41,7 @@ Scoring Logic: 5 = <=100%, 0 = >110%`,
       title: 'Cost control',
       description: 'Keep spend within the approved budget',
       formula: 'Actual cost / Budget',
-      scoringLogic: '5 = <=100%, 0 = >110%',
+      scoring_logic: '5 = <=100%, 0 = >110%',
       confidence: 'high',
     },
   },
@@ -51,13 +51,13 @@ Scoring Logic: 5 = <=100%, 0 = >110%`,
       title: 'Daily production report shared with HOD',
       description: null,
       formula: null,
-      scoringLogic: null,
+      scoring_logic: null,
       confidence: 'unparsed',
     },
   },
   {
     raw: '   ',
-    expected: { title: null, description: null, formula: null, scoringLogic: null, confidence: 'empty' },
+    expected: { title: null, description: null, formula: null, scoring_logic: null, confidence: 'empty' },
   },
 ];
 
@@ -67,7 +67,7 @@ describe('kpi text split — SQL/TS parity fixtures', () => {
     expect(parts.title).toBe(c.expected.title);
     expect(parts.description).toBe(c.expected.description);
     expect(parts.formula).toBe(c.expected.formula);
-    expect(parts.scoringLogic).toBe(c.expected.scoringLogic);
+    expect(parts.scoring_logic).toBe(c.expected.scoring_logic);
     expect(parts.confidence).toBe(c.expected.confidence);
   });
 });
