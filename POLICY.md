@@ -6200,3 +6200,15 @@ plain-language reason.
   population — never on a client-trimmed subset.
 - Manager scope means the employee's reporting manager. Narrowing a parent
   filter clears any child selections that fall outside it.
+
+### §BU-CONSOLE-DUPLICATE-SCAN-FAIL-LOUD (ADR-266)
+
+- Duplicate KPI scanning must fail loudly. A failed scan is shown as an error
+  state with the reason; it must never be presented as an empty queue or as
+  "no duplicates found".
+- Database functions that depend on extension helpers (e.g. `pg_trgm`) must
+  include the extension schema in their pinned `search_path` and
+  schema-qualify those calls, so a hardened `search_path` cannot silently
+  break a feature.
+- Fuzzy matching must be index-assisted (trigram operator + threshold), not a
+  full pairwise comparison, so scan cost stays bounded as KPI volume grows.

@@ -8451,3 +8451,29 @@ detail list flagged by `detail_truncated` / `detail_limit`, and paginated
   and clears orphaned child selections.
 * Rollback: filters default to NULL (no narrowing), so leaving them empty
   reproduces the previous behaviour exactly.
+
+## ADR-266 — Duplicate KPI scan: extension-schema search_path
+
+* What: `public.scan_kpi_duplicate_groups` now runs with
+  `search_path = public, extensions` and schema-qualifies its trigram calls
+  (`extensions.similarity`, `OPERATOR(extensions.%)`);
+  `bu_console_generate_merge_proposals` carries the same search_path.
+* Why: the BU Console "Scan for duplicates" action failed with
+  `function similarity(text, text) does not exist`. `pg_trgm` is installed in
+  the `extensions` schema, but both SECURITY DEFINER functions pinned
+  `search_path` to `public` only, so the fuzzy matcher could not resolve
+  `similarity()`. Every scan aborted, the proposal table stayed empty, and the
+  UI showed an empty queue next to a raw Postgres error.
+* How it is used: admins open BU Performance Console → KPI Library → Scan for
+  duplicates. The scan now completes and files pending merge proposals for
+  review. Approving a proposal still only records a decision; historical
+  scores are never edited.
+* Scalability: candidate pairs are pre-filtered with the trigram `%` operator
+  under a per-call `pg_trgm.similarity_threshold`, instead of computing
+  `similarity()` across every pair. Added GIN trigram index
+  `idx_kpis_kpi_name_trgm` on `lower(btrim(kpi_name))`.
+* UI: scan failures render an inline alert ("Duplicate scan could not run")
+  plus a toast with the underlying reason, and the empty-state copy changes so
+  a failed scan is never presented as "no duplicates found".
+* Rollback: re-apply the previous function definitions and drop
+  `idx_kpis_kpi_name_trgm`; no data is affected.
