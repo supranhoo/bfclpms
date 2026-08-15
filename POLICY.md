@@ -6228,3 +6228,16 @@ plain-language reason.
   value is unknown the UI states "not measurable yet" — never a fake 0%.
 - Create, edit and archive are admin-only; reads follow `bu_console_can_read`.
   Archiving is a soft archive behind a destructive-action confirmation.
+
+## §BU-CONSOLE-LAYOUT-CONTRACT (ADR-268)
+
+- The Console tab must keep scope controls to a single sticky toolbar row on
+  desktop and a single "Filters (n)" sheet trigger below `md`. Scope filters may
+  never reclaim a full screen of vertical space.
+- Drill levels (category → KRA → KPI) use one shared dense row primitive so
+  density and hierarchy stay consistent across levels.
+- Every console row and scope control keeps a ≥44px tap target; status is never
+  conveyed by colour alone.
+- Console surfaces display only measured values. A metric with no underlying
+  data renders "—" and is never substituted with a placeholder number.
+- Colours come from semantic design tokens only — no hardcoded palettes.

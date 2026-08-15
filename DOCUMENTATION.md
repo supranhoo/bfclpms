@@ -8492,3 +8492,24 @@ CPP → "45 MW AFBC" / "45 MW WHRB" / "8 MW".
   recompute, add sub-goal, archive) and `GoalFormDialog.tsx` (category → KRA →
   KPI linkage, source selector, weight, scope, start/target/unit).
 - Client contract tests: `src/components/admin/bu-console/goalObjects.test.ts`.
+
+### ADR-268 — BU Performance Console: compact, review-first layout
+
+Presentation-only redesign of the Console tab. No RPC, scoring or goal logic
+changed.
+
+- `src/components/admin/bu-console/ScopeToolbar.tsx` — sticky one-line scope
+  toolbar (period + Divisions/BUs/Departments/Managers + Load + Refresh).
+  Below `md` the four filters collapse into a "Filters (n)" Sheet. Cascading
+  filter rules (ADR-229) stay owned by `BuConsole.tsx`.
+- `src/components/admin/bu-console/ConsoleMetricRow.tsx` — dense row primitive:
+  index chip, title + muted sub-line, labelled metric columns, whole row is one
+  ≥44px tap target.
+- `BuConsoleTree.tsx` — categories render as a horizontally scrollable tab strip
+  with counts; KRA and KPI lists use `ConsoleMetricRow`. Virtualization above 40
+  rows is unchanged.
+- `BuConsole.tsx` — condensed header and a breadcrumb (period → category → KRA)
+  under the tabs.
+- Metric columns show only values present on the tree nodes (KPI count,
+  employee impact). No placeholder ratings or statuses are fabricated.
+- Regression guard: `src/test/buConsoleLayout.test.tsx`.
