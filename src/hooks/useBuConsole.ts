@@ -914,6 +914,9 @@ export const GROUP_EDIT_FIELDS = [
   'weightage', 'target_value', 'uom', 'uom_type', 'frequency', 'threshold_mode',
   'qualitative_options', 'r5', 'r4', 'r3', 'r2', 'r1', 'r0',
   'kra_name', 'category_id', 'criteria', 'source_of_data',
+  // ADR-275 — cycle anchor and operational flags.
+  'frequency_cycle_start', 'day_count_type', 'is_org_level', 'org_level_scope',
+  'require_resubmit_reason', 'is_frequency_locked',
 ] as const;
 
 export type GroupEditField = (typeof GROUP_EDIT_FIELDS)[number];
@@ -936,13 +939,33 @@ export const GROUP_EDIT_FIELD_LABELS: Record<string, string> = {
   category_id: 'Category',
   criteria: 'Direction',
   source_of_data: 'Source of data',
+  frequency_cycle_start: 'Cycle anchor',
+  day_count_type: 'Day counting',
+  is_org_level: 'Organisation-level KPI',
+  org_level_scope: 'Org-level scope',
+  require_resubmit_reason: 'Reason on resubmission',
+  is_frequency_locked: 'Lock frequency after submission',
 };
 
 export const GROUP_EDIT_SKIP_LABELS: Record<string, string> = {
   final_score_locked: 'Final score approved — immutable (POLICY §88)',
   past_kra_set: 'Already in review — enable "include rows already in review" to edit',
   individual_override: 'Individually overridden — tick "reset overrides" to include',
+  cycle_anchor_conflict: 'The new cycle overlaps an existing cycle for this KPI',
+  no_change: 'Nothing changed',
+  not_found: 'This KPI row no longer exists',
 };
+
+/** ADR-275 — one row per employee whose new cycle would clash with an existing one. */
+export interface CycleAnchorConflictRow {
+  kpi_id: string;
+  employee_id: string;
+  employee_name: string | null;
+  employee_code: string | null;
+  existing_anchor: string | null;
+  new_anchor: string | null;
+  frequency: string | null;
+}
 
 export interface GroupEditPreviewRow {
   kpi_id: string;
@@ -977,6 +1000,8 @@ export interface GroupEditResult {
   detail_truncated?: boolean;
   skip_summary?: SkipSummaryEntry[];
   weightage_impact?: GroupEditWeightageRow[];
+  cycle_change?: boolean;
+  anchor_conflicts?: CycleAnchorConflictRow[];
   preview?: GroupEditPreviewRow[];
   skipped_details?: GroupWriteSkipRow[];
 }
