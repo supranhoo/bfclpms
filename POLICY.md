@@ -6212,3 +6212,19 @@ plain-language reason.
   break a feature.
 - Fuzzy matching must be index-assisted (trigram operator + threshold), not a
   full pairwise comparison, so scan cost stays bounded as KPI volume grows.
+
+## §BU-CONSOLE-GOAL-HIERARCHY (ADR-267)
+- A goal is a named target that belongs to a KRA category, optionally narrowed
+  to a KRA and a KPI name. It may hold sub-goals, one level deep only.
+- A goal's current value comes from exactly one declared source: rolled up from
+  the live employee KPI rows it matches, rolled up from its sub-goals by their
+  declared weight, or entered manually. Only manual goals accept a typed value.
+- Roll-up is always weighted (employee weightage within a period, declared
+  weight across sub-goals) and never a plain average. N/A and unscored rows are
+  excluded.
+- Goals never grade anyone and never write to `kpis` or review submissions.
+  Employee scoring remains the per-employee 0–5 bands and the resolved workflow.
+- Progress is measured start → target, clamped 0–100. When the target or current
+  value is unknown the UI states "not measurable yet" — never a fake 0%.
+- Create, edit and archive are admin-only; reads follow `bu_console_can_read`.
+  Archiving is a soft archive behind a destructive-action confirmation.

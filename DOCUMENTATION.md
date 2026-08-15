@@ -8477,3 +8477,18 @@ detail list flagged by `detail_truncated` / `detail_limit`, and paginated
   a failed scan is never presented as "no duplicates found".
 * Rollback: re-apply the previous function definitions and drop
   `idx_kpis_kpi_name_trgm`; no data is affected.
+
+### BU Performance Console — Goals (ADR-267)
+Goals live inside the KRA category tree: a top-level goal per category (and
+optionally KRA), with sub-goals nested one level below it — e.g. Production →
+CPP → "45 MW AFBC" / "45 MW WHRB" / "8 MW".
+
+- Table: `public.bu_goals` (`title`, `category_id`, `kra_name`,
+  `kpi_name_match`, `goal_source`, `weight`, `parent_goal_id`, scope columns).
+- RPCs: `bu_goal_list` (nested, paged 200 top-level goals), `bu_goal_upsert`,
+  `bu_goal_rollup` (returns the per-period breakdown), `bu_goal_archive`,
+  `bu_goal_kra_options` (KRA/KPI pickers from live review data).
+- UI: `src/components/admin/bu-console/GoalsTab.tsx` (indented tree, per-goal
+  recompute, add sub-goal, archive) and `GoalFormDialog.tsx` (category → KRA →
+  KPI linkage, source selector, weight, scope, start/target/unit).
+- Client contract tests: `src/components/admin/bu-console/goalObjects.test.ts`.

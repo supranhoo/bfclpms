@@ -3896,15 +3896,19 @@ export type Database = {
       bu_goals: {
         Row: {
           business_unit_id: string | null
+          category_id: string | null
           created_at: string
           created_by: string | null
           current_value: number | null
           cycle_ref: string | null
-          definition_id: string
+          definition_id: string | null
           department_id: string | null
           entity_level: Database["public"]["Enums"]["kpi_goal_entity_level"]
+          goal_source: string
           id: string
           is_active: boolean
+          kpi_name_match: string | null
+          kra_name: string | null
           notes: string | null
           owner_profile_id: string | null
           parent_goal_id: string | null
@@ -3916,22 +3920,28 @@ export type Database = {
           start_value: number | null
           subperiod_summary_rule: Database["public"]["Enums"]["kpi_goal_summary_rule"]
           target_value: number | null
+          title: string | null
           tracking_method: Database["public"]["Enums"]["kpi_goal_tracking_method"]
           unit: string | null
           updated_at: string
           visibility: Database["public"]["Enums"]["kpi_goal_visibility"]
+          weight: number
         }
         Insert: {
           business_unit_id?: string | null
+          category_id?: string | null
           created_at?: string
           created_by?: string | null
           current_value?: number | null
           cycle_ref?: string | null
-          definition_id: string
+          definition_id?: string | null
           department_id?: string | null
           entity_level?: Database["public"]["Enums"]["kpi_goal_entity_level"]
+          goal_source?: string
           id?: string
           is_active?: boolean
+          kpi_name_match?: string | null
+          kra_name?: string | null
           notes?: string | null
           owner_profile_id?: string | null
           parent_goal_id?: string | null
@@ -3943,22 +3953,28 @@ export type Database = {
           start_value?: number | null
           subperiod_summary_rule?: Database["public"]["Enums"]["kpi_goal_summary_rule"]
           target_value?: number | null
+          title?: string | null
           tracking_method?: Database["public"]["Enums"]["kpi_goal_tracking_method"]
           unit?: string | null
           updated_at?: string
           visibility?: Database["public"]["Enums"]["kpi_goal_visibility"]
+          weight?: number
         }
         Update: {
           business_unit_id?: string | null
+          category_id?: string | null
           created_at?: string
           created_by?: string | null
           current_value?: number | null
           cycle_ref?: string | null
-          definition_id?: string
+          definition_id?: string | null
           department_id?: string | null
           entity_level?: Database["public"]["Enums"]["kpi_goal_entity_level"]
+          goal_source?: string
           id?: string
           is_active?: boolean
+          kpi_name_match?: string | null
+          kra_name?: string | null
           notes?: string | null
           owner_profile_id?: string | null
           parent_goal_id?: string | null
@@ -3970,10 +3986,12 @@ export type Database = {
           start_value?: number | null
           subperiod_summary_rule?: Database["public"]["Enums"]["kpi_goal_summary_rule"]
           target_value?: number | null
+          title?: string | null
           tracking_method?: Database["public"]["Enums"]["kpi_goal_tracking_method"]
           unit?: string | null
           updated_at?: string
           visibility?: Database["public"]["Enums"]["kpi_goal_visibility"]
+          weight?: number
         }
         Relationships: [
           {
@@ -3981,6 +3999,13 @@ export type Database = {
             columns: ["business_unit_id"]
             isOneToOne: false
             referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bu_goals_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
             referencedColumns: ["id"]
           },
           {
@@ -16947,9 +16972,20 @@ export type Database = {
         Returns: Json
       }
       bu_goal_archive: { Args: { p_id: string }; Returns: Json }
+      bu_goal_kra_options: {
+        Args: {
+          p_category_id?: string
+          p_kra_name?: string
+          p_limit?: number
+          p_search?: string
+          p_year: number
+        }
+        Returns: Json
+      }
       bu_goal_list: {
         Args: {
           p_bu_ids?: string[]
+          p_category_ids?: string[]
           p_dept_ids?: string[]
           p_page?: number
           p_page_size?: number
@@ -16965,12 +17001,16 @@ export type Database = {
       bu_goal_upsert: {
         Args: {
           p_business_unit_id?: string
+          p_category_id?: string
           p_current_value?: number
           p_cycle_ref?: string
-          p_definition_id: string
+          p_definition_id?: string
           p_department_id?: string
           p_entity_level?: Database["public"]["Enums"]["kpi_goal_entity_level"]
+          p_goal_source?: string
           p_id?: string
+          p_kpi_name_match?: string
+          p_kra_name?: string
           p_notes?: string
           p_owner_profile_id?: string
           p_parent_goal_id?: string
@@ -16980,9 +17020,11 @@ export type Database = {
           p_start_value?: number
           p_subperiod_summary_rule?: Database["public"]["Enums"]["kpi_goal_summary_rule"]
           p_target_value?: number
+          p_title?: string
           p_tracking_method?: Database["public"]["Enums"]["kpi_goal_tracking_method"]
           p_unit?: string
           p_visibility?: Database["public"]["Enums"]["kpi_goal_visibility"]
+          p_weight?: number
         }
         Returns: Json
       }

@@ -520,6 +520,14 @@ export type GoalProgressType = 'number' | 'currency' | 'percentage' | 'rollup';
 export type GoalTrackingMethod = 'manual' | 'rollup' | 'source';
 export type GoalSummaryRule = 'last' | 'sum' | 'avg';
 export type GoalVisibility = 'public' | 'restricted' | 'custom';
+/** ADR-267 — where a goal's current value comes from. */
+export type GoalSource = 'kpi_rollup' | 'child_rollup' | 'manual';
+
+export const GOAL_SOURCE_LABELS: Record<GoalSource, string> = {
+  kpi_rollup: 'Rolled up from employee KPIs',
+  child_rollup: 'Rolled up from sub-goals',
+  manual: 'Entered manually',
+};
 
 export const GOAL_SUMMARY_RULE_LABELS: Record<GoalSummaryRule, string> = {
   last: 'Latest sub-period value',
@@ -535,10 +543,17 @@ export const GOAL_TRACKING_LABELS: Record<GoalTrackingMethod, string> = {
 
 export interface BuGoalRow {
   id: string;
-  definition_id: string;
+  title: string | null;
+  definition_id: string | null;
   parent_goal_id: string | null;
-  kra_name: string;
-  kpi_name: string;
+  /** 0 = top-level goal, 1 = sub-goal. */
+  depth: number;
+  category_id: string | null;
+  category_name: string | null;
+  kra_name: string | null;
+  kpi_name: string | null;
+  goal_source: GoalSource;
+  weight: number | null;
   entity_level: GoalEntityLevel;
   business_unit_id: string | null;
   business_unit_name: string | null;
@@ -557,6 +572,7 @@ export interface BuGoalRow {
   start_value: number | null;
   target_value: number | null;
   current_value: number | null;
+  notes: string | null;
   rollup_computed_at: string | null;
 }
 
@@ -573,6 +589,7 @@ export interface GoalListArgs {
   period: string | null;
   buIds: string[];
   deptIds: string[];
+  categoryIds?: string[];
   page: number;
 }
 
@@ -589,6 +606,7 @@ export function useBuGoals(args: GoalListArgs | null) {
         p_period: a.period,
         p_bu_ids: a.buIds.length ? a.buIds : null,
         p_dept_ids: a.deptIds.length ? a.deptIds : null,
+        p_category_ids: a.categoryIds?.length ? a.categoryIds : null,
         p_page: a.page,
         p_page_size: 200,
       });
@@ -600,7 +618,13 @@ export function useBuGoals(args: GoalListArgs | null) {
 
 export interface GoalUpsertArgs {
   id?: string | null;
-  definitionId: string;
+  title: string;
+  categoryId: string | null;
+  kraName: string | null;
+  kpiNameMatch: string | null;
+  goalSource: GoalSource;
+  weight: number | null;
+  definitionId?: string | null;
   reviewYear: number;
   reviewPeriod: string | null;
   entityLevel: GoalEntityLevel;
@@ -609,7 +633,6 @@ export interface GoalUpsertArgs {
   ownerProfileId?: string | null;
   cycleRef?: string | null;
   progressType: GoalProgressType;
-  trackingMethod: GoalTrackingMethod;
   subperiodSummaryRule: GoalSummaryRule;
   visibility: GoalVisibility;
   unit: string | null;
@@ -625,9 +648,15 @@ export function useGoalUpsert() {
   return useMutation<{ authorized: boolean; id?: string; error?: string }, Error, GoalUpsertArgs>({
     mutationFn: async (a) => {
       const { data, error } = await supabase.rpc('bu_goal_upsert' as any, {
-        p_definition_id: a.definitionId,
         p_review_year: a.reviewYear,
         p_id: a.id ?? null,
+        p_title: a.title,
+        p_category_id: a.categoryId,
+        p_kra_name: a.kraName,
+        p_kpi_name_match: a.kpiNameMatch,
+        p_goal_source: a.goalSource,
+        p_weight: a.weight ?? 1,
+        p_definition_id: a.definitionId ?? null,
         p_entity_level: a.entityLevel,
         p_business_unit_id: a.businessUnitId,
         p_department_id: a.departmentId,
@@ -635,7 +664,6 @@ export function useGoalUpsert() {
         p_review_period: a.reviewPeriod,
         p_cycle_ref: a.cycleRef ?? null,
         p_progress_type: a.progressType,
-        p_tracking_method: a.trackingMethod,
         p_subperiod_summary_rule: a.subperiodSummaryRule,
         p_visibility: a.visibility,
         p_unit: a.unit,
@@ -665,11 +693,14 @@ export interface GoalRollupResult {
   persisted?: boolean;
   summary_rule?: GoalSummaryRule;
   tracking_method?: GoalTrackingMethod;
+  goal_source?: GoalSource;
+  error?: string;
   current_value: number | null;
   target_value?: number | null;
   row_count?: number;
   employee_count?: number;
   periods?: Array<{ review_period: string; weighted_value: number; row_count: number; employee_count: number }>;
+  children?: Array<{ id: string; title: string | null; weight: number | null; current_value: number | null; target_value: number | null }>;
 }
 
 /** Computes (and optionally stores) a goal's current value from its children. */
@@ -683,6 +714,7 @@ export function useGoalRollup() {
     },
     onSuccess: (res, vars) => {
       if (!res.authorized) { toast.error('You cannot roll up this goal.'); return; }
+      if (res.error) { toast.error(res.error); return; }
       if (vars.persist) {
         qc.invalidateQueries({ queryKey: ['bu-console-goals'] });
         toast.success('Roll-up saved.');
@@ -754,3 +786,43 @@ export function goalProgressPercent(goal: Pick<BuGoalRow, 'start_value' | 'targe
   if (!Number.isFinite(pct)) return null;
   return Math.max(0, Math.min(100, Math.round(pct * 100) / 100));
 }
+
+export interface GoalKraOptionsResult {
+  authorized: boolean;
+  kras: string[];
+  kra_total: number;
+  kpis: string[];
+  kpi_total: number;
+  limit: number;
+}
+
+/**
+ * ADR-267 — the goal form picks its KRA / KPI names from the *live* review
+ * data (`kpis`) rather than the master library, so a goal always anchors to
+ * something employees are actually scored on.
+ */
+export function useGoalKraOptions(
+  year: number,
+  categoryId: string | null,
+  kraName: string | null,
+  search: string,
+  enabled: boolean,
+) {
+  return useQuery<GoalKraOptionsResult>({
+    queryKey: ['bu-console-goal-kra-options', year, categoryId, kraName, search],
+    enabled,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('bu_goal_kra_options' as any, {
+        p_year: year,
+        p_category_id: categoryId,
+        p_kra_name: kraName,
+        p_search: search.trim() || null,
+        p_limit: 200,
+      });
+      if (error) throw error;
+      return (data ?? { authorized: false, kras: [], kra_total: 0, kpis: [], kpi_total: 0, limit: 200 }) as unknown as GoalKraOptionsResult;
+    },
+  });
+}
+
