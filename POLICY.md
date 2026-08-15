@@ -6160,3 +6160,23 @@ plain-language reason.
 - An unscored, non-N/A row is never advanced — it is skipped as `not_scored`.
 - Every committed advance stamps a shared `batch_id` and a
   `BU_CONSOLE_GROUP_ADVANCE` audit row per KPI.
+- Phase 5 (ADR-263) adds the goal object: `bu_goals`, one row per KPI definition
+  per scope (org / business unit / department) per period or full year.
+- A goal describes intent (start, target, current, unit, cycle, owner,
+  visibility). It never grades anybody. Employee scoring stays on the existing
+  0-5 per-employee bands; goal progress feeds understanding, not the score.
+- A goal's current value is either entered manually or derived. Derivation is
+  weighted by each employee's weightage — never a straight average — and rows
+  that are N/A or unscored are excluded from the weighted value.
+- Sub-periods summarise into the headline number by the goal's declared
+  `subperiod_summary_rule` (latest value / sum / average). The rule is stored on
+  the goal, never inferred at read time, so "why is the annual number not the
+  sum" has one answer per goal.
+- Roll-up never writes to `kpis` or `review_submissions`. It reads them and
+  stores the result only on the goal row.
+- Goals carry no approval chain of their own. Approval remains the resolved
+  per-employee workflow.
+- Only admins create, edit, archive or persist a roll-up for a goal; console
+  read roles (admin, auditor, management, HR PMS) may view and preview.
+- Progress that cannot be computed is shown as "not measurable yet". A missing
+  target or current value must never render as 0%.

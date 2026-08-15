@@ -3893,6 +3893,133 @@ export type Database = {
         }
         Relationships: []
       }
+      bu_goals: {
+        Row: {
+          business_unit_id: string | null
+          created_at: string
+          created_by: string | null
+          current_value: number | null
+          cycle_ref: string | null
+          definition_id: string
+          department_id: string | null
+          entity_level: Database["public"]["Enums"]["kpi_goal_entity_level"]
+          id: string
+          is_active: boolean
+          notes: string | null
+          owner_profile_id: string | null
+          parent_goal_id: string | null
+          progress_type: Database["public"]["Enums"]["kpi_goal_progress_type"]
+          review_period: string | null
+          review_year: number
+          rollup_computed_at: string | null
+          rollup_source: Json | null
+          start_value: number | null
+          subperiod_summary_rule: Database["public"]["Enums"]["kpi_goal_summary_rule"]
+          target_value: number | null
+          tracking_method: Database["public"]["Enums"]["kpi_goal_tracking_method"]
+          unit: string | null
+          updated_at: string
+          visibility: Database["public"]["Enums"]["kpi_goal_visibility"]
+        }
+        Insert: {
+          business_unit_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_value?: number | null
+          cycle_ref?: string | null
+          definition_id: string
+          department_id?: string | null
+          entity_level?: Database["public"]["Enums"]["kpi_goal_entity_level"]
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          owner_profile_id?: string | null
+          parent_goal_id?: string | null
+          progress_type?: Database["public"]["Enums"]["kpi_goal_progress_type"]
+          review_period?: string | null
+          review_year: number
+          rollup_computed_at?: string | null
+          rollup_source?: Json | null
+          start_value?: number | null
+          subperiod_summary_rule?: Database["public"]["Enums"]["kpi_goal_summary_rule"]
+          target_value?: number | null
+          tracking_method?: Database["public"]["Enums"]["kpi_goal_tracking_method"]
+          unit?: string | null
+          updated_at?: string
+          visibility?: Database["public"]["Enums"]["kpi_goal_visibility"]
+        }
+        Update: {
+          business_unit_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          current_value?: number | null
+          cycle_ref?: string | null
+          definition_id?: string
+          department_id?: string | null
+          entity_level?: Database["public"]["Enums"]["kpi_goal_entity_level"]
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          owner_profile_id?: string | null
+          parent_goal_id?: string | null
+          progress_type?: Database["public"]["Enums"]["kpi_goal_progress_type"]
+          review_period?: string | null
+          review_year?: number
+          rollup_computed_at?: string | null
+          rollup_source?: Json | null
+          start_value?: number | null
+          subperiod_summary_rule?: Database["public"]["Enums"]["kpi_goal_summary_rule"]
+          target_value?: number | null
+          tracking_method?: Database["public"]["Enums"]["kpi_goal_tracking_method"]
+          unit?: string | null
+          updated_at?: string
+          visibility?: Database["public"]["Enums"]["kpi_goal_visibility"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bu_goals_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bu_goals_definition_id_fkey"
+            columns: ["definition_id"]
+            isOneToOne: false
+            referencedRelation: "kpi_definitions_master"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bu_goals_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bu_goals_owner_profile_id_fkey"
+            columns: ["owner_profile_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bu_goals_owner_profile_id_fkey"
+            columns: ["owner_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bu_goals_parent_goal_id_fkey"
+            columns: ["parent_goal_id"]
+            isOneToOne: false
+            referencedRelation: "bu_goals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bulk_review_batches: {
         Row: {
           affected_count: number
@@ -16800,6 +16927,46 @@ export type Database = {
           p_dept_ids?: string[]
           p_period: string
           p_year: number
+        }
+        Returns: Json
+      }
+      bu_goal_archive: { Args: { p_id: string }; Returns: Json }
+      bu_goal_list: {
+        Args: {
+          p_bu_ids?: string[]
+          p_dept_ids?: string[]
+          p_page?: number
+          p_page_size?: number
+          p_period?: string
+          p_year: number
+        }
+        Returns: Json
+      }
+      bu_goal_rollup: {
+        Args: { p_goal_id: string; p_persist?: boolean }
+        Returns: Json
+      }
+      bu_goal_upsert: {
+        Args: {
+          p_business_unit_id?: string
+          p_current_value?: number
+          p_cycle_ref?: string
+          p_definition_id: string
+          p_department_id?: string
+          p_entity_level?: Database["public"]["Enums"]["kpi_goal_entity_level"]
+          p_id?: string
+          p_notes?: string
+          p_owner_profile_id?: string
+          p_parent_goal_id?: string
+          p_progress_type?: Database["public"]["Enums"]["kpi_goal_progress_type"]
+          p_review_period?: string
+          p_review_year: number
+          p_start_value?: number
+          p_subperiod_summary_rule?: Database["public"]["Enums"]["kpi_goal_summary_rule"]
+          p_target_value?: number
+          p_tracking_method?: Database["public"]["Enums"]["kpi_goal_tracking_method"]
+          p_unit?: string
+          p_visibility?: Database["public"]["Enums"]["kpi_goal_visibility"]
         }
         Returns: Json
       }

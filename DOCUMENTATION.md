@@ -8376,3 +8376,41 @@ Tests: `src/test/tni/continuityRule.test.ts`, `src/test/pip/*`.
   Tests: `src/components/admin/bu-console/groupApproval.test.ts`.
   Rollback: feature-flagged and additive; the RPC can be dropped and batches
   reverted through the audit batch_id.
+- v2.66.262 — ADR-263 BU Console Phase 5: goal objects and roll-up.
+  New table `public.bu_goals` — one goal per KPI definition per scope:
+  `definition_id` → `kpi_definitions_master`, self-FK `parent_goal_id`,
+  `entity_level` (org|bu|department|individual), `business_unit_id`,
+  `department_id`, `owner_profile_id`, `cycle_ref`, `review_period` (NULL =
+  full year), `review_year`, `progress_type`, `tracking_method`,
+  `subperiod_summary_rule`, `visibility`, `unit`, `start_value`,
+  `target_value`, `current_value`, `rollup_computed_at`, `rollup_source`,
+  `notes`, `is_active`. Unique per
+  (definition, level, BU, dept, period, year) via a COALESCE index.
+  GRANTs to `authenticated`/`service_role`; RLS = console roles read
+  (`bu_console_can_read`), admin write. `updated_at` trigger attached. Backed up
+  automatically via `get_backup_table_order()` — no allow-list edit.
+  * `bu_goal_list(p_year, p_period, p_bu_ids, p_dept_ids, p_page, p_page_size)`
+    — SECURITY DEFINER, STABLE, server-paged at 200/page, joins definition, BU,
+    department and owner names.
+  * `bu_goal_upsert(...)` — admin-only, insert-or-update on the scope key.
+    `current_value` is only writable when `tracking_method = 'manual'`;
+    derived goals keep the roll-up as the single source of their current value.
+    Self-parent links are rejected.
+  * `bu_goal_rollup(p_goal_id, p_persist)` — resolves the mapped `kpis` rows by
+    normalised KRA/KPI key within the goal's scope and year, takes each row's
+    achieved value through the universal cascade (management → hr_pms →
+    skip_level → auditor → functional_manager → manager → self → base),
+    excludes N/A rows, computes a weightage-weighted value per period, then
+    summarises periods by the goal's `subperiod_summary_rule`
+    (last / sum / avg). Read roles may preview; only admins may persist.
+    Returns the per-period breakdown so the number is explainable.
+  UI: `GoalsTab.tsx` (paged table with start / current / target, start→target
+  progress bar, tracking + summary-rule badges, roll-up, edit and archive
+  actions behind `ConfirmDestructiveDialog`) and `GoalFormDialog.tsx`, wired as
+  the "Goals" tab of `/admin/bu-console`; nothing loads before a scope is
+  applied. Hooks `useBuGoals`, `useGoalUpsert`, `useGoalRollup`,
+  `useGoalArchive`, `useKpiDefinitionOptions`, plus the pure helper
+  `goalProgressPercent`.
+  Tests: `src/components/admin/bu-console/goalObjects.test.ts` (8).
+  Rollback: additive and feature-flagged — dropping `bu_goals` and the three
+  RPCs removes the layer with zero effect on review data.
