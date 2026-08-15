@@ -641,6 +641,44 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
 
   return (
     <div className="space-y-4">
+      {/* ADR-272 — KRA Library search, at parity with "Assign New KRA" */}
+      <KraLibrarySearchPanel
+        templates={templates}
+        allKpis={allKpis}
+        categories={categories}
+        onSelectKpi={(catId, kra, kpiNameValue) => {
+          const source =
+            (templates || []).find(
+              (t: any) => t.is_active && t.category_id === catId && t.kra_name === kra && t.kpi_name === kpiNameValue,
+            ) ||
+            (allKpis || []).find(
+              (k: any) => k.category_id === catId && k.kra_name === kra && k.kpi_name === kpiNameValue,
+            );
+          setFormData(prev => ({
+            ...prev,
+            category_id: catId,
+            kra_name: kra,
+            kpi_name: kpiNameValue,
+            uom_type: ((source as any)?.uom_type as UomType) || prev.uom_type,
+            uom: (source as any)?.uom ?? prev.uom,
+            criteria: (source as any)?.criteria ?? prev.criteria,
+            target_value: (source as any)?.target_value != null ? String((source as any).target_value) : prev.target_value,
+            weightage: (source as any)?.weightage != null ? String((source as any).weightage) : prev.weightage,
+            frequency: (source as any)?.frequency ?? prev.frequency,
+            source_of_data: (source as any)?.source_of_data ?? prev.source_of_data,
+            r5: (source as any)?.r5 ?? prev.r5,
+            r4: (source as any)?.r4 ?? prev.r4,
+            r3: (source as any)?.r3 ?? prev.r3,
+            r2: (source as any)?.r2 ?? prev.r2,
+            r1: (source as any)?.r1 ?? prev.r1,
+            r0: (source as any)?.r0 ?? prev.r0,
+            qualitative_options: ((source as any)?.qualitative_options as QualitativeOption[]) ?? prev.qualitative_options,
+            threshold_mode: ((source as any)?.threshold_mode as 'absolute' | 'ratio') ?? prev.threshold_mode,
+          }));
+          setTextState(textStateFromRow({ ...(source as any), kpi_name: kpiNameValue }));
+        }}
+      />
+
       {/* ═══ IDENTITY ═══ */}
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
@@ -662,22 +700,68 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Category</Label>
-          <Select
-            value={formData.category_id}
-            onValueChange={(value) => setFormData(prev => ({ ...prev, category_id: value }))}
-          >
-            <SelectTrigger className="h-9">
-              <SelectValue placeholder="Select category" />
-            </SelectTrigger>
-            <SelectContent>
-              {categories?.map(cat => (
-                <SelectItem key={cat.id} value={cat.id}>
-                  {cat.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center justify-between gap-2">
+            <Label className="text-xs">Category</Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[11px]"
+              onClick={() => setIsCustomCategory(v => !v)}
+            >
+              {isCustomCategory ? 'Cancel' : '+ New'}
+            </Button>
+          </div>
+          {isCustomCategory ? (
+            <div className="space-y-2 rounded-md border p-2">
+              <Input
+                className="h-9"
+                value={customCategoryName}
+                onChange={(e) => setCustomCategoryName(e.target.value)}
+                placeholder="Category name"
+              />
+              <div className="flex gap-2">
+                <Input
+                  className="h-9"
+                  type="number"
+                  value={customCategoryWeightage}
+                  onChange={(e) => setCustomCategoryWeightage(e.target.value)}
+                  placeholder="Weightage %"
+                />
+                <Input
+                  className="h-9 w-16 p-1"
+                  type="color"
+                  value={customCategoryColor}
+                  onChange={(e) => setCustomCategoryColor(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9"
+                  disabled={!customCategoryName.trim() || createCategory.isPending}
+                  onClick={handleCreateCategory}
+                >
+                  Create
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Select
+              value={formData.category_id}
+              onValueChange={(value) => setFormData(prev => ({ ...prev, category_id: value }))}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories?.map(cat => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
 
