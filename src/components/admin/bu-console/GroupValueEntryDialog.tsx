@@ -75,6 +75,8 @@ export function GroupValueEntryDialog({ args, open, onOpenChange }: Props) {
       categoryId: args.categoryId,
       kraName: args.kraName,
       kpiName: args.kpiName,
+      titleKey: args.titleKey ?? null,
+      variantKey: args.variantKey ?? null,
       period: args.period,
       year: args.year,
       buIds: args.buIds,

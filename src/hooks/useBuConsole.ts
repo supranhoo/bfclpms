@@ -11,12 +11,41 @@ import { toast } from 'sonner';
 
 export const BU_CONSOLE_FLAG_KEY = 'feature_bu_console';
 
-export interface BuConsoleKpiNode {
-  kpi_key: string;
+/**
+ * ADR-270 — a console KPI node is keyed by its structured title. Rows that
+ * share a title but disagree on description / formula / scoring / target are
+ * separate *variants* of the same node and are always declared, never hidden.
+ */
+export interface BuConsoleKpiVariant {
+  variant_key: string;
   kpi_name: string;
+  kpi_names: string[];
+  description: string | null;
+  formula: string | null;
+  scoring_logic: string | null;
+  target_value: number | null;
+  uom: string | null;
   kpi_rows: number;
   employee_count: number;
+  avg_score: number | null;
+}
+
+export interface BuConsoleKpiNode {
+  kpi_key: string;
+  /** Normalised title used as the group key for detail/write/advance calls. */
+  title_key: string;
+  /** Representative raw `kpi_name` (kept for legacy rows and audit metadata). */
+  kpi_name: string;
+  kpi_title: string | null;
+  kpi_description: string | null;
+  kpi_rows: number;
+  employee_count: number;
+  variant_count: number;
+  weightage_values: number[] | null;
+  avg_score: number | null;
+  is_structured: boolean;
   is_org_level: boolean;
+  variants: BuConsoleKpiVariant[];
 }
 
 export interface BuConsoleKraNode {
@@ -56,6 +85,11 @@ export interface BuConsoleEmployeeRow {
   frequency: string | null;
   status: string | null;
   is_na: boolean | null;
+  variant_key: string | null;
+  kpi_title: string | null;
+  kpi_description: string | null;
+  kpi_formula: string | null;
+  kpi_scoring_logic: string | null;
   achieved_value: number | null;
   self_score: number | null;
   manager_score: number | null;
@@ -170,6 +204,11 @@ export interface KpiDetailArgs extends BuConsoleScope {
   kraName: string;
   kpiName: string;
   page: number;
+  /** ADR-270 — group by structured title when present. */
+  titleKey?: string | null;
+  kpiTitle?: string | null;
+  /** Narrow every read/write to one variant of the title group. */
+  variantKey?: string | null;
 }
 
 export function useBuConsoleKpiDetail(args: KpiDetailArgs | null) {
@@ -191,6 +230,8 @@ export function useBuConsoleKpiDetail(args: KpiDetailArgs | null) {
         p_manager_ids: args!.managerIds?.length ? args!.managerIds : null,
         p_page: args!.page,
         p_page_size: 200,
+        p_title_key: args!.titleKey ?? null,
+        p_variant_key: args!.variantKey ?? null,
       });
       if (error) throw error;
       return (data ?? { authorized: false, total: 0, page: 1, page_size: 200, definition: {}, rows: [] }) as unknown as BuConsoleKpiDetail;
@@ -307,6 +348,7 @@ export interface GroupWriteResult {
   will_skip?: number;
   propagated?: number;
   skipped?: number;
+  variant_count?: number;
   detail_limit?: number;
   detail_truncated?: boolean;
   skip_summary?: SkipSummaryEntry[];
@@ -340,6 +382,8 @@ export interface GroupWriteArgs {
   remarks: string | null;
   policy: GroupWritePolicy;
   dryRun: boolean;
+  titleKey?: string | null;
+  variantKey?: string | null;
 }
 
 async function callGroupWrite(a: GroupWriteArgs): Promise<GroupWriteResult> {
@@ -358,6 +402,8 @@ async function callGroupWrite(a: GroupWriteArgs): Promise<GroupWriteResult> {
     p_remarks: a.remarks,
     p_overwrite_policy: a.policy,
     p_dry_run: a.dryRun,
+    p_title_key: a.titleKey ?? null,
+    p_variant_key: a.variantKey ?? null,
   });
   if (error) throw error;
   return (data ?? { authorized: false, dry_run: a.dryRun, batch_id: null }) as unknown as GroupWriteResult;
@@ -440,6 +486,7 @@ export interface GroupAdvanceResult {
   will_skip?: number;
   advanced?: number;
   skipped?: number;
+  variant_count?: number;
   detail_limit?: number;
   detail_truncated?: boolean;
   skip_summary?: SkipSummaryEntry[];
@@ -460,6 +507,8 @@ export interface GroupAdvanceArgs {
   targetStage: string;
   remarks: string | null;
   dryRun: boolean;
+  titleKey?: string | null;
+  variantKey?: string | null;
 }
 
 async function callGroupAdvance(a: GroupAdvanceArgs): Promise<GroupAdvanceResult> {
@@ -476,6 +525,8 @@ async function callGroupAdvance(a: GroupAdvanceArgs): Promise<GroupAdvanceResult
     p_manager_ids: a.managerIds?.length ? a.managerIds : null,
     p_remarks: a.remarks,
     p_dry_run: a.dryRun,
+    p_title_key: a.titleKey ?? null,
+    p_variant_key: a.variantKey ?? null,
   });
   if (error) throw error;
   return (data ?? { authorized: false, dry_run: a.dryRun, batch_id: null }) as unknown as GroupAdvanceResult;

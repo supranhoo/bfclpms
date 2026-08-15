@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useBuConsoleKpiDetail, type KpiDetailArgs } from '@/hooks/useBuConsole';
+import { KpiTextBlocks } from '@/components/kpi/KpiText';
 import { GroupValueEntryDialog } from './GroupValueEntryDialog';
 import { GroupApprovalDialog } from './GroupApprovalDialog';
 
@@ -17,27 +18,56 @@ interface Props {
   args: KpiDetailArgs | null;
   onPageChange: (page: number) => void;
   onClose: () => void;
+  /** ADR-270 — reopen the same node scoped to one variant. */
+  onSelectVariant?: (variantKey: string | null) => void;
 }
 
 const fmt = (v: number | null | undefined) =>
   v === null || v === undefined ? '—' : Number(v).toFixed(2);
 
-export function KpiDetailDrawer({ args, onPageChange, onClose }: Props) {
+export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }: Props) {
   const { data, isLoading, error } = useBuConsoleKpiDetail(args);
   const [entryOpen, setEntryOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
-  const def = (data?.definition ?? {}) as Record<string, string | null>;
+  const def = (data?.definition ?? {}) as Record<string, any>;
+  const variantCount = Number(def.variant_count ?? 1);
   const totalPages = data ? Math.max(1, Math.ceil(data.total / (data.page_size || 200))) : 1;
 
   return (
     <Sheet open={!!args} onOpenChange={(open) => !open && onClose()}>
       <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto">
         <SheetHeader>
-          <SheetTitle className="pr-8">{args?.kpiName ?? 'KPI'}</SheetTitle>
+          <SheetTitle className="pr-8">
+            {args?.kpiTitle || def.kpi_title || args?.kpiName || 'KPI'}
+          </SheetTitle>
           <SheetDescription>
             {args?.kraName} · {args?.period} {args?.year}
           </SheetDescription>
         </SheetHeader>
+
+        {data?.authorized && (variantCount > 1 || args?.variantKey) && (
+          <div className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
+            <p className="font-medium">
+              {args?.variantKey
+                ? 'Scoped to one variant of this KPI.'
+                : `${variantCount} definition variants sit behind this title.`}
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              Group actions below apply to every row currently shown
+              {args?.variantKey ? ' in this variant' : ' across all variants'}.
+            </p>
+            {args?.variantKey && onSelectVariant && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2"
+                onClick={() => onSelectVariant(null)}
+              >
+                Show all variants
+              </Button>
+            )}
+          </div>
+        )}
 
         {data?.authorized && (
           <div className="mt-4 flex flex-wrap gap-2">
@@ -78,7 +108,19 @@ export function KpiDetailDrawer({ args, onPageChange, onClose }: Props) {
             <section className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
               <Meta label="Unit" value={def.uom} />
               <Meta label="Frequency" value={def.frequency} />
-              <Meta label="Criteria" value={def.criteria} />
+              <Meta label="Variants" value={String(variantCount)} />
+            </section>
+
+            <section className="rounded-md border p-3">
+              <KpiTextBlocks
+                kpi={{
+                  kpi_name: def.kpi_name ?? args?.kpiName ?? '',
+                  kpi_title: def.kpi_title ?? null,
+                  kpi_description: def.kpi_description ?? null,
+                  kpi_formula: def.kpi_formula ?? null,
+                  kpi_scoring_logic: def.kpi_scoring_logic ?? null,
+                }}
+              />
             </section>
 
             <section>
@@ -127,6 +169,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose }: Props) {
                     <TableRow>
                       <TableHead>Employee</TableHead>
                       <TableHead>Department</TableHead>
+                      {variantCount > 1 && <TableHead>Variant</TableHead>}
                       <TableHead className="text-right">Weightage</TableHead>
                       <TableHead className="text-right">Target</TableHead>
                       <TableHead className="text-right">Actual</TableHead>
@@ -144,6 +187,13 @@ export function KpiDetailDrawer({ args, onPageChange, onClose }: Props) {
                           )}
                         </TableCell>
                         <TableCell className="text-muted-foreground">{r.department_name ?? '—'}</TableCell>
+                        {variantCount > 1 && (
+                          <TableCell>
+                            <Badge variant="outline" className="font-mono text-[10px]">
+                              {(r.variant_key ?? '—').slice(0, 6)}
+                            </Badge>
+                          </TableCell>
+                        )}
                         <TableCell className="text-right">{fmt(r.weightage)}</TableCell>
                         <TableCell className="text-right">{fmt(r.target_value)}</TableCell>
                         <TableCell className="text-right">{r.is_na ? 'N/A' : fmt(r.achieved_value)}</TableCell>
@@ -157,7 +207,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose }: Props) {
                     ))}
                     {data.rows.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={variantCount > 1 ? 8 : 7} className="text-center text-sm text-muted-foreground">
                           No mapped employees in this scope.
                         </TableCell>
                       </TableRow>

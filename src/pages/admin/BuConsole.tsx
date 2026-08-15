@@ -255,8 +255,17 @@ export default function BuConsole() {
               selectedKraKey={kraKey}
               onSelectCategory={(id) => { setCategoryId(id); setKraKey(null); }}
               onSelectKra={setKraKey}
-              onSelectKpi={(cId, kraName, kpiName) =>
-                setDetail({ ...scope!, categoryId: cId, kraName, kpiName, page: 1 })
+              onSelectKpi={(cId, kraName, kpi, variantKey) =>
+                setDetail({
+                  ...scope!,
+                  categoryId: cId,
+                  kraName,
+                  kpiName: kpi.kpi_name,
+                  titleKey: kpi.title_key,
+                  kpiTitle: kpi.kpi_title,
+                  variantKey: variantKey ?? null,
+                  page: 1,
+                })
               }
             />
           )}
@@ -282,6 +291,9 @@ export default function BuConsole() {
       <KpiDetailDrawer
         args={detail}
         onPageChange={(page) => setDetail(d => (d ? { ...d, page } : d))}
+        onSelectVariant={(variantKey) =>
+          setDetail(d => (d ? { ...d, variantKey, page: 1 } : d))
+        }
         onClose={() => setDetail(null)}
       />
     </div>
