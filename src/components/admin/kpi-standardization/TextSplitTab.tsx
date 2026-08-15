@@ -306,7 +306,7 @@ function EditPartsDialog({
   onSave,
   saving,
 }: {
-  row: KpiSplitPreviewRow | null;
+  row: KpiSplitGroupRow | null;
   onClose: () => void;
   onSave: (p: { title: string | null; description: string | null; formula: string | null; scoring_logic: string | null }) => void;
   saving: boolean;
@@ -317,8 +317,8 @@ function EditPartsDialog({
   const [scoring, setScoring] = useState('');
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
 
-  if (row && loadedFor !== row.kpi_id) {
-    setLoadedFor(row.kpi_id);
+  if (row && loadedFor !== row.kpi_name) {
+    setLoadedFor(row.kpi_name);
     setTitle(row.title ?? '');
     setDescription(row.description ?? '');
     setFormula(row.formula ?? '');
@@ -331,7 +331,8 @@ function EditPartsDialog({
         <DialogHeader>
           <DialogTitle>Edit structured KPI text</DialogTitle>
           <DialogDescription>
-            Saves the four structured fields only. The original KPI name text stays exactly as it is.
+            Saves the four structured fields for all {row ? Number(row.row_count) : 0} KPI row(s) that share this exact
+            text. The original KPI name text stays exactly as it is.
           </DialogDescription>
         </DialogHeader>
 
