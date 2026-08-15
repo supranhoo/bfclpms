@@ -93,6 +93,19 @@ export default function BuConsole() {
 
   const { data: tree, isFetching, refetch } = useBuConsoleTree(scope);
 
+  // ADR-271 — filter selections are only committed on apply; surface the gap
+  // instead of letting stale category counts look current.
+  const sameIds = (a: string[], b: string[]) =>
+    a.length === b.length && [...a].sort().join('|') === [...b].sort().join('|');
+  const scopeDirty = !!scope && !(
+    scope.period === period &&
+    scope.year === year &&
+    sameIds(scope.buIds, buIds) &&
+    sameIds(scope.deptIds, deptIds) &&
+    sameIds(scope.divisionIds, divisionIds) &&
+    sameIds(scope.managerIds, managerIds)
+  );
+
   const selectedCategory = useMemo(
     () => tree?.categories.find(c => c.category_id === categoryId) ?? null,
     [tree, categoryId],
