@@ -53,16 +53,19 @@ function Stat({ label, value }: { label: string; value: number | string }) {
   );
 }
 
-export function TextSplitTab() {
-  const [confidence, setConfidence] = useState<KpiSplitConfidence | 'all'>('high');
-  const [state, setState] = useState<KpiSplitState>('pending');
+export function TextSplitTab({ initialSearch = '' }: { initialSearch?: string } = {}) {
+  const [confidence, setConfidence] = useState<KpiSplitConfidence | 'all'>(
+    initialSearch ? 'all' : 'high',
+  );
+  const [state, setState] = useState<KpiSplitState>(initialSearch ? 'all' : 'pending');
+  const [search, setSearch] = useState(initialSearch);
   const [page, setPage] = useState(0);
   const [editing, setEditing] = useState<KpiSplitGroupRow | null>(null);
   const [lastRunIds, setLastRunIds] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
 
   const summary = useKpiSplitSummary();
-  const preview = useKpiSplitGroups({ page, pageSize: PAGE_SIZE, confidence, state });
+  const preview = useKpiSplitGroups({ page, pageSize: PAGE_SIZE, confidence, state, search });
   const apply = useApplyKpiSplit(setProgress);
   const rollback = useRollbackKpiSplit();
   const save = useSaveKpiPartsByName();
@@ -74,6 +77,8 @@ export function TextSplitTab() {
   const pendingReview = summary.data?.pending_review ?? 0;
   const needsManual = summary.data?.needs_manual ?? 0;
   const needsManualGroups = summary.data?.needs_manual_groups ?? 0;
+  const suspectTitles = summary.data?.suspect_titles ?? 0;
+  const suspectGroups = summary.data?.suspect_title_groups ?? 0;
 
   const runApply = (conf: 'high' | 'review') => {
     setProgress(0);
