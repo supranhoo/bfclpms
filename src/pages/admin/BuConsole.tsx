@@ -291,6 +291,9 @@ export default function BuConsole() {
       <KpiDetailDrawer
         args={detail}
         onPageChange={(page) => setDetail(d => (d ? { ...d, page } : d))}
+        onSelectVariant={(variantKey) =>
+          setDetail(d => (d ? { ...d, variantKey, page: 1 } : d))
+        }
         onClose={() => setDetail(null)}
       />
     </div>
