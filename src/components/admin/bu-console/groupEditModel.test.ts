@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { diffChanges, hasChanges, weightageDeviations, uniqueByEmployee } from './groupEditModel';
+import { directionConflictsWithLadder, buildScoringPayload } from '@/components/admin/kpi-form/kpiFormModel';
 
 const ALLOWED = ['kpi_title', 'weightage', 'target_value', 'r5'];
 
