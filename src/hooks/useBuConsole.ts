@@ -712,6 +712,10 @@ export interface GoalUpsertArgs {
   currentValue: number | null;
   parentGoalId?: string | null;
   notes?: string | null;
+  /** ADR-276 — cross-functional alignment, separate from the structural parent. */
+  alignsToId?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
 }
 
 export function useGoalUpsert() {
@@ -743,6 +747,9 @@ export function useGoalUpsert() {
         p_current_value: a.currentValue,
         p_parent_goal_id: a.parentGoalId ?? null,
         p_notes: a.notes ?? null,
+        p_aligns_to_id: a.alignsToId ?? null,
+        p_start_date: a.startDate ?? null,
+        p_end_date: a.endDate ?? null,
       });
       if (error) throw error;
       return (data ?? { authorized: false }) as any;
@@ -751,6 +758,7 @@ export function useGoalUpsert() {
       if (!res.authorized) { toast.error('Only admins can save goals.'); return; }
       if (res.error) { toast.error(res.error); return; }
       qc.invalidateQueries({ queryKey: ['bu-console-goals'] });
+      qc.invalidateQueries({ queryKey: ['kra-tree'] });
       toast.success('Goal saved.');
     },
     onError: (e: any) => toast.error(e?.message ?? 'Could not save the goal.'),
@@ -788,6 +796,7 @@ export function useGoalRollup() {
       if (res.error) { toast.error(res.error); return; }
       if (vars.persist) {
         qc.invalidateQueries({ queryKey: ['bu-console-goals'] });
+        qc.invalidateQueries({ queryKey: ['kra-tree'] });
         toast.success('Roll-up saved.');
       }
     },
@@ -806,6 +815,7 @@ export function useGoalArchive() {
     onSuccess: (res) => {
       if (!res.authorized) { toast.error('Only admins can archive goals.'); return; }
       qc.invalidateQueries({ queryKey: ['bu-console-goals'] });
+      qc.invalidateQueries({ queryKey: ['kra-tree'] });
       toast.success('Goal archived.');
     },
     onError: (e: any) => toast.error(e?.message ?? 'Could not archive the goal.'),
