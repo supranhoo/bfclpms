@@ -306,38 +306,39 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
       return;
     }
 
+    // ADR-272 — same validation as the Admin KPI Editor
+    const scoringError = validateScoringState(scoringState);
+    if (scoringError) {
+      toast.error(scoringError);
+      return;
+    }
+    const textPayload = buildTextPayload(textState);
+    const scoringPayload = buildScoringPayload(scoringState);
+
     try {
       await createKpi.mutateAsync({
         payload: {
           employee_id: employeeId,
           category_id: categoryId,
           kra_name: kraName,
-          kpi_name: kpiName,
+          ...textPayload,
           uom: uomType === 'numeric' ? (uom || null) : uomType,
           criteria: uomType === 'numeric' ? (criteria || null) : null,
           target_value: uomType === 'numeric' ? (targetValue ? parseFloat(targetValue) : null) : null,
           weightage: weightage ? parseFloat(weightage) : null,
           frequency: frequency || null,
           source_of_data: sourceOfData || null,
-          r5: uomType === 'numeric' ? (r5 || null) : null,
-          r4: uomType === 'numeric' ? (r4 || null) : null,
-          r3: uomType === 'numeric' ? (r3 || null) : null,
-          r2: uomType === 'numeric' ? (r2 || null) : null,
-          r1: uomType === 'numeric' ? (r1 || null) : null,
-          r0: uomType === 'numeric' ? (r0 || null) : null,
+          ...scoringPayload,
           review_period: resolvedPeriod,
           review_year: reviewYear,
           status: 'kra_set' as ReviewStatus,
           is_org_level: isOrgLevel,
           org_level_scope: isOrgLevel ? orgLevelScope as any : null,
-          uom_type: uomType,
-          qualitative_options: uomType === 'tiered' ? qualitativeOptions : (uomType === 'binary' ? (binaryInverted ? BINARY_OPTIONS_INVERTED : BINARY_OPTIONS) : null),
           sub_frequency: null,
           frequency_cycle_start: (frequencyCycleStart && frequencyCycleStart !== 'system_default') ? frequencyCycleStart : null,
           is_frequency_locked: false,
           require_resubmit_reason: requireResubmitReason,
           day_count_type: frequency === 'Daily' ? dayCountType : null,
-          threshold_mode: uomType === 'numeric' ? thresholdMode : null,
           source_template_id: selectedTemplateId || null,
         },
         errorContext: {
