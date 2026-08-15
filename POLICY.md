@@ -6123,8 +6123,25 @@ plain-language reason.
 ## §BU-CONSOLE-BETA (ADR-259/260)
 - The BU Performance Console is beta and stays invisible until an admin enables
   the `feature_bu_console` switch; the route itself is admin-only.
-- The console is read-only in this phase. It never writes scores, never changes
-  a review stage, and never edits history.
+- Phase 1-2 of the console are read-only. Phase 3 (ADR-261) adds group value
+  entry: a single actual value is fanned out to every mapped employee in scope
+  through `bu_console_group_write`, which delegates to `propagate_org_kpi_value`.
+- No group write is ever committed blind. The dialog must first call the RPC in
+  dry-run mode and show the admin the exact list of employees that will be
+  written (with each employee's derived 0-5 rating from their own scoring bands)
+  and the exact list that will be skipped, each with a stated reason. Silent
+  skips are a defect.
+- Every employee keeps their own weightage and their own scoring bands. The same
+  actual value legitimately yields different ratings; the console never
+  normalises ratings across the group.
+- Rows carrying a non-null `final_score` are never written, under any overwrite
+  policy (POLICY §88). `overwrite_and_stepback` may reset downstream reviewer
+  scores but never an approved row.
+- A KPI row with no parsable scoring bands is skipped as `no_scoring_bands`
+  rather than written with a null score.
+- Every committed group write stamps a shared `batch_id` on a
+  `BU_CONSOLE_GROUP_WRITE` audit row per affected KPI, so the batch can be
+  reviewed or reverted as one unit.
 - Merge proposals are advisory records. A scan may only propose; a human admin
   approves or rejects, and a decision never rewrites past KPI scores.
 - Every console read must go through a `bu_console_*` RPC so scope and
