@@ -8513,3 +8513,39 @@ changed.
 - Metric columns show only values present on the tree nodes (KPI count,
   employee impact). No placeholder ratings or statuses are fabricated.
 - Regression guard: `src/test/buConsoleLayout.test.tsx`.
+
+## ADR-269 — Forward-only KPI text split (FY 2026-27+)
+
+**What.** KPI free text is split into four structured fields (`kpi_title`,
+`kpi_description`, `kpi_formula`, `kpi_scoring_logic`) on `kpis` and
+`kpi_templates`, for the assessment year starting July 2026 onward only.
+
+**Why.** A single blob of text mixes definition, formula and scoring logic, which
+makes KPIs hard to read, compare and standardise. Rewriting historical KPI names
+was rejected: `kpi_name` joins ~1.3M `org_kpi_values` rows and backs alias and
+duplicate-prevention logic.
+
+**How.**
+- Parser SSOT in two mirrored implementations: `src/lib/kpiTextSplit.ts` and
+  `public.kpi_split_text(text)`. Parity is enforced by
+  `src/test/kpiTextSplitParity.test.ts` using fixtures captured from the SQL side.
+- Confidence grading: `high` (title + formula + scoring), `review` (partial or
+  no title), `unparsed` (no markers), `empty`.
+- RPCs (admin-only, fiscal-gated): `kpi_split_summary`, `kpi_split_dry_run`
+  (paginated, returns `total_count`), `kpi_split_apply`, `kpi_split_rollback`,
+  `kpi_split_set_parts` (manual correction).
+- Audit: every apply/manual save writes `kpi_text_split_audit` rows carrying a
+  run id; `kpi_split_rollback(run_id)` restores the previous parts.
+- UI: `KPI Standardization → Text Split` tab (`TextSplitTab.tsx`) with summary
+  stats, paginated preview filtered by confidence, bulk apply of clean splits,
+  undo of the last run, and per-KPI manual editing.
+- Data layer: `src/hooks/useKpiTextSplit.ts`. Pagination is server-side
+  (25/page) — no unbounded fetches.
+- Display: `resolveKpiText(row)` prefers structured parts and falls back to the
+  legacy split of `kpi_name`, so mixed states render correctly during rollout.
+
+**Current scope (FY 2026-27):** 6,070 KPI rows — 5,339 clean, 719 needing review,
+12 without markers.
+
+**Rollback.** Additive columns only; `kpi_split_rollback(run_id)` reverts any run,
+and dropping usage of the columns restores the legacy rendering entirely.
