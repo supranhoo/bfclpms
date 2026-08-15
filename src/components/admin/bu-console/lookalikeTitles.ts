@@ -10,7 +10,8 @@
 
 const MONTH_BRACKET =
   /\((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[^)]*\)/g;
-const SCORING_TAIL = /(?:=+>?\s*\d|\bscoring\s+logic\b|\bformula\s*:)/;
+const SCORING_TAIL =
+  /(?:=+>?\s*\d|\bscoring\s+logic\b|\bformula\s*:|\d+\s*%\s*incentive)/;
 
 /** Lower-cased title with scoring ladders, incentive notes and month lists removed. */
 export function normalizeConsoleTitle(raw: string | null | undefined): string {
