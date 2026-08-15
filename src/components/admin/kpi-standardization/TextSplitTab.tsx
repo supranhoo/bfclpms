@@ -25,6 +25,7 @@ import {
   type KpiSplitPreviewRow,
 } from '@/hooks/useKpiTextSplit';
 import type { KpiSplitConfidence } from '@/lib/kpiTextSplit';
+import type { KpiSplitState } from '@/hooks/useKpiTextSplit';
 
 const PAGE_SIZE = 25;
 
@@ -54,28 +55,32 @@ function Stat({ label, value }: { label: string; value: number | string }) {
 
 export function TextSplitTab() {
   const [confidence, setConfidence] = useState<KpiSplitConfidence | 'all'>('high');
+  const [state, setState] = useState<KpiSplitState>('pending');
   const [page, setPage] = useState(0);
   const [editing, setEditing] = useState<KpiSplitPreviewRow | null>(null);
-  const [lastRunId, setLastRunId] = useState<string | null>(null);
+  const [lastRunIds, setLastRunIds] = useState<string[]>([]);
+  const [progress, setProgress] = useState(0);
 
   const summary = useKpiSplitSummary();
-  const preview = useKpiSplitPreview({ page, pageSize: PAGE_SIZE, confidence });
-  const apply = useApplyKpiSplit();
+  const preview = useKpiSplitPreview({ page, pageSize: PAGE_SIZE, confidence, state });
+  const apply = useApplyKpiSplit(setProgress);
   const rollback = useRollbackKpiSplit();
   const save = useSaveKpiParts();
 
   const rows = preview.data ?? [];
   const total = rows[0]?.total_count ?? 0;
   const pages = Math.max(1, Math.ceil(Number(total) / PAGE_SIZE));
+  const pendingHigh = summary.data?.pending_high ?? 0;
 
   const runApply = () => {
+    setProgress(0);
     apply.mutate(
-      { confidence: 'high', limit: 5000 },
+      { confidence: 'high' },
       {
         onSuccess: (res) => {
-          setLastRunId(res.run_id);
+          setLastRunIds(res.run_ids);
           toast.success(`Split applied to ${res.applied} KPI${res.applied === 1 ? '' : 's'}`, {
-            description: 'Original KPI name text was not modified.',
+            description: `${res.batches} batch${res.batches === 1 ? '' : 'es'} · original KPI name text was not modified.`,
           });
         },
         onError: (e: unknown) => toast.error('Could not apply the split', { description: (e as Error).message }),
@@ -84,11 +89,14 @@ export function TextSplitTab() {
   };
 
   const runRollback = () => {
-    if (!lastRunId) return;
-    rollback.mutate(lastRunId, {
+    const runId = lastRunIds[lastRunIds.length - 1];
+    if (!runId) return;
+    rollback.mutate(runId, {
       onSuccess: (res) => {
-        toast.success(`Reverted ${res.reverted} KPI${res.reverted === 1 ? '' : 's'}`);
-        setLastRunId(null);
+        toast.success(`Reverted ${res.reverted} KPI${res.reverted === 1 ? '' : 's'}`, {
+          description: lastRunIds.length > 1 ? `${lastRunIds.length - 1} earlier batch(es) remain applied.` : undefined,
+        });
+        setLastRunIds((ids) => ids.slice(0, -1));
       },
       onError: (e: unknown) => toast.error('Rollback failed', { description: (e as Error).message }),
     });
@@ -120,17 +128,19 @@ export function TextSplitTab() {
           ) : null}
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={runApply} disabled={apply.isPending}>
+            <Button onClick={runApply} disabled={apply.isPending || (!apply.isPending && pendingHigh === 0)}>
               <PlayCircle className="mr-2 h-4 w-4" />
-              {apply.isPending ? 'Applying…' : 'Apply clean splits'}
+              {apply.isPending
+                ? `Applying… ${progress} of ${pendingHigh}`
+                : 'Apply clean splits'}
             </Button>
-            <Button variant="outline" onClick={runRollback} disabled={!lastRunId || rollback.isPending}>
+            <Button variant="outline" onClick={runRollback} disabled={lastRunIds.length === 0 || rollback.isPending}>
               <Undo2 className="mr-2 h-4 w-4" />
-              Undo last run
+              {lastRunIds.length > 1 ? `Undo last batch (${lastRunIds.length})` : 'Undo last run'}
             </Button>
             {summary.data ? (
               <span className="text-xs text-muted-foreground">
-                {summary.data.already_split} already structured
+                {summary.data.pending} pending · {summary.data.already_split} already structured
               </span>
             ) : null}
           </div>
@@ -143,6 +153,23 @@ export function TextSplitTab() {
             <CardTitle className="text-base">Preview</CardTitle>
             <CardDescription>{Number(total)} row{Number(total) === 1 ? '' : 's'} in this filter</CardDescription>
           </div>
+          <div className="flex items-center gap-2">
+          <Select
+            value={state}
+            onValueChange={(v) => {
+              setState(v as KpiSplitState);
+              setPage(0);
+            }}
+          >
+            <SelectTrigger className="h-9 w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pending">Pending only</SelectItem>
+              <SelectItem value="structured">Already structured</SelectItem>
+              <SelectItem value="all">All states</SelectItem>
+            </SelectContent>
+          </Select>
           <Select
             value={confidence}
             onValueChange={(v) => {
@@ -160,6 +187,7 @@ export function TextSplitTab() {
               <SelectItem value="all">All</SelectItem>
             </SelectContent>
           </Select>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           {preview.isLoading ? (

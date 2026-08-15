@@ -14,8 +14,15 @@ export interface KpiSplitSummary {
   review: number;
   unparsed: number;
   already_split: number;
+  pending: number;
+  pending_high: number;
   legacy_untouched: number;
 }
+
+export type KpiSplitState = 'pending' | 'structured' | 'all';
+
+/** Rows applied per RPC call. The server caps at 20,000; the UI loops until done. */
+const APPLY_BATCH_SIZE = 5000;
 
 export interface KpiSplitPreviewRow {
   kpi_id: string;
@@ -49,17 +56,19 @@ export function useKpiSplitPreview(params: {
   page: number;
   pageSize: number;
   confidence: KpiSplitConfidence | 'all';
+  state?: KpiSplitState;
   enabled?: boolean;
 }) {
-  const { page, pageSize, confidence, enabled = true } = params;
+  const { page, pageSize, confidence, state = 'pending', enabled = true } = params;
   return useQuery({
-    queryKey: ['kpi-split-preview', page, pageSize, confidence],
+    queryKey: ['kpi-split-preview', page, pageSize, confidence, state],
     enabled,
     queryFn: async (): Promise<KpiSplitPreviewRow[]> => {
       const { data, error } = await supabase.rpc('kpi_split_dry_run', {
         p_limit: pageSize,
         p_offset: page * pageSize,
         p_confidence: confidence === 'all' ? null : confidence,
+        p_state: state,
       });
       if (error) throw error;
       return (data ?? []) as unknown as KpiSplitPreviewRow[];
@@ -75,17 +84,49 @@ function useInvalidateSplit() {
   };
 }
 
-export function useApplyKpiSplit() {
+/**
+ * Applies the split in repeated batches until the server reports no pending
+ * rows left. No dataset size can silently truncate the run (ADR-269).
+ */
+export function useApplyKpiSplit(onProgress?: (appliedSoFar: number) => void) {
   const invalidate = useInvalidateSplit();
   return useMutation({
-    mutationFn: async (vars: { ids?: string[]; limit?: number; confidence?: KpiSplitConfidence | null }) => {
-      const { data, error } = await supabase.rpc('kpi_split_apply', {
-        p_ids: vars.ids ?? null,
-        p_limit: vars.limit ?? 1000,
-        p_confidence: vars.confidence ?? 'high',
-      });
-      if (error) throw error;
-      return data as unknown as { run_id: string; applied: number };
+    mutationFn: async (vars: {
+      ids?: string[];
+      confidence?: KpiSplitConfidence | null;
+      batchSize?: number;
+    }) => {
+      const runIds: string[] = [];
+      let applied = 0;
+
+      // Explicit ids => single targeted call (allows manual re-split).
+      if (vars.ids?.length) {
+        const { data, error } = await supabase.rpc('kpi_split_apply', {
+          p_ids: vars.ids,
+          p_limit: vars.ids.length,
+          p_confidence: vars.confidence ?? null,
+        });
+        if (error) throw error;
+        const res = data as unknown as { run_id: string; applied: number };
+        return { run_ids: [res.run_id], run_id: res.run_id, applied: res.applied, batches: 1 };
+      }
+
+      for (let batch = 0; batch < 100; batch++) {
+        const { data, error } = await supabase.rpc('kpi_split_apply', {
+          p_ids: null,
+          p_limit: vars.batchSize ?? APPLY_BATCH_SIZE,
+          p_confidence: vars.confidence ?? 'high',
+        });
+        if (error) throw error;
+        const res = data as unknown as { run_id: string; applied: number };
+        if (!res.applied) break;
+        runIds.push(res.run_id);
+        applied += res.applied;
+        onProgress?.(applied);
+        if (res.applied < (vars.batchSize ?? APPLY_BATCH_SIZE)) break;
+      }
+
+      return { run_ids: runIds, run_id: runIds[runIds.length - 1] ?? null, applied, batches: runIds.length };
     },
     onSuccess: invalidate,
   });

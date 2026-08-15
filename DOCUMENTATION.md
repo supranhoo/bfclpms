@@ -8549,3 +8549,24 @@ duplicate-prevention logic.
 
 **Rollback.** Additive columns only; `kpi_split_rollback(run_id)` reverts any run,
 and dropping usage of the columns restores the legacy rendering entirely.
+
+### ADR-269a — Apply is batched and idempotent (no 5,000-row ceiling)
+
+**Issue.** The first release capped `kpi_split_apply` at 5,000 rows and did not
+skip already-structured KPIs, so repeated runs kept re-targeting the same first
+5,000 rows and the remaining pending rows were never processed. The preview also
+listed already-structured rows, making it look as if nothing had been applied.
+
+**Fix.**
+- `kpi_split_apply` now hard-filters `kpi_title IS NULL` (pending only) and its
+  ceiling is raised to 20,000 rows per call.
+- `kpi_split_dry_run` and `kpi_split_summary` accept a `p_state` filter
+  (`pending` / `structured` / `all`) and the summary returns `pending` and
+  `pending_high` counts.
+- `useApplyKpiSplit` loops batches of 5,000 until the server returns fewer rows
+  than the batch size, reporting live progress and every run id so each batch can
+  be undone individually.
+- The preview defaults to **Pending only** with an explicit state selector.
+
+**Tests.** `src/test/kpiSplitApplyBatching.test.ts` — multi-batch completion,
+idempotent zero-row re-run, and a guard that no apply payload carries `kpi_name`.

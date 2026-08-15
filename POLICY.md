@@ -6260,3 +6260,10 @@ plain-language reason.
   bulk. Rows without a detectable title — including text that opens with
   "Description:" — are flagged for human review and must be named manually.
 - Review, scoring, weightage and workflow mechanics are unchanged by the split.
+- **No apply ceiling and no repeat work.** Bulk apply is idempotent: the RPC skips
+  rows that already carry structured text, and the admin screen loops batches
+  until the server reports zero pending rows. A run must never stop silently at a
+  fixed row limit, and re-running must never re-target already-structured KPIs.
+- The admin preview defaults to **Pending only**; already-structured rows are
+  visible solely via the explicit state filter, so the queue always reflects the
+  work that is actually left.
