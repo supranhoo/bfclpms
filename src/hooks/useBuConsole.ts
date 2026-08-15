@@ -89,6 +89,29 @@ export interface MergeProposal {
   created_at: string;
 }
 
+/**
+ * ADR-264 — every console surface that can exceed its display cap must expose
+ * the true total and label the cut. Shared shape for the paged RPCs.
+ */
+export interface MergeProposalPage {
+  authorized: boolean;
+  rows: MergeProposal[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+/** Detail lists in group previews are capped; counts never are. */
+export interface SkipSummaryEntry {
+  reason: string;
+  count: number;
+}
+
+export const GROUP_PREVIEW_DETAIL_LIMIT = 500;
+
+/** Above this many affected employees a group action needs a typed confirmation. */
+export const GROUP_ACTION_CONFIRM_THRESHOLD = 2000;
+
 /** Beta gate — the console stays hidden until an admin flips the flag. */
 export function useBuConsoleFlag() {
   return useQuery({
