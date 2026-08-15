@@ -29,6 +29,11 @@ export interface KPI {
   employee_id: string;
   kra_name: string;
   kpi_name: string;
+  // ADR-269 structured text (FY 2026-27+ only; null on legacy rows)
+  kpi_title?: string | null;
+  kpi_description?: string | null;
+  kpi_formula?: string | null;
+  kpi_scoring_logic?: string | null;
   uom: string | null;
   criteria: string | null;
   target_value: number | null;
