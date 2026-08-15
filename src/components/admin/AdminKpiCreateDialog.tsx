@@ -1092,33 +1092,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                         </div>
                       )}
                     </div>
-                    <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Binary Polarity</Label>
-                        <Select value={binaryInverted ? 'inverted' : 'standard'} onValueChange={(v) => setBinaryInverted(v === 'inverted')}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="standard">Standard (Yes = Good)</SelectItem>
-                            <SelectItem value="inverted">Inverted (No = Good)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                          {binaryInverted
-                            ? 'Inverted: "No" scores R5 (5), "Yes" scores R0 (0) — for safety KPIs like LTI.'
-                            : 'Standard: "Yes" scores R5 (5), "No" scores R0 (0).'}
-                        </p>
-                      </div>
-                      <div className="flex gap-4">
-                        <Badge className={binaryInverted ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}>
-                          Yes = R{binaryInverted ? '0 (0)' : '5 (5)'}
-                        </Badge>
-                        <Badge className={binaryInverted ? 'bg-blue-500 text-white' : 'bg-red-500 text-white'}>
-                          No = R{binaryInverted ? '5 (5)' : '0 (0)'}
-                        </Badge>
-                      </div>
-                    </div>
+                    {/* ADR-272 / ADR-271 — shared, type-aware scoring editor */}
+                    <KpiScoringEditor value={scoringState} onChange={setScoring} />
                   </div>
                 )}
 
@@ -1153,10 +1128,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                         </Select>
                       </div>
                     </div>
-                    <TieredOptionsBuilder
-                      options={qualitativeOptions}
-                      onChange={setQualitativeOptions}
-                    />
+                    {/* ADR-272 / ADR-271 — shared, type-aware scoring editor */}
+                    <KpiScoringEditor value={scoringState} onChange={setScoring} />
                   </div>
                 )}
 
