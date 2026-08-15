@@ -187,6 +187,7 @@ export function useMyKpis() {
 // via separate `.in('id', [...])` lookups after fetching.
 const SLIM_KPI_SELECT = `
   id, employee_id, category_id, kra_name, kpi_name, status, weightage,
+  kpi_title, kpi_description, kpi_formula, kpi_scoring_logic,
   review_period, review_year, frequency, is_org_level, org_level_scope,
   uom, uom_type, criteria, target_value, r5, r4, r3, r2, r1, r0,
   sub_frequency, frequency_cycle_start, source_template_id, threshold_mode,
