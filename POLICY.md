@@ -6373,3 +6373,19 @@ group-only), and additionally allows several employees to be tuned at once in a
 single undoable run. Every mapped-employee row shows which of its fields are
 individually tuned, and an admin can release them back to the group definition.
 A cycle move requires the typed confirmation, like a structural move.
+
+## §KRA-TREE-SINGLE-CASCADE (ADR-276)
+Objectives are shown as one indented cascade, Organisation → Business Unit →
+Department → Employee, and are named in the business's own words: a **KRA**
+when it aggregates children, a **KPI** when it is the measurable leaf. The word
+"goal" does not appear in the UI. Nesting is limited to four levels and loops
+are rejected server-side.
+Structure and alignment are separate: `parent_goal_id` is where an item sits in
+the cascade, `aligns_to_id` is a cross-functional link that never changes
+roll-up. Roll-up rules are unchanged — weighted by employee weightage for
+KPI-backed items and by declared weight for parents; never a plain average.
+Health is derived from progress against elapsed time (achieved / on track / at
+risk / behind), and a hand-set status always wins over the derived one and is
+labelled as manual. Every level of the tree is server-paged and loaded on
+expand; a level with more rows than one page shows a "Load more" control and is
+never silently truncated.

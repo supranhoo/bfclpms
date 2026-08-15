@@ -14,10 +14,13 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { OrgFilterCombobox } from '@/components/admin/OrgFilterCombobox';
+import { EmployeeCombobox } from '@/components/admin/EmployeeCombobox';
+import { useActiveEmployeesForCopy } from '@/hooks/useActiveEmployeesForCopy';
 import { useKraCategories } from '@/hooks/useOrganization';
 import {
   useGoalUpsert,
   useGoalKraOptions,
+  useKraTree,
   GOAL_SUMMARY_RULE_LABELS,
   GOAL_SOURCE_LABELS,
   type BuGoalRow,
@@ -28,13 +31,16 @@ import {
   type GoalVisibility,
 } from '@/hooks/useBuConsole';
 
+/** Rows reach this dialog from either the legacy list or the KRA tree. */
+export type GoalFormSeed = Partial<BuGoalRow> & { id: string };
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Goal being edited, or null when creating. */
-  goal: BuGoalRow | null;
+  goal: GoalFormSeed | null;
   /** Set when creating a sub-goal under this parent. */
-  parent: BuGoalRow | null;
+  parent: GoalFormSeed | null;
   year: number;
   period: string | null;
   buOptions: { value: string; label: string }[];
@@ -66,6 +72,10 @@ export function GoalFormDialog({ open, onOpenChange, goal, parent, year, period,
   const [targetValue, setTargetValue] = useState('');
   const [currentValue, setCurrentValue] = useState('');
   const [notes, setNotes] = useState('');
+  const [ownerId, setOwnerId] = useState<string>('');
+  const [alignsToId, setAlignsToId] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   useEffect(() => {
     if (!open) return;
@@ -88,6 +98,10 @@ export function GoalFormDialog({ open, onOpenChange, goal, parent, year, period,
     setTargetValue(goal?.target_value?.toString() ?? '');
     setCurrentValue(goal?.current_value?.toString() ?? '');
     setNotes(goal?.notes ?? '');
+    setOwnerId(goal?.owner_profile_id ?? parent?.owner_profile_id ?? '');
+    setAlignsToId((goal as any)?.aligns_to_id ?? null);
+    setStartDate((goal as any)?.start_date ?? '');
+    setEndDate((goal as any)?.end_date ?? '');
   }, [open, goal, parent, period]);
 
   const categoryOptions = useMemo(
@@ -96,6 +110,18 @@ export function GoalFormDialog({ open, onOpenChange, goal, parent, year, period,
   );
 
   const { data: kraOptionsData } = useGoalKraOptions(year, categoryId, kraName, kraSearch, open && goalSource === 'kpi_rollup');
+
+  /** Employees for the "Employee" level owner. Paged roster (POLICY §94). */
+  const { data: employees } = useActiveEmployeesForCopy({ enabled: open && entityLevel === 'individual' });
+
+  /** Top-level KRAs are the alignment targets (ADR-276). */
+  const { data: alignTargets } = useKraTree(open ? { year, period: null, parentId: null, pageSize: 200 } : null);
+  const alignOptions = useMemo(
+    () => (alignTargets?.rows ?? [])
+      .filter(r => r.id !== goal?.id)
+      .map(r => ({ value: r.id, label: r.title ?? r.kra_name ?? 'Untitled' })),
+    [alignTargets, goal?.id],
+  );
 
   const kraOptions = useMemo(
     () => (kraOptionsData?.kras ?? []).map(k => ({ value: k, label: k })),
@@ -126,6 +152,10 @@ export function GoalFormDialog({ open, onOpenChange, goal, parent, year, period,
         entityLevel,
         businessUnitId: entityLevel === 'org' ? null : buId,
         departmentId: entityLevel === 'department' ? deptId : null,
+        ownerProfileId: entityLevel === 'individual' ? (ownerId || null) : null,
+        alignsToId,
+        startDate: startDate || null,
+        endDate: endDate || null,
         progressType,
         subperiodSummaryRule: rule,
         visibility,
@@ -224,6 +254,7 @@ export function GoalFormDialog({ open, onOpenChange, goal, parent, year, period,
                   <SelectItem value="org">Organisation</SelectItem>
                   <SelectItem value="bu">Business unit</SelectItem>
                   <SelectItem value="department">Department</SelectItem>
+                  <SelectItem value="individual">Employee</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -246,7 +277,7 @@ export function GoalFormDialog({ open, onOpenChange, goal, parent, year, period,
                 options={buOptions}
                 placeholder="All business units"
               />
-              {entityLevel === 'department' && (
+              {(entityLevel === 'department' || entityLevel === 'individual') && (
                 <OrgFilterCombobox
                   label="Department"
                   value={deptId ?? ''}
@@ -257,6 +288,36 @@ export function GoalFormDialog({ open, onOpenChange, goal, parent, year, period,
               )}
             </div>
           )}
+
+          {entityLevel === 'individual' && (
+            <div className="space-y-2">
+              <Label>Owner</Label>
+              <EmployeeCombobox
+                employees={employees ?? []}
+                value={ownerId}
+                onChange={setOwnerId}
+                placeholder="Pick the employee who owns this KRA"
+              />
+            </div>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Starts on</Label>
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Due by</Label>
+              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            </div>
+            <OrgFilterCombobox
+              label="Aligns to (optional)"
+              value={alignsToId ?? ''}
+              onValueChange={(v) => setAlignsToId(v || null)}
+              options={alignOptions}
+              placeholder="No alignment"
+            />
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">

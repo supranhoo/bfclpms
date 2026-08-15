@@ -8818,3 +8818,32 @@ incl. 6 new for anchor validation and the new field diffs).
 
 **Rollback.** Additive: the new fields can be dropped from the whitelist and the
 two new RPCs dropped; existing rows are untouched. Any run stays undoable.
+
+## ADR-276 — KRA Tree (Performance Console)
+
+**What.** The console's "Goals" tab is now **KRA Tree**: one indented cascade
+(Organisation → Business Unit → Department → Employee) with owner, alignment
+chip, level badge, health chip and progress bar on each row.
+
+**Why.** The wide goals table was cluttered and mixed two vocabularies. KRA and
+goal mean the same thing here, so the UI keeps one word — KRA — and shows the
+hierarchy the same way KRAs are already mapped.
+
+**How.**
+- DB: `bu_goals` gains `aligns_to_id`, `status` (+ reason / who / when),
+  `start_date`, `end_date`. New `kra_progress_pct()`, `kra_derive_status()` and
+  the paged reader `kra_tree_list(year, period, parent_id, bu_ids, dept_ids,
+  category_ids, search, page, page_size)`. `bu_goal_upsert` rebuilt: four-level
+  nesting with an ancestor-walk loop guard, alignment link and dates.
+- UI: `KraTree.tsx` (recursive, level-by-level fetch, "Load more" per level),
+  `GoalsTab.tsx` rewritten around it, `GoalFormDialog` gains the Employee level
+  with an owner picker, start/due dates and the alignment picker.
+- Hooks: `useKraTree`, extended `GoalUpsertArgs`.
+
+**Scalability.** No level is fetched until it is expanded; each level is capped
+at 200 rows per page with the true total returned, so the tree scales with the
+org rather than the dataset. Mapped-employee counts are computed per visible
+row only.
+
+**Rollback.** Additive: the new columns are nullable, `kra_tree_list` can be
+dropped, and the previous list RPC (`bu_goal_list`) is still in place.
