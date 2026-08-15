@@ -16,6 +16,11 @@ export interface KpiSplitSummary {
   already_split: number;
   pending: number;
   pending_high: number;
+  pending_review?: number;
+  pending_unparsed?: number;
+  needs_manual?: number;
+  needs_manual_groups?: number;
+  pending_groups?: number;
   legacy_untouched: number;
 }
 
@@ -37,6 +42,49 @@ export interface KpiSplitPreviewRow {
   confidence: KpiSplitConfidence;
   already_split: boolean;
   total_count: number;
+}
+
+/**
+ * ADR-269b1 — duplicate-aware preview. One row per distinct KPI text, so a
+ * single correction covers every employee row that shares that text.
+ */
+export interface KpiSplitGroupRow {
+  kpi_name: string;
+  sample_kpi_id: string;
+  row_count: number;
+  pending_count: number;
+  structured_count: number;
+  kra_sample: string | null;
+  title: string | null;
+  description: string | null;
+  formula: string | null;
+  scoring_logic: string | null;
+  confidence: KpiSplitConfidence;
+  total_groups: number;
+}
+
+export function useKpiSplitGroups(params: {
+  page: number;
+  pageSize: number;
+  confidence: KpiSplitConfidence | 'all';
+  state?: KpiSplitState;
+  enabled?: boolean;
+}) {
+  const { page, pageSize, confidence, state = 'pending', enabled = true } = params;
+  return useQuery({
+    queryKey: ['kpi-split-groups', page, pageSize, confidence, state],
+    enabled,
+    queryFn: async (): Promise<KpiSplitGroupRow[]> => {
+      const { data, error } = await supabase.rpc('kpi_split_grouped_dry_run', {
+        p_limit: pageSize,
+        p_offset: page * pageSize,
+        p_confidence: confidence === 'all' ? null : confidence,
+        p_state: state,
+      });
+      if (error) throw error;
+      return (data ?? []) as unknown as KpiSplitGroupRow[];
+    },
+  });
 }
 
 export function useKpiSplitSummary(enabled = true) {
@@ -81,6 +129,7 @@ function useInvalidateSplit() {
   return () => {
     qc.invalidateQueries({ queryKey: ['kpi-split-summary'] });
     qc.invalidateQueries({ queryKey: ['kpi-split-preview'] });
+    qc.invalidateQueries({ queryKey: ['kpi-split-groups'] });
   };
 }
 
@@ -163,6 +212,34 @@ export function useSaveKpiParts() {
       });
       if (error) throw error;
       return data;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * Saves a correction once for every FY 2026-27+ KPI row that shares the exact
+ * same source text (ADR-269b1) — duplicates are never fixed one by one.
+ */
+export function useSaveKpiPartsByName() {
+  const invalidate = useInvalidateSplit();
+  return useMutation({
+    mutationFn: async (vars: {
+      kpiName: string;
+      title: string | null;
+      description: string | null;
+      formula: string | null;
+      scoring_logic: string | null;
+    }) => {
+      const { data, error } = await supabase.rpc('kpi_split_set_parts_by_name', {
+        p_kpi_name: vars.kpiName,
+        p_title: vars.title,
+        p_description: vars.description,
+        p_formula: vars.formula,
+        p_scoring_logic: vars.scoring_logic,
+      });
+      if (error) throw error;
+      return data as unknown as { run_id: string; updated: number };
     },
     onSuccess: invalidate,
   });

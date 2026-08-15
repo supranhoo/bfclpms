@@ -8571,6 +8571,25 @@ listed already-structured rows, making it look as if nothing had been applied.
 **Tests.** `src/test/kpiSplitApplyBatching.test.ts` — multi-batch completion,
 idempotent zero-row re-run, and a guard that no apply payload carries `kpi_name`.
 
+### ADR-269b1 — Duplicate-aware split queue
+
+**Issue.** 719 "Needs review" rows in scope collapse to only 104 distinct KPI
+texts, yet the queue listed every employee row and each had to be corrected
+individually. "Needs review" and "No markers" rows were also unreachable by bulk
+apply, which was hard-wired to `confidence = 'high'`.
+
+**Fix.**
+- `kpi_split_grouped_dry_run(limit, offset, confidence, state)` returns one row
+  per distinct `kpi_name` with `row_count` / `pending_count` /
+  `structured_count`.
+- `kpi_split_set_parts_by_name(...)` writes a correction to every FY 2026-27+ row
+  sharing that text, audited as one `manual_group` run (revertible).
+- `kpi_split_summary` adds `pending_review`, `pending_unparsed`, `needs_manual`,
+  `needs_manual_groups`, `pending_groups`.
+- Text Split tab shows grouped rows with a `×N` badge, an "Apply reviewed splits"
+  action for review-confidence rows that have a title, and an explicit note for
+  the rows that genuinely need manual naming.
+
 ### ADR-269b — Structured KPI text reaches reviewers (display wiring)
 
 **What.** The structured columns are now rendered in the scorecard, the review

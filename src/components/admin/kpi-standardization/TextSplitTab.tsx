@@ -18,11 +18,11 @@ import { toast } from 'sonner';
 import { ChevronLeft, ChevronRight, Pencil, PlayCircle, Undo2 } from 'lucide-react';
 import {
   useApplyKpiSplit,
-  useKpiSplitPreview,
+  useKpiSplitGroups,
   useKpiSplitSummary,
   useRollbackKpiSplit,
-  useSaveKpiParts,
-  type KpiSplitPreviewRow,
+  useSaveKpiPartsByName,
+  type KpiSplitGroupRow,
 } from '@/hooks/useKpiTextSplit';
 import type { KpiSplitConfidence } from '@/lib/kpiTextSplit';
 import type { KpiSplitState } from '@/hooks/useKpiTextSplit';
@@ -57,25 +57,28 @@ export function TextSplitTab() {
   const [confidence, setConfidence] = useState<KpiSplitConfidence | 'all'>('high');
   const [state, setState] = useState<KpiSplitState>('pending');
   const [page, setPage] = useState(0);
-  const [editing, setEditing] = useState<KpiSplitPreviewRow | null>(null);
+  const [editing, setEditing] = useState<KpiSplitGroupRow | null>(null);
   const [lastRunIds, setLastRunIds] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
 
   const summary = useKpiSplitSummary();
-  const preview = useKpiSplitPreview({ page, pageSize: PAGE_SIZE, confidence, state });
+  const preview = useKpiSplitGroups({ page, pageSize: PAGE_SIZE, confidence, state });
   const apply = useApplyKpiSplit(setProgress);
   const rollback = useRollbackKpiSplit();
-  const save = useSaveKpiParts();
+  const save = useSaveKpiPartsByName();
 
   const rows = preview.data ?? [];
-  const total = rows[0]?.total_count ?? 0;
+  const total = rows[0]?.total_groups ?? 0;
   const pages = Math.max(1, Math.ceil(Number(total) / PAGE_SIZE));
   const pendingHigh = summary.data?.pending_high ?? 0;
+  const pendingReview = summary.data?.pending_review ?? 0;
+  const needsManual = summary.data?.needs_manual ?? 0;
+  const needsManualGroups = summary.data?.needs_manual_groups ?? 0;
 
-  const runApply = () => {
+  const runApply = (conf: 'high' | 'review') => {
     setProgress(0);
     apply.mutate(
-      { confidence: 'high' },
+      { confidence: conf },
       {
         onSuccess: (res) => {
           setLastRunIds(res.run_ids);
@@ -128,11 +131,19 @@ export function TextSplitTab() {
           ) : null}
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={runApply} disabled={apply.isPending || (!apply.isPending && pendingHigh === 0)}>
+            <Button onClick={() => runApply('high')} disabled={apply.isPending || pendingHigh === 0}>
               <PlayCircle className="mr-2 h-4 w-4" />
               {apply.isPending
                 ? `Applying… ${progress} of ${pendingHigh}`
                 : 'Apply clean splits'}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => runApply('review')}
+              disabled={apply.isPending || pendingReview === 0}
+            >
+              <PlayCircle className="mr-2 h-4 w-4" />
+              Apply reviewed splits ({pendingReview})
             </Button>
             <Button variant="outline" onClick={runRollback} disabled={lastRunIds.length === 0 || rollback.isPending}>
               <Undo2 className="mr-2 h-4 w-4" />
@@ -144,6 +155,13 @@ export function TextSplitTab() {
               </span>
             ) : null}
           </div>
+          {needsManual > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {needsManual} KPI row{needsManual === 1 ? '' : 's'} ({needsManualGroups} distinct text
+              {needsManualGroups === 1 ? '' : 's'}) have no detectable title — these can only be fixed by editing the
+              text below. Each edit is saved once for every duplicate of that text.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -151,7 +169,10 @@ export function TextSplitTab() {
         <CardHeader className="flex-row items-center justify-between gap-3 space-y-0 pb-3">
           <div>
             <CardTitle className="text-base">Preview</CardTitle>
-            <CardDescription>{Number(total)} row{Number(total) === 1 ? '' : 's'} in this filter</CardDescription>
+            <CardDescription>
+              {Number(total)} distinct KPI text{Number(total) === 1 ? '' : 's'} in this filter — duplicates are grouped,
+              one fix updates them all
+            </CardDescription>
           </div>
           <div className="flex items-center gap-2">
           <Select
@@ -196,18 +217,20 @@ export function TextSplitTab() {
             <p className="py-8 text-center text-sm text-muted-foreground">No KPIs match this filter.</p>
           ) : (
             rows.map((r) => (
-              <div key={r.kpi_id} className="rounded-lg border p-3">
+              <div key={r.kpi_name} className="rounded-lg border p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium">
                       {r.title ?? <span className="text-destructive">No title detected</span>}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {r.kra_name} · {r.review_period} {r.review_year}
+                      {r.kra_sample} · {Number(r.row_count)} KPI row{Number(r.row_count) === 1 ? '' : 's'} share this text
+                      {Number(r.structured_count) > 0 ? ` · ${Number(r.structured_count)} already structured` : ''}
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    {r.already_split ? <Badge variant="outline">Structured</Badge> : null}
+                    <Badge variant="outline">×{Number(r.row_count)}</Badge>
+                    {Number(r.pending_count) === 0 ? <Badge variant="outline">Structured</Badge> : null}
                     <ConfidenceBadge value={r.confidence} />
                     <Button size="sm" variant="ghost" onClick={() => setEditing(r)}>
                       <Pencil className="h-4 w-4" />
@@ -259,10 +282,12 @@ export function TextSplitTab() {
         onSave={(parts) => {
           if (!editing) return;
           save.mutate(
-            { kpiId: editing.kpi_id, ...parts },
+            { kpiName: editing.kpi_name, ...parts },
             {
-              onSuccess: () => {
-                toast.success('Structured text saved');
+              onSuccess: (res) => {
+                toast.success(`Structured text saved for ${res.updated} KPI row${res.updated === 1 ? '' : 's'}`, {
+                  description: 'Every duplicate of this KPI text was updated in one go.',
+                });
                 setEditing(null);
               },
               onError: (e: unknown) => toast.error('Save failed', { description: (e as Error).message }),
@@ -281,7 +306,7 @@ function EditPartsDialog({
   onSave,
   saving,
 }: {
-  row: KpiSplitPreviewRow | null;
+  row: KpiSplitGroupRow | null;
   onClose: () => void;
   onSave: (p: { title: string | null; description: string | null; formula: string | null; scoring_logic: string | null }) => void;
   saving: boolean;
@@ -292,8 +317,8 @@ function EditPartsDialog({
   const [scoring, setScoring] = useState('');
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
 
-  if (row && loadedFor !== row.kpi_id) {
-    setLoadedFor(row.kpi_id);
+  if (row && loadedFor !== row.kpi_name) {
+    setLoadedFor(row.kpi_name);
     setTitle(row.title ?? '');
     setDescription(row.description ?? '');
     setFormula(row.formula ?? '');
@@ -306,7 +331,8 @@ function EditPartsDialog({
         <DialogHeader>
           <DialogTitle>Edit structured KPI text</DialogTitle>
           <DialogDescription>
-            Saves the four structured fields only. The original KPI name text stays exactly as it is.
+            Saves the four structured fields for all {row ? Number(row.row_count) : 0} KPI row(s) that share this exact
+            text. The original KPI name text stays exactly as it is.
           </DialogDescription>
         </DialogHeader>
 
