@@ -16748,6 +16748,23 @@ export type Database = {
         Args: { p_fuzzy_threshold?: number }
         Returns: Json
       }
+      bu_console_group_write: {
+        Args: {
+          p_achieved_value?: number
+          p_bu_ids?: string[]
+          p_category_id: string
+          p_dept_ids?: string[]
+          p_dry_run?: boolean
+          p_is_na?: boolean
+          p_kpi_name: string
+          p_kra_name: string
+          p_overwrite_policy?: string
+          p_period: string
+          p_remarks?: string
+          p_year: number
+        }
+        Returns: Json
+      }
       bu_console_kpi_detail: {
         Args: {
           p_bu_ids?: string[]
