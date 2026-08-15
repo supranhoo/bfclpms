@@ -801,6 +801,9 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                   )}
                 </div>
 
+                {/* ADR-272 — structured KPI text (title / description / formula / logic) */}
+                <KpiTextSplitFields value={textState} onChange={handleTextChange} />
+
                 {/* ADR-272 / ADR-271 — shared, type-aware scoring editor */}
                 {uomType === 'numeric' && (
                   <KpiScoringEditor value={scoringState} onChange={setScoring} />
