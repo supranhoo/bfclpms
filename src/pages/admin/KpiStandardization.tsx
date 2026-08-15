@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScanSearch, BookCheck, Wrench, ShieldCheck, Activity, Sparkles, History } from 'lucide-react';
+import { ScanSearch, BookCheck, Wrench, ShieldCheck, Activity, Sparkles, History, SplitSquareHorizontal } from 'lucide-react';
 import { BuildRegistryTab } from '@/components/admin/kpi-standardization/BuildRegistryTab';
 import { ReviewRegistryTab } from '@/components/admin/kpi-standardization/ReviewRegistryTab';
 import { CorrectMayKpisTab } from '@/components/admin/kpi-standardization/CorrectMayKpisTab';
@@ -8,6 +8,7 @@ import { GovernanceTab } from '@/components/admin/kpi-standardization/Governance
 import { HealthCoverageTab } from '@/components/admin/kpi-standardization/HealthCoverageTab';
 import { SuggestionsTab } from '@/components/admin/kpi-standardization/SuggestionsTab';
 import { HistoryUndoTab } from '@/components/admin/kpi-standardization/HistoryUndoTab';
+import { TextSplitTab } from '@/components/admin/kpi-standardization/TextSplitTab';
 
 export default function KpiStandardization() {
   const [activeTab, setActiveTab] = useState('build');
@@ -22,7 +23,7 @@ export default function KpiStandardization() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-7 w-full max-w-5xl">
+        <TabsList className="grid grid-cols-4 w-full max-w-5xl lg:grid-cols-8">
           <TabsTrigger value="build" className="flex items-center gap-1.5">
             <ScanSearch className="h-4 w-4" />
             Build Registry
@@ -50,6 +51,10 @@ export default function KpiStandardization() {
           <TabsTrigger value="history" className="flex items-center gap-1.5">
             <History className="h-4 w-4" />
             History &amp; Undo
+          </TabsTrigger>
+          <TabsTrigger value="split" className="flex items-center gap-1.5">
+            <SplitSquareHorizontal className="h-4 w-4" />
+            Text Split
           </TabsTrigger>
         </TabsList>
 
