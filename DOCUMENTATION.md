@@ -8414,3 +8414,26 @@ Tests: `src/test/tni/continuityRule.test.ts`, `src/test/pip/*`.
   Tests: `src/components/admin/bu-console/goalObjects.test.ts` (8).
   Rollback: additive and feature-flagged — dropping `bu_goals` and the three
   RPCs removes the layer with zero effect on review data.
+
+### ADR-264 — BU Console: no silent truncation ceilings (UI layer)
+Complements the server work of ADR-264 (RPCs return true totals plus a capped
+detail list flagged by `detail_truncated` / `detail_limit`, and paginated
+`bu_console_merge_proposal_list` / `bu_console_definition_search`).
+
+* `src/lib/review/groupPreviewSummary.ts` — SSOT for what a group preview
+  displays: `resolveSkipSummary` (prefers the server-wide `skip_summary` over
+  the capped detail list), `affectedCount` (`will_write` / `will_advance`,
+  never the array length), `previewTruncation` / `skippedTruncation` (explicit
+  "showing first N of M" notes), and `needsTypedConfirmation` /
+  `confirmationSatisfied` (typed `APPLY` above 2,000 affected employees).
+* `GroupValueEntryDialog.tsx` and `GroupApprovalDialog.tsx` — summary-first
+  preview: true counts, full reason breakdown, truncation notes on both the
+  affected and skipped lists, and a typed confirmation gate on very large
+  scopes. Commit buttons act on the true count.
+* `GoalFormDialog.tsx` — definition picker states "showing the first N of M"
+  when the search cap bites, instead of silently hiding matches.
+* `BuConsoleTree.tsx` — KRA and KPI lists virtualized with
+  `@tanstack/react-virtual` above 40 rows; every row stays reachable.
+* Tests: `src/lib/review/groupPreviewSummary.test.ts` (5).
+* Rollback: presentation-only; reverting these files restores the previous
+  dialogs with no data effect.
