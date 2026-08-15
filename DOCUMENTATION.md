@@ -8726,3 +8726,40 @@ clean-title identity, blank input, flagged pair, no grouping without titles).
 **Rollback.** Frontend changes are additive and behind no data write. The DB change can be reverted
 by restoring the previous 4-argument `kpi_split_grouped_dry_run` and the previous
 `kpi_split_summary` body; `kpi_title_is_suspect` is then unused and can be dropped.
+
+## ADR-274 — BU Console: group KPI definition editing with per-employee overrides
+
+**What.** One KPI definition is mapped to many employee rows in `kpis`. The console KPI drawer now
+exposes two write paths:
+
+- **Edit definition for all N** (`GroupDefinitionEditDialog.tsx`) — edits the whitelisted definition
+  fields once for every mapped row in the current scope (period, BU, department, division, manager,
+  optional variant). Structured text and scoring use the shared ADR-272 controls
+  (`KpiTextSplitFields`, `KpiScoringEditor`), so the console can never drift from the Admin KPI
+  Editor / Assign New KRA forms.
+- **Tune** (`RowOverrideDialog.tsx`) — per-employee weightage, target, unit and numeric ladder. Saved
+  fields are recorded in `bu_console_kpi_overrides` and are skipped by later group edits unless the
+  admin ticks "Reset individual overrides".
+
+**How.** `groupEditModel.ts` diffs the form against the loaded definition and sends **only changed
+fields**, so an untouched control can never overwrite a per-employee value. Every apply is
+preview-first: `bu_console_group_edit_definition` runs as a dry run, returning `will_write`,
+`will_skip`, `skipped_details` and `weightage_impact` (current vs new per-employee totals).
+Deviations from 100% are surfaced before the write; scopes above the group-action threshold require
+the typed `APPLY` confirmation (shared `groupPreviewSummary.ts` helpers). Commits write a run id and
+are undoable via `bu_console_undo_edit_run`.
+
+**Why.** Admins previously edited the same shared KPI employee-by-employee, which is where title and
+weightage drift originated. Group editing plus an explicit override record makes "one definition,
+deliberate exceptions" the default.
+
+**Invariants.** `kpi_name` is never rewritten by the console — it stays the join key for history,
+reports and Org KPI matching (ADR-269). Rows with approved final scores are immutable (§88); rows
+already in review are excluded unless the admin opts in.
+
+**Tests.** `src/components/admin/bu-console/groupEditModel.test.ts` (7 cases: changed-only diff,
+clearing a value, whitelist enforcement, untouched form, weightage deviation detection, null impact
+list, duplicate employee collapse).
+
+**Rollback.** Frontend is additive; hiding the two buttons disables the feature. Server side, drop
+the ADR-274 RPCs and tables — existing `kpis` rows are unaffected.

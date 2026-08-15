@@ -6321,3 +6321,17 @@ structured parts so historical joins remain valid.
 3. Corrections are always applied per distinct KPI text (`kpi_split_set_parts_by_name`), are
    audited into `kpi_text_split_audit`, and remain forward-only (fiscal start year >= 2026).
    Assessment years before July 2026 are never touched.
+
+### §BU-CONSOLE-GROUP-EDIT (ADR-274)
+
+1. A KPI definition edit made from the BU Performance Console applies to **every** employee row in
+   the shown scope, and writes **only the fields the admin changed**.
+2. No group edit commits without a dry-run preview stating how many rows change, how many are
+   skipped and why, and each affected employee's weightage total before and after.
+3. Rows with an approved final score are never edited. Rows already in review are edited only when
+   the admin explicitly opts in.
+4. A field tuned for a single employee is an **override**: later group edits skip it until the admin
+   explicitly resets overrides.
+5. The legacy `kpi_name` text is never rewritten by the console, so historical joins, reports and Org
+   KPI matching stay intact.
+6. Every group edit and override is audited with a run id and is undoable.
