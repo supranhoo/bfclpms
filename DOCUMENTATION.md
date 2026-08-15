@@ -8570,3 +8570,33 @@ listed already-structured rows, making it look as if nothing had been applied.
 
 **Tests.** `src/test/kpiSplitApplyBatching.test.ts` — multi-batch completion,
 idempotent zero-row re-run, and a guard that no apply payload carries `kpi_name`.
+
+### ADR-269b — Structured KPI text reaches reviewers (display wiring)
+
+**What.** The structured columns are now rendered in the scorecard, the review
+panel and the KPI detail modal, instead of living only in the admin screen.
+
+**Why.** Splitting the text has no user value until reviewers read a clean title
+and separate Formula / Scoring Logic blocks instead of one blob.
+
+**How.**
+- `src/components/kpi/KpiText.tsx` exposes `KpiTitle`, `KpiTextBlocks` and
+  `isStructuredKpi`. All three call `resolveKpiText()` and nothing else.
+- Structured rows render a one-line title plus labelled Description / Formula /
+  Scoring Logic blocks (Formula and Scoring collapse behind a toggle under `md`).
+  Legacy rows fall through to `getKpiSummaryText` / `renderBoldKpiText` unchanged.
+- Call sites wired: `KpiDetailsTable`, `review/MobileKpiCard`,
+  `dashboard/MobileKpiCard`, `tablet/TabletKpiRowCard` (new optional `kpiRow`
+  prop), `KpiHeaderSection`, `ReviewDetailsCard`, `ReviewDetailsCardCompact`,
+  `KpiLogicModal`.
+- Fetch: `kpi_title, kpi_description, kpi_formula, kpi_scoring_logic` added to
+  `SLIM_KPI_SELECT` and to the `KpiScorecardDetail` paged select. `KPI` in
+  `useKpis.ts` carries the four optional fields.
+- Precedence in `KpiHeaderSection`: canonical registry name > structured title >
+  raw `kpi_name`. An admin-only muted "Structured" chip shows rollout coverage.
+
+**Tests.** `src/test/kpiTextDisplay.test.tsx` — legacy parity, structured parts
+rendered separately, raw `kpi_name` never printed for structured rows, empty
+parts omitted, and precedence.
+
+**Rollback.** Revert the touched components; the columns can stay populated.
