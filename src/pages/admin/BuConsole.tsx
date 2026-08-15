@@ -26,6 +26,7 @@ import {
 import { BuConsoleTree } from '@/components/admin/bu-console/BuConsoleTree';
 import { KpiDetailDrawer } from '@/components/admin/bu-console/KpiDetailDrawer';
 import { MergeProposalsTab } from '@/components/admin/bu-console/MergeProposalsTab';
+import { GoalsTab } from '@/components/admin/bu-console/GoalsTab';
 import { FlaskConical, RefreshCw } from 'lucide-react';
 
 export default function BuConsole() {
@@ -122,6 +123,7 @@ export default function BuConsole() {
       <Tabs defaultValue="console">
         <TabsList>
           <TabsTrigger value="console">Console</TabsTrigger>
+          <TabsTrigger value="goals">Goals</TabsTrigger>
           <TabsTrigger value="library">KPI Library</TabsTrigger>
         </TabsList>
 
@@ -191,6 +193,18 @@ export default function BuConsole() {
 
         <TabsContent value="library" className="mt-4">
           <MergeProposalsTab />
+        </TabsContent>
+
+        <TabsContent value="goals" className="mt-4">
+          <GoalsTab
+            active={!!scope}
+            year={scope?.year ?? year}
+            period={scope?.period ?? period}
+            buIds={scope?.buIds ?? []}
+            deptIds={scope?.deptIds ?? []}
+            buOptions={buOptions}
+            deptOptions={deptOptions}
+          />
         </TabsContent>
       </Tabs>
 
