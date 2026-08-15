@@ -1,60 +1,89 @@
-# Splitting KPI text into Detail / Formula / Scoring Logic
+# KPI text split — forward-only, effective July 2026
 
-## What the live data says (measured, not assumed)
+Scope change: nothing in FY 2025-26 or earlier is touched. The structured
+split applies to the new assessment year (July 2026 onward, FY 2026-27+).
 
-Across `kpis` (20,698 rows, 1,397 distinct names):
+## What the live data says (measured)
 
-| Signal | Count | Share |
+Rows in the new assessment year (Jul 2026 → Jun 2027) already in `kpis`: **6,070**
+(1,020 distinct KPI names).
+
+| Signal (FY 2026-27 rows only) | Count | Share |
 | --- | --- | --- |
-| Rows with both a Formula and a Scoring marker | 20,222 | 97.7% |
-| Scoring marker only (no formula) | 388 | 1.9% |
-| Formula marker only | 48 | 0.2% |
-| Neither marker (plain names) | 40 | 0.2% |
-| First line usable as a short title (3-120 chars) | 18,540 | 89.6% |
-| First line longer than 120 chars (title needs manual trim) | 2,158 | 10.4% |
+| Text carries both a Formula and a Scoring marker → splits cleanly | 5,906 | 97.3% |
+| Partial / no markers → needs a human decision | 164 | 2.7% |
+| First line already usable as a short title (≤120 chars) | 5,372 | 88.5% |
+| First line too long, title needs trimming | 698 | 11.5% |
 
-So ~97.7% split automatically into three parts with high confidence; ~10% will still need a human to shorten the title line; ~476 rows (2.3%) need manual classification.
+Legacy rows left untouched: 14,628 (FY 2025-26 and earlier).
 
-## The constraint that decides the design
+## Design: additive columns + a fiscal cutover, no legacy rewrite
 
-`kpi_name` is not just a label — it is a live matching key:
+`kpi_name` is a live matching key — `org_kpi_values` links to `kpis` by exact
+`kpi_name` text, `kpi_name_aliases` holds 260 alias rows, and duplicate
+prevention is `kra_name + kpi_name + period`. So `kpi_name` is never rewritten,
+in any year.
 
-- `org_kpi_values` links to `kpis` by exact `kpi_name` text (1.3M matched pairs today).
-- 260 rows in `kpi_name_aliases` map old text to canonical text.
-- The duplicate-prevention constraint is `kra_name + kpi_name + period`.
-- 926 `kpi_templates` rows and org KPI owner/history tables carry the same text.
-- `kpi_definitions_master` is empty (0 rows), so it cannot be used as the anchor.
+1. **New nullable columns on `kpis` and `kpi_templates`:** `kpi_title`,
+   `kpi_description`, `kpi_formula`, `kpi_scoring_logic`.
+2. **Cutover rule (single SSOT helper):** a KPI is "structured" when its fiscal
+   cycle starts July 2026 or later — resolved through the existing
+   `fiscalYearForMonth` / `fiscal_year_for_month` helpers, never a hardcoded
+   date in a component.
+3. **Backfill limited to the cutover window:** the parse job only ever selects
+   rows in FY 2026-27+. Dry-run first, audit row per change, rollback = null out
+   the four new columns. Legacy rows are excluded by the query itself, so they
+   cannot be touched even by a mis-click.
+4. **Display resolver:** `src/lib/textFormatting.ts` gains
+   `resolveKpiText(kpi)` — returns the structured parts when present, otherwise
+   falls back to today's `getKpiSummaryText` / `splitKpiTextSegments` parsing.
+   Legacy KPIs therefore render exactly as they do now, byte-for-byte.
+5. **Authoring from July 2026 onward:** the KPI editor / template editor show
+   four separate fields (Title, Description, Formula, Scoring Logic). On save
+   the system composes `kpi_name` from those parts in the existing text format,
+   so every downstream name-match keeps working unchanged. For legacy periods
+   the editor keeps the single free-text field.
+6. **Low-confidence queue:** the 164 unparsed + 698 long-title rows land in an
+   admin list with an inline editor. No auto-guessing.
 
-Rewriting `kpi_name` in place would silently break Org KPI linkage, alias resolution, duplicate detection and historical reports. So the split must be **additive**.
+## Impact
 
-## Approach: additive split, zero change to review mechanics
-
-1. **Add three nullable columns to `kpis`** (and mirror on `kpi_templates`): `kpi_description`, `kpi_formula`, `kpi_scoring_logic`, plus `kpi_title` for the short display name. `kpi_name` stays byte-identical forever and remains the matching key.
-2. **One-time parse job (dry-run first)** writes the three parts from the existing text. It never edits `kpi_name`, never touches scores, submissions, thresholds or statuses. Every parsed row is logged to an audit table so the whole run is reversible by nulling the new columns.
-3. **Display resolver (SSOT)** extends `src/lib/textFormatting.ts`: use the structured columns when present, otherwise fall back to today's `getKpiSummaryText` / `splitKpiTextSegments` parsing. Nothing in the UI breaks if a row was not parsed.
-4. **Admin review queue** for the 2,158 long-title and 476 unparsed rows: an admin screen listing low-confidence rows with an inline editor for title/description/formula/scoring. No bulk auto-guessing on these.
-5. **Writes stay legacy-compatible**: when an admin edits the structured fields, the system re-composes `kpi_name` only if it would be byte-identical; otherwise it leaves `kpi_name` alone and records the divergence. New KPIs created after the split write both the structured fields and a composed `kpi_name`.
-
-## Impact assessment
-
-- **Review workflow, scoring, final scores:** unchanged. No column read by the scoring chain is touched.
-- **Org KPI linkage:** unchanged, because `kpi_name` is untouched.
-- **Reports and exports:** unchanged by default; a follow-up phase can add separate Description / Formula / Scoring columns behind a flag.
-- **Notifications:** already use first-line + truncation (ADR-039); they can later read `kpi_title` for a cleaner result.
-- **Standardization registry / aliases:** unaffected; the registry keeps operating on `kpi_name`.
-- **Regression risk:** low, since the change is additive and gated by a fallback resolver. The main risk is a bad parse writing wrong text into the new columns — mitigated by dry-run, audit log and a null-out rollback.
-- **Scale:** parse runs in batches (20,698 rows); admin queue is server-paginated.
+- **Existing assessment year:** zero change — no column, no row, no rendering
+  path for FY 2025-26 and earlier is modified.
+- **Review workflow / scoring / final scores:** unchanged; the split touches
+  descriptive text only, never thresholds, weightage, status or scores.
+- **Org KPI linkage, aliases, duplicate constraint, standardization registry:**
+  unchanged, because `kpi_name` stays the composed canonical text.
+- **Reports / exports:** unchanged by default. A follow-up can add separate
+  Description / Formula / Scoring columns that fall back to the parser for
+  legacy rows so a mixed-year report still renders fully.
+- **Regression risk:** low — additive schema, fiscal-gated writes, resolver
+  fallback, and a rollback that is a single UPDATE to NULL.
+- **Scale:** backfill batched over ~6k rows; admin queue server-paginated.
 
 ## Technical details
 
-- Migration: additive columns + GRANTs unchanged (existing table), backfill via a `SECURITY DEFINER` RPC `kpi_split_text_dry_run(limit, offset)` and `kpi_split_text_apply(batch)`, both writing to `kpi_text_split_audit`.
-- Parser lives in one place and is shared: TS in `src/lib/textFormatting.ts` for display, PL/pgSQL mirror for the backfill, with a test asserting both produce the same split on a fixture set.
-- Tests: parser unit tests (all four data shapes above), a contract test that the backfill migration never updates `kpi_name`, and a fallback test that unparsed rows still render exactly as today.
-- Docs: new ADR, POLICY section `§KPI-TEXT-SPLIT-ADDITIVE`, DOCUMENTATION.md version history entry.
+- Migration: four nullable text columns on `kpis` and `kpi_templates` (no new
+  table, so no new GRANT surface), plus
+  `kpi_split_dry_run(p_limit, p_offset)` and `kpi_split_apply(p_ids[])`
+  SECURITY DEFINER RPCs that hard-filter to FY ≥ 2026-27 via
+  `public.fiscal_year_for_month(review_period, review_year) >= 2026`.
+- Audit: `kpi_text_split_audit` (kpi_id, before/after parts, actor, run id)
+  with GRANTs and admin-only RLS.
+- Parser shared: TS in `src/lib/textFormatting.ts`, PL/pgSQL mirror for the
+  backfill, with a fixture test asserting both produce identical splits.
+- Compose-on-save helper `composeKpiName(parts)` with a test proving
+  `compose(parse(name)) === name` for the 5,906 clean rows' shapes.
+- Tests: parser/compose round-trip, a contract test that the migration and RPCs
+  never write `kpi_name` and never select rows below the cutover, and a render
+  test that a legacy KPI is unaffected.
+- Docs: new ADR, `POLICY §KPI-TEXT-SPLIT-FORWARD-ONLY`, DOCUMENTATION.md
+  version-history entry.
 
-## Suggested phasing
+## Phasing
 
-- Phase 1: columns + dry-run report (numbers above, per-KRA breakdown) — no writes.
-- Phase 2: apply backfill for the 97.7% high-confidence rows + display resolver.
-- Phase 3: admin review queue for low-confidence rows.
-- Phase 4 (optional): reports/notifications adopt the structured fields.
+1. Columns + audit table + dry-run report (counts above, per-KRA breakdown) — no writes.
+2. Apply backfill to the 97.3% clean FY 2026-27 rows + display resolver.
+3. Structured authoring fields in the KPI/template editors, fiscal-gated.
+4. Low-confidence admin queue.
+5. Optional: reports and notifications adopt the structured fields.
