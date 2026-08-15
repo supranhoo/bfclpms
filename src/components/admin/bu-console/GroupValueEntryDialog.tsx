@@ -79,6 +79,8 @@ export function GroupValueEntryDialog({ args, open, onOpenChange }: Props) {
       year: args.year,
       buIds: args.buIds,
       deptIds: args.deptIds,
+      divisionIds: args.divisionIds,
+      managerIds: args.managerIds,
       achievedValue: isNa ? null : numericValue,
       isNa,
       remarks: remarks.trim() || null,

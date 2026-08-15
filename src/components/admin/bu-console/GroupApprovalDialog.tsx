@@ -66,6 +66,8 @@ export function GroupApprovalDialog({ args, open, onOpenChange }: Props) {
       year: args.year,
       buIds: args.buIds,
       deptIds: args.deptIds,
+      divisionIds: args.divisionIds,
+      managerIds: args.managerIds,
       targetStage: stage,
       remarks: remarks.trim() || null,
     };

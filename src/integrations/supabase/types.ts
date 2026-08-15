@@ -16884,9 +16884,11 @@ export type Database = {
           p_bu_ids?: string[]
           p_category_id: string
           p_dept_ids?: string[]
+          p_division_ids?: string[]
           p_dry_run?: boolean
           p_kpi_name: string
           p_kra_name: string
+          p_manager_ids?: string[]
           p_period: string
           p_remarks?: string
           p_target_stage: string
@@ -16900,10 +16902,12 @@ export type Database = {
           p_bu_ids?: string[]
           p_category_id: string
           p_dept_ids?: string[]
+          p_division_ids?: string[]
           p_dry_run?: boolean
           p_is_na?: boolean
           p_kpi_name: string
           p_kra_name: string
+          p_manager_ids?: string[]
           p_overwrite_policy?: string
           p_period: string
           p_remarks?: string
@@ -16916,8 +16920,10 @@ export type Database = {
           p_bu_ids?: string[]
           p_category_id: string
           p_dept_ids?: string[]
+          p_division_ids?: string[]
           p_kpi_name: string
           p_kra_name: string
+          p_manager_ids?: string[]
           p_page?: number
           p_page_size?: number
           p_period: string
@@ -16933,6 +16939,8 @@ export type Database = {
         Args: {
           p_bu_ids?: string[]
           p_dept_ids?: string[]
+          p_division_ids?: string[]
+          p_manager_ids?: string[]
           p_period: string
           p_year: number
         }

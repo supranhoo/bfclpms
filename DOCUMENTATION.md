@@ -8437,3 +8437,17 @@ detail list flagged by `detail_truncated` / `detail_limit`, and paginated
 * Tests: `src/lib/review/groupPreviewSummary.test.ts` (5).
 * Rollback: presentation-only; reverting these files restores the previous
   dialogs with no data effect.
+
+## ADR-265 — BU Console: Division and Manager scope filters
+
+* What: added Division and Manager (reporting manager) multi-select filters to
+  the BU Performance Console scope card, alongside Business Unit and Department.
+* Why: users scope work by division and by manager, not only by BU/department.
+* How: `bu_console_tree`, `bu_console_kpi_detail`, `bu_console_group_write` and
+  `bu_console_group_advance` now accept `p_division_ids` and `p_manager_ids`
+  (division resolved via `business_units.division_id`, manager via
+  `profiles.reporting_manager_id`). `BuConsoleScope` carries `divisionIds` /
+  `managerIds`; `BuConsole.tsx` cascades Division → BU → Department → Manager
+  and clears orphaned child selections.
+* Rollback: filters default to NULL (no narrowing), so leaving them empty
+  reproduces the previous behaviour exactly.

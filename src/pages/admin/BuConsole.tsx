@@ -16,7 +16,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { ReviewPeriodSelector } from '@/components/ui/ReviewPeriodSelector';
 import { OrgFilterCombobox } from '@/components/admin/OrgFilterCombobox';
-import { useBusinessUnits, useDepartments } from '@/hooks/useOrganization';
+import { useBusinessUnits, useDepartments, useDivisions } from '@/hooks/useOrganization';
+import { useManagers } from '@/hooks/useKpiFilters';
 import {
   useBuConsoleFlag,
   useBuConsoleTree,
@@ -36,6 +37,8 @@ export default function BuConsole() {
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [buIds, setBuIds] = useState<string[]>([]);
   const [deptIds, setDeptIds] = useState<string[]>([]);
+  const [divisionIds, setDivisionIds] = useState<string[]>([]);
+  const [managerIds, setManagerIds] = useState<string[]>([]);
   const [scope, setScope] = useState<BuConsoleScope | null>(null);
 
   const [categoryId, setCategoryId] = useState<string | null>(null);
@@ -44,22 +47,51 @@ export default function BuConsole() {
 
   const { data: businessUnits } = useBusinessUnits();
   const { data: departments } = useDepartments();
+  const { data: divisions } = useDivisions();
+  const managers = useManagers();
 
+  const divisionOptions = useMemo(
+    () => (divisions ?? []).map((d: any) => ({ value: d.id, label: d.name })),
+    [divisions],
+  );
+
+  // Cascading: BU options narrow to the selected divisions (ADR-229).
   const buOptions = useMemo(
-    () => (businessUnits ?? []).map((b: any) => ({ value: b.id, label: b.name })),
-    [businessUnits],
+    () =>
+      (businessUnits ?? [])
+        .filter((b: any) => divisionIds.length === 0 || divisionIds.includes(b.division_id))
+        .map((b: any) => ({ value: b.id, label: b.name })),
+    [businessUnits, divisionIds],
   );
 
   // Cascading: department options narrow to the selected BUs (ADR-229).
   const deptOptions = useMemo(() => {
-    const list = (departments ?? []).filter((d: any) =>
-      buIds.length === 0 ? true : buIds.includes(d.business_unit_id),
-    );
+    const allowedBuIds = new Set(buOptions.map(o => o.value));
+    const list = (departments ?? []).filter((d: any) => {
+      if (buIds.length > 0) return buIds.includes(d.business_unit_id);
+      return divisionIds.length === 0 || allowedBuIds.has(d.business_unit_id);
+    });
     return list.map((d: any) => ({
       value: d.id,
       label: d.business_units?.name ? `${d.name} — ${d.business_units.name}` : d.name,
     }));
-  }, [departments, buIds]);
+  }, [departments, buIds, divisionIds, buOptions]);
+
+  // Cascading: manager options narrow to the selected division / BU / department.
+  const managerOptions = useMemo(() => {
+    const allowedBuIds = new Set(buOptions.map(o => o.value));
+    return (managers ?? [])
+      .filter((m: any) => {
+        if (deptIds.length > 0) return deptIds.includes(m.department_id);
+        if (buIds.length > 0) return buIds.includes(m.business_unit_id);
+        if (divisionIds.length > 0) return allowedBuIds.has(m.business_unit_id);
+        return true;
+      })
+      .map((m: any) => ({
+        value: m.id,
+        label: m.employee_code ? `${m.full_name} (${m.employee_code})` : m.full_name,
+      }));
+  }, [managers, deptIds, buIds, divisionIds, buOptions]);
 
   const { data: tree, isFetching, refetch } = useBuConsoleTree(scope);
 
@@ -67,7 +99,30 @@ export default function BuConsole() {
     setCategoryId(null);
     setKraKey(null);
     setDetail(null);
-    setScope({ period, year, buIds, deptIds });
+    setScope({ period, year, buIds, deptIds, divisionIds, managerIds });
+  };
+
+  const handleDivisionChange = (values: string[]) => {
+    setDivisionIds(values);
+    const allowedBuIds = new Set(
+      (businessUnits ?? [])
+        .filter((b: any) => values.length === 0 || values.includes(b.division_id))
+        .map((b: any) => b.id),
+    );
+    // Drop BUs / departments / managers that fall outside the selected divisions.
+    setBuIds(prev => prev.filter(id => values.length === 0 || allowedBuIds.has(id)));
+    setDeptIds(prev =>
+      prev.filter(id => {
+        const d = (departments ?? []).find((x: any) => x.id === id) as any;
+        return !d || values.length === 0 || allowedBuIds.has(d.business_unit_id);
+      }),
+    );
+    setManagerIds(prev =>
+      prev.filter(id => {
+        const m = (managers ?? []).find((x: any) => x.id === id) as any;
+        return !m || values.length === 0 || allowedBuIds.has(m.business_unit_id);
+      }),
+    );
   };
 
   const handleBuChange = (values: string[]) => {
@@ -77,6 +132,22 @@ export default function BuConsole() {
       prev.filter(id => {
         const d = (departments ?? []).find((x: any) => x.id === id) as any;
         return !d || values.length === 0 || values.includes(d.business_unit_id);
+      }),
+    );
+    setManagerIds(prev =>
+      prev.filter(id => {
+        const m = (managers ?? []).find((x: any) => x.id === id) as any;
+        return !m || values.length === 0 || values.includes(m.business_unit_id);
+      }),
+    );
+  };
+
+  const handleDeptChange = (values: string[]) => {
+    setDeptIds(values);
+    setManagerIds(prev =>
+      prev.filter(id => {
+        const m = (managers ?? []).find((x: any) => x.id === id) as any;
+        return !m || values.length === 0 || values.includes(m.department_id);
       }),
     );
   };
@@ -145,6 +216,14 @@ export default function BuConsole() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <OrgFilterCombobox
                   multiSelect
+                  label="Divisions"
+                  values={divisionIds}
+                  onValuesChange={handleDivisionChange}
+                  options={divisionOptions}
+                  placeholder="All divisions"
+                />
+                <OrgFilterCombobox
+                  multiSelect
                   label="Business Units"
                   values={buIds}
                   onValuesChange={handleBuChange}
@@ -155,9 +234,17 @@ export default function BuConsole() {
                   multiSelect
                   label="Departments"
                   values={deptIds}
-                  onValuesChange={setDeptIds}
+                  onValuesChange={handleDeptChange}
                   options={deptOptions}
                   placeholder="All departments"
+                />
+                <OrgFilterCombobox
+                  multiSelect
+                  label="Managers"
+                  values={managerIds}
+                  onValuesChange={setManagerIds}
+                  options={managerOptions}
+                  placeholder="All managers"
                 />
               </div>
               <Button onClick={applyScope} disabled={isFetching}>Load console</Button>
