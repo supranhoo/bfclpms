@@ -93,6 +93,9 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
   const { data: categories } = useKraCategories();
   const { data: profiles } = useProfiles();
   const updateKpi = useAdminUpdateKpi();
+  const { data: templates } = useKpiTemplates();
+  const { data: allKpis } = useAllKpis();
+  const createCategory = useCreateKraCategory();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -138,6 +141,13 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
     day_count_type: 'working_days' as 'working_days' | 'all_days',
     threshold_mode: 'absolute' as 'absolute' | 'ratio',
   });
+  // ADR-272 — structured KPI text (title / description / formula / scoring logic)
+  const [textState, setTextState] = useState<KpiTextState>({
+    kpi_name: '', kpi_title: '', kpi_description: '', kpi_formula: '', kpi_scoring_logic: '',
+  });
+  // ADR-272 — inline category creation, at parity with "Assign New KRA"
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState('');
   const [reason, setReason] = useState('');
   const [applyScope, setApplyScope] = useState<ApplyScope>('this_month');
   const [alsoRenameSiblings, setAlsoRenameSiblings] = useState(false);
@@ -174,6 +184,9 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         day_count_type: (kpi.day_count_type as 'working_days' | 'all_days') || 'working_days',
         threshold_mode: (kpi.threshold_mode as 'absolute' | 'ratio') || 'absolute',
       });
+      setTextState(textStateFromRow(kpi));
+      setIsCustomCategory(false);
+      setCustomCategoryName('');
       setReason('');
       setApplyScope('this_month');
       setAlsoRenameSiblings(false);
