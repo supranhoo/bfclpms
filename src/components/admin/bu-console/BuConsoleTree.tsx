@@ -9,9 +9,11 @@ import { useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ChevronRight, Users, Layers } from 'lucide-react';
+import { ChevronRight, Users, Layers, AlertTriangle, Wrench } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { ConsoleMetricRow } from './ConsoleMetricRow';
+import { lookalikeCounts } from './lookalikeTitles';
 import type {
   BuConsoleCategoryNode,
   BuConsoleKraNode,
@@ -75,6 +77,8 @@ interface Props {
     kpi: BuConsoleKpiNode,
     variantKey?: string | null,
   ) => void;
+  /** ADR-273 — opens the Text Split screen filtered to this KPI's raw text. */
+  onFixTextSplit?: (kpi: BuConsoleKpiNode) => void;
 }
 
 const fmtScore = (v: number | null | undefined) =>
@@ -89,15 +93,20 @@ function KpiRow({
   kpi,
   index,
   onOpen,
+  lookalikeCount,
+  onFixTextSplit,
 }: {
   kpi: BuConsoleKpiNode;
   index: number;
   onOpen: (variantKey?: string | null) => void;
+  lookalikeCount?: number;
+  onFixTextSplit?: (kpi: BuConsoleKpiNode) => void;
 }) {
   const [open, setOpen] = useState(false);
   const weights = kpi.weightage_values ?? [];
   const variantCount = kpi.variant_count ?? 1;
   const hasVariance = variantCount > 1 || weights.length > 1;
+  const isLookalike = (lookalikeCount ?? 0) > 1;
 
   return (
     <div>
@@ -120,6 +129,23 @@ function KpiRow({
             {!kpi.is_structured && (
               <Badge variant="outline" className="h-4 px-1 text-[10px]">Unsplit text</Badge>
             )}
+            {isLookalike && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                      <AlertTriangle className="h-3 w-3" />
+                      Possible duplicate
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    {lookalikeCount} KPI rows under this KRA have titles that only differ by
+                    scoring text, an incentive note or month brackets. That usually means the
+                    KPI text was split incorrectly — fix the split so they group as one KPI.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </span>
         }
         onClick={() => onOpen(null)}
@@ -138,6 +164,21 @@ function KpiRow({
         ]}
         trailing={
           <span className="flex items-center gap-2">
+            {onFixTextSplit && (isLookalike || !kpi.is_structured) && (
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label={`Fix the text split for ${kpi.kpi_title || kpi.kpi_name}`}
+                onClick={(e) => { e.stopPropagation(); onFixTextSplit(kpi); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onFixTextSplit(kpi); }
+                }}
+                className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+              >
+                <Wrench className="h-3 w-3" />
+                Fix text split
+              </span>
+            )}
             {hasVariance && (
               <span
                 role="button"
