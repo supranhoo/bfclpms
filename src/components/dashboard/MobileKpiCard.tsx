@@ -6,6 +6,7 @@ import { KPI } from '@/hooks/useKpis';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getKpiSummaryText } from '@/lib/textFormatting';
+import { KpiTitle } from '@/components/kpi/KpiText';
 import { getQualitativeTargetLabel } from '@/lib/qualitativeUom';
 import { AuditKpiAssignPopover } from '@/components/review/AuditKpiAssignPopover';
 import { FrequencyBadge } from '@/components/review/FrequencyBadge';
@@ -97,7 +98,7 @@ export function MobileKpiCard({
 
       {/* KRA/KPI names */}
       <p className="font-medium text-sm mb-1 line-clamp-1 whitespace-pre-wrap">{renderBoldKpiText(kpi.kra_name)}</p>
-      <p className="text-xs text-muted-foreground mb-1 line-clamp-2 whitespace-pre-wrap">{renderBoldKpiText(getKpiSummaryText(kpi.kpi_name))}</p>
+      <KpiTitle kpi={kpi} as="p" className="text-xs text-muted-foreground mb-1 line-clamp-2" />
       {submission?.auto_advance_reason?.startsWith('System-forwarded') ? (
         <FastForward className="h-4 w-4 text-amber-500 dark:text-amber-400 shrink-0 mb-1" />
       ) : submission?.auto_advance_reason ? (

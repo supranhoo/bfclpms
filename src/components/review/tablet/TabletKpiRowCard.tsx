@@ -3,6 +3,8 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
+import { KpiTitle } from '@/components/kpi/KpiText';
+import type { KpiLikeRow } from '@/lib/kpiTextSplit';
 
 /**
  * TabletKpiRowCard — compact KPI card used in the tablet tier (768–1279px)
@@ -28,6 +30,11 @@ export interface TabletKpiRowCardProps {
   categoryColor?: string | null;
   kraName: string;
   kpiName: string;
+  /**
+   * ADR-269b — optional structured row. When supplied and the KPI carries
+   * structured text, the clean title is shown instead of the raw blob.
+   */
+  kpiRow?: KpiLikeRow | null;
   target: ReactNode;
   current?: ReactNode;
   score?: ReactNode;
@@ -51,6 +58,7 @@ export function TabletKpiRowCard({
   categoryColor,
   kraName,
   kpiName,
+  kpiRow,
   target,
   current,
   score,
@@ -96,7 +104,11 @@ export function TabletKpiRowCard({
             {renderBoldKpiText(kraName)}
           </div>
           <div className="text-sm text-muted-foreground leading-snug whitespace-pre-wrap break-words">
-            {renderBoldKpiText(kpiName)}
+            <KpiTitle
+              kpi={kpiRow ?? { kpi_name: kpiName }}
+              as="span"
+              legacyFullText
+            />
           </div>
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">

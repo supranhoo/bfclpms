@@ -17,6 +17,7 @@ import { FrequencyBadge } from '@/components/review/FrequencyBadge';
 import { statusColors, statusLabels, CANONICAL_WORKFLOW_STAGES } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
 import { getKpiSummaryText } from '@/lib/textFormatting';
+import { KpiTitle } from '@/components/kpi/KpiText';
 import { getQualitativeTargetLabel, getQualitativeAchievedLabel } from '@/lib/qualitativeUom';
 import { canReviewKpi as workflowCanReview, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { 
@@ -495,9 +496,7 @@ export function KpiDetailsTable({
                       ) : null}
                     </div>
                     <div className="relative">
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                        {renderBoldKpiText(getKpiSummaryText(kpi.kpi_name))}
-                      </p>
+                      <KpiTitle kpi={kpi} as="p" className="text-sm text-muted-foreground" />
                       <Info className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity absolute top-0 right-0" />
                     </div>
                   </button>

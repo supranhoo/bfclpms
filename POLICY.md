@@ -6267,3 +6267,9 @@ plain-language reason.
 - The admin preview defaults to **Pending only**; already-structured rows are
   visible solely via the explicit state filter, so the queue always reflects the
   work that is actually left.
+- **Display contract (ADR-269b).** `resolveKpiText()` is the single decision
+  point for structured-vs-legacy rendering; no component re-implements the
+  parser. Display precedence is: canonical registry name (§88I) > structured
+  title > legacy first line. A row with no `kpi_title` renders exactly as it did
+  before the split existed. Empty structured parts are omitted, never rendered
+  as a placeholder.

@@ -202,6 +202,7 @@ async function fetchScorecardForPeriod(month: string, year: number): Promise<Fla
       .from('kpis')
       .select(`
         id, employee_id, kra_name, kpi_name, weightage, target_value, review_period, review_year, status, updated_at,
+        kpi_title, kpi_description, kpi_formula, kpi_scoring_logic,
         frequency, is_org_level, org_level_scope, category_id,
         kra_categories ( name )
       `)

@@ -3,6 +3,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { KPI } from '@/hooks/useKpis';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
+import { KpiTitle, KpiTextBlocks } from '@/components/kpi/KpiText';
 
 interface ReviewDetailsCardProps {
   kpi: KPI;
@@ -33,7 +34,8 @@ export function ReviewDetailsCard({ kpi }: ReviewDetailsCardProps) {
         
         <div>
           <p className="text-xs text-muted-foreground uppercase tracking-wide">KPI</p>
-          <p className="text-sm whitespace-pre-wrap">{renderBoldKpiText(kpi.kpi_name)}</p>
+          <KpiTitle kpi={kpi} as="p" className="text-sm font-medium" legacyFullText />
+          <KpiTextBlocks kpi={kpi} collapsible hideLegacy className="mt-1.5" />
         </div>
 
         {/* Target, Criteria, Weightage */}
