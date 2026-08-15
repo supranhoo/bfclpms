@@ -109,8 +109,8 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
 
   const changedFields = Object.keys(changes);
   const affected = preview?.will_write ?? 0;
-  const bigScope = needsTypedConfirmation(affected);
-  const confirmed = confirmationSatisfied(affected, confirmText);
+  const bigScope = needsTypedConfirmation(preview);
+  const confirmed = confirmationSatisfied(preview, confirmText);
   const weightRows = uniqueByEmployee(preview?.weightage_impact);
   const deviations = weightageDeviations(weightRows);
 
