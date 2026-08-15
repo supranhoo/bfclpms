@@ -16739,6 +16739,38 @@ export type Database = {
         Args: { kpis_json: Json }
         Returns: number
       }
+      bu_console_can_read: { Args: { _uid: string }; Returns: boolean }
+      bu_console_decide_merge_proposal: {
+        Args: { p_approve: boolean; p_note?: string; p_proposal_id: string }
+        Returns: Json
+      }
+      bu_console_generate_merge_proposals: {
+        Args: { p_fuzzy_threshold?: number }
+        Returns: Json
+      }
+      bu_console_kpi_detail: {
+        Args: {
+          p_bu_ids?: string[]
+          p_category_id: string
+          p_dept_ids?: string[]
+          p_kpi_name: string
+          p_kra_name: string
+          p_page?: number
+          p_page_size?: number
+          p_period: string
+          p_year: number
+        }
+        Returns: Json
+      }
+      bu_console_tree: {
+        Args: {
+          p_bu_ids?: string[]
+          p_dept_ids?: string[]
+          p_period: string
+          p_year: number
+        }
+        Returns: Json
+      }
       bulk_create_annual_review_instances: {
         Args: { p_cycle_id: string; p_employee_ids: string[] }
         Returns: {
