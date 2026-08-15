@@ -1,14 +1,16 @@
 /**
  * ADR-259 — KPI detail drawer: definition, scoring scale and the paged
  * mapped-employee table (server-side pagination, max 200 rows per page).
- * Read-only in this phase; entry and group approval land in later phases.
+ * Phase 3 adds one-value group entry via a preview-first dialog.
  */
+import { useState } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useBuConsoleKpiDetail, type KpiDetailArgs } from '@/hooks/useBuConsole';
+import { GroupValueEntryDialog } from './GroupValueEntryDialog';
 
 interface Props {
   args: KpiDetailArgs | null;
@@ -21,6 +23,7 @@ const fmt = (v: number | null | undefined) =>
 
 export function KpiDetailDrawer({ args, onPageChange, onClose }: Props) {
   const { data, isLoading, error } = useBuConsoleKpiDetail(args);
+  const [entryOpen, setEntryOpen] = useState(false);
   const def = (data?.definition ?? {}) as Record<string, string | null>;
   const totalPages = data ? Math.max(1, Math.ceil(data.total / (data.page_size || 200))) : 1;
 
@@ -33,6 +36,14 @@ export function KpiDetailDrawer({ args, onPageChange, onClose }: Props) {
             {args?.kraName} · {args?.period} {args?.year}
           </SheetDescription>
         </SheetHeader>
+
+        {data?.authorized && (
+          <div className="mt-4">
+            <Button size="sm" onClick={() => setEntryOpen(true)} disabled={!args || data.total === 0}>
+              Enter value for all {data.total} employees
+            </Button>
+          </div>
+        )}
 
         {isLoading && (
           <div className="mt-6 space-y-2">
@@ -148,6 +159,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose }: Props) {
           </div>
         )}
       </SheetContent>
+      <GroupValueEntryDialog args={args} open={entryOpen} onOpenChange={setEntryOpen} />
     </Sheet>
   );
 }
