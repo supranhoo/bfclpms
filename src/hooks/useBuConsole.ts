@@ -1237,3 +1237,124 @@ export function useUndoConsoleEditRun() {
     onError: (e: any) => toast.error(e?.message ?? 'Could not undo this run.'),
   });
 }
+
+/* ------------------------------------------------------------------
+ * ADR-276 — KRA Tree.
+ * One clean cascade: Organisation → Business Unit → Department → Employee.
+ * The tree is read one level at a time (`kra_tree_list`) so a wide org never
+ * pulls thousands of rows in a single call, and every level is server-paged.
+ * ------------------------------------------------------------------ */
+
+export type KraStatus =
+  | 'on_track' | 'at_risk' | 'behind' | 'achieved' | 'dropped'
+  | 'not_started' | 'not_set';
+
+export const KRA_STATUS_LABELS: Record<KraStatus, string> = {
+  on_track: 'On track',
+  at_risk: 'At risk',
+  behind: 'Behind',
+  achieved: 'Achieved',
+  dropped: 'Dropped',
+  not_started: 'Not started',
+  not_set: 'No progress yet',
+};
+
+export const KRA_LEVEL_LABELS: Record<GoalEntityLevel, string> = {
+  org: 'Organisation',
+  bu: 'Business unit',
+  department: 'Department',
+  individual: 'Employee',
+};
+
+export interface KraTreeRow {
+  id: string;
+  title: string | null;
+  parent_goal_id: string | null;
+  aligns_to_id: string | null;
+  aligns_to_title: string | null;
+  category_id: string | null;
+  category_name: string | null;
+  kra_name: string | null;
+  kpi_name: string | null;
+  goal_source: GoalSource;
+  weight: number | null;
+  entity_level: GoalEntityLevel;
+  business_unit_id: string | null;
+  business_unit_name: string | null;
+  department_id: string | null;
+  department_name: string | null;
+  owner_profile_id: string | null;
+  owner_name: string | null;
+  review_period: string | null;
+  review_year: number;
+  start_date: string | null;
+  end_date: string | null;
+  unit: string | null;
+  progress_type: GoalProgressType;
+  subperiod_summary_rule: GoalSummaryRule;
+  start_value: number | null;
+  target_value: number | null;
+  current_value: number | null;
+  progress_pct: number | null;
+  status: KraStatus;
+  status_is_manual: boolean;
+  status_reason: string | null;
+  notes: string | null;
+  child_count: number;
+  aligned_count: number;
+  mapped_employee_count: number;
+  last_updated_at: string | null;
+}
+
+export interface KraTreeResult {
+  authorized: boolean;
+  rows: KraTreeRow[];
+  total: number;
+  page: number;
+  page_size: number;
+  parent_id: string | null;
+}
+
+export interface KraTreeArgs {
+  year: number;
+  period: string | null;
+  parentId: string | null;
+  buIds?: string[];
+  deptIds?: string[];
+  categoryIds?: string[];
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+const EMPTY_TREE: KraTreeResult = {
+  authorized: false, rows: [], total: 0, page: 1, page_size: 100, parent_id: null,
+};
+
+/**
+ * One level of the KRA tree. `parentId === null` returns the roots.
+ * Server-paged — never assume the level fits in one page.
+ */
+export function useKraTree(args: KraTreeArgs | null) {
+  return useQuery<KraTreeResult>({
+    queryKey: ['kra-tree', args],
+    enabled: !!args,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const a = args!;
+      const { data, error } = await supabase.rpc('kra_tree_list' as any, {
+        p_year: a.year,
+        p_period: a.period,
+        p_parent_id: a.parentId,
+        p_bu_ids: a.buIds?.length ? a.buIds : null,
+        p_dept_ids: a.deptIds?.length ? a.deptIds : null,
+        p_category_ids: a.categoryIds?.length ? a.categoryIds : null,
+        p_search: a.search?.trim() ? a.search.trim() : null,
+        p_page: a.page ?? 1,
+        p_page_size: a.pageSize ?? 100,
+      });
+      if (error) throw error;
+      return (data ?? EMPTY_TREE) as unknown as KraTreeResult;
+    },
+  });
+}
