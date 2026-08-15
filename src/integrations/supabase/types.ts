@@ -4040,6 +4040,7 @@ export type Database = {
       }
       bu_goals: {
         Row: {
+          aligns_to_id: string | null
           business_unit_id: string | null
           category_id: string | null
           created_at: string
@@ -4048,6 +4049,7 @@ export type Database = {
           cycle_ref: string | null
           definition_id: string | null
           department_id: string | null
+          end_date: string | null
           entity_level: Database["public"]["Enums"]["kpi_goal_entity_level"]
           goal_source: string
           id: string
@@ -4062,7 +4064,12 @@ export type Database = {
           review_year: number
           rollup_computed_at: string | null
           rollup_source: Json | null
+          start_date: string | null
           start_value: number | null
+          status: string | null
+          status_reason: string | null
+          status_set_at: string | null
+          status_set_by: string | null
           subperiod_summary_rule: Database["public"]["Enums"]["kpi_goal_summary_rule"]
           target_value: number | null
           title: string | null
@@ -4073,6 +4080,7 @@ export type Database = {
           weight: number
         }
         Insert: {
+          aligns_to_id?: string | null
           business_unit_id?: string | null
           category_id?: string | null
           created_at?: string
@@ -4081,6 +4089,7 @@ export type Database = {
           cycle_ref?: string | null
           definition_id?: string | null
           department_id?: string | null
+          end_date?: string | null
           entity_level?: Database["public"]["Enums"]["kpi_goal_entity_level"]
           goal_source?: string
           id?: string
@@ -4095,7 +4104,12 @@ export type Database = {
           review_year: number
           rollup_computed_at?: string | null
           rollup_source?: Json | null
+          start_date?: string | null
           start_value?: number | null
+          status?: string | null
+          status_reason?: string | null
+          status_set_at?: string | null
+          status_set_by?: string | null
           subperiod_summary_rule?: Database["public"]["Enums"]["kpi_goal_summary_rule"]
           target_value?: number | null
           title?: string | null
@@ -4106,6 +4120,7 @@ export type Database = {
           weight?: number
         }
         Update: {
+          aligns_to_id?: string | null
           business_unit_id?: string | null
           category_id?: string | null
           created_at?: string
@@ -4114,6 +4129,7 @@ export type Database = {
           cycle_ref?: string | null
           definition_id?: string | null
           department_id?: string | null
+          end_date?: string | null
           entity_level?: Database["public"]["Enums"]["kpi_goal_entity_level"]
           goal_source?: string
           id?: string
@@ -4128,7 +4144,12 @@ export type Database = {
           review_year?: number
           rollup_computed_at?: string | null
           rollup_source?: Json | null
+          start_date?: string | null
           start_value?: number | null
+          status?: string | null
+          status_reason?: string | null
+          status_set_at?: string | null
+          status_set_by?: string | null
           subperiod_summary_rule?: Database["public"]["Enums"]["kpi_goal_summary_rule"]
           target_value?: number | null
           title?: string | null
@@ -4139,6 +4160,13 @@ export type Database = {
           weight?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "bu_goals_aligns_to_id_fkey"
+            columns: ["aligns_to_id"]
+            isOneToOne: false
+            referencedRelation: "bu_goals"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bu_goals_business_unit_id_fkey"
             columns: ["business_unit_id"]
@@ -17273,12 +17301,14 @@ export type Database = {
       }
       bu_goal_upsert: {
         Args: {
+          p_aligns_to_id?: string
           p_business_unit_id?: string
           p_category_id?: string
           p_current_value?: number
           p_cycle_ref?: string
           p_definition_id?: string
           p_department_id?: string
+          p_end_date?: string
           p_entity_level?: Database["public"]["Enums"]["kpi_goal_entity_level"]
           p_goal_source?: string
           p_id?: string
@@ -17290,6 +17320,7 @@ export type Database = {
           p_progress_type?: Database["public"]["Enums"]["kpi_goal_progress_type"]
           p_review_period?: string
           p_review_year: number
+          p_start_date?: string
           p_start_value?: number
           p_subperiod_summary_rule?: Database["public"]["Enums"]["kpi_goal_summary_rule"]
           p_target_value?: number
@@ -19036,6 +19067,28 @@ export type Database = {
         }[]
       }
       kpi_title_is_suspect: { Args: { p_title: string }; Returns: boolean }
+      kra_derive_status: {
+        Args: { p_end_date: string; p_pct: number; p_start_date: string }
+        Returns: string
+      }
+      kra_progress_pct: {
+        Args: { p_current: number; p_start: number; p_target: number }
+        Returns: number
+      }
+      kra_tree_list: {
+        Args: {
+          p_bu_ids?: string[]
+          p_category_ids?: string[]
+          p_dept_ids?: string[]
+          p_page?: number
+          p_page_size?: number
+          p_parent_id?: string
+          p_period?: string
+          p_search?: string
+          p_year: number
+        }
+        Returns: Json
+      }
       list_annual_review_pending_reviewers: {
         Args: { p_cycle_id: string }
         Returns: {
