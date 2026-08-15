@@ -348,6 +348,7 @@ export interface GroupWriteResult {
   will_skip?: number;
   propagated?: number;
   skipped?: number;
+  variant_count?: number;
   detail_limit?: number;
   detail_truncated?: boolean;
   skip_summary?: SkipSummaryEntry[];
