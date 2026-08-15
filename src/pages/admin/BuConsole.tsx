@@ -170,23 +170,15 @@ export default function BuConsole() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-semibold">
-            BU Performance Console
-            <Badge variant="secondary">Beta</Badge>
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Review performance by KPI group instead of employee by employee. Read-only preview.
-          </p>
-        </div>
-        {scope && (
-          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-        )}
+    <div className="space-y-3 p-4 sm:p-6">
+      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h1 className="flex items-center gap-2 text-xl font-semibold sm:text-2xl">
+          BU Performance Console
+          <Badge variant="secondary">Beta</Badge>
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Review performance by KPI group instead of employee by employee.
+        </p>
       </header>
 
       <Tabs defaultValue="console">
@@ -196,58 +188,44 @@ export default function BuConsole() {
           <TabsTrigger value="library">KPI Library</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="console" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Scope</CardTitle>
-              <CardDescription>
-                Nothing loads until you apply a scope — this keeps large BUs responsive.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <ReviewPeriodSelector
-                selectedPeriod={period}
-                selectedYear={year}
-                onPeriodChange={setPeriod}
-                onYearChange={setYear}
-              />
-              <div className="grid gap-4 sm:grid-cols-2">
-                <OrgFilterCombobox
-                  multiSelect
-                  label="Divisions"
-                  values={divisionIds}
-                  onValuesChange={handleDivisionChange}
-                  options={divisionOptions}
-                  placeholder="All divisions"
-                />
-                <OrgFilterCombobox
-                  multiSelect
-                  label="Business Units"
-                  values={buIds}
-                  onValuesChange={handleBuChange}
-                  options={buOptions}
-                  placeholder="All business units"
-                />
-                <OrgFilterCombobox
-                  multiSelect
-                  label="Departments"
-                  values={deptIds}
-                  onValuesChange={handleDeptChange}
-                  options={deptOptions}
-                  placeholder="All departments"
-                />
-                <OrgFilterCombobox
-                  multiSelect
-                  label="Managers"
-                  values={managerIds}
-                  onValuesChange={setManagerIds}
-                  options={managerOptions}
-                  placeholder="All managers"
-                />
-              </div>
-              <Button onClick={applyScope} disabled={isFetching}>Load console</Button>
-            </CardContent>
-          </Card>
+        <TabsContent value="console" className="mt-3 space-y-3">
+          <ScopeToolbar
+            period={period}
+            year={year}
+            onPeriodChange={setPeriod}
+            onYearChange={setYear}
+            filters={[
+              { key: 'div', label: 'Divisions', placeholder: 'All divisions', values: divisionIds, onValuesChange: handleDivisionChange, options: divisionOptions },
+              { key: 'bu', label: 'Business Units', placeholder: 'All business units', values: buIds, onValuesChange: handleBuChange, options: buOptions },
+              { key: 'dept', label: 'Departments', placeholder: 'All departments', values: deptIds, onValuesChange: handleDeptChange, options: deptOptions },
+              { key: 'mgr', label: 'Managers', placeholder: 'All managers', values: managerIds, onValuesChange: setManagerIds, options: managerOptions },
+            ]}
+            onApply={applyScope}
+            onRefresh={() => refetch()}
+            isBusy={isFetching}
+            hasScope={!!scope}
+            hint={!scope ? 'Nothing loads until you apply a scope — this keeps large BUs responsive.' : undefined}
+          />
+
+          {scope && (
+            <nav aria-label="Console drilldown" className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+              <span>{scope.period} {scope.year}</span>
+              {selectedCategoryName && (
+                <>
+                  <ChevronRight className="h-3 w-3" />
+                  <button type="button" className="hover:text-foreground" onClick={() => setKraKey(null)}>
+                    {selectedCategoryName}
+                  </button>
+                </>
+              )}
+              {kraKey && selectedKraName && (
+                <>
+                  <ChevronRight className="h-3 w-3" />
+                  <span className="text-foreground">{selectedKraName}</span>
+                </>
+              )}
+            </nav>
+          )}
 
           {isFetching && (
             <div className="space-y-2">
