@@ -786,3 +786,52 @@ export function goalProgressPercent(goal: Pick<BuGoalRow, 'start_value' | 'targe
   if (!Number.isFinite(pct)) return null;
   return Math.max(0, Math.min(100, Math.round(pct * 100) / 100));
 }
+
+export interface GoalKraOptionsResult {
+  authorized: boolean;
+  kras: string[];
+  kra_total: number;
+  kpis: string[];
+  kpi_total: number;
+  limit: number;
+}
+
+/**
+ * ADR-267 — the goal form picks its KRA / KPI names from the *live* review
+ * data (`kpis`) rather than the master library, so a goal always anchors to
+ * something employees are actually scored on.
+ */
+export function useGoalKraOptions(
+  year: number,
+  categoryId: string | null,
+  kraName: string | null,
+  search: string,
+  enabled: boolean,
+) {
+  return useQuery<GoalKraOptionsResult>({
+    queryKey: ['bu-console-goal-kra-options', year, categoryId, kraName, search],
+    enabled,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('bu_goal_kra_options' as any, {
+        p_year: year,
+        p_category_id: categoryId,
+        p_kra_name: kraName,
+        p_search: search.trim() || null,
+        p_limit: 200,
+      });
+      if (error) throw error;
+      return (data ?? { authorized: false, kras: [], kra_total: 0, kpis: [], kpi_total: 0, limit: 200 }) as unknown as GoalKraOptionsResult;
+    },
+  });
+}
+
+function legacyProgress(goal: Pick<BuGoalRow, 'start_value' | 'target_value' | 'current_value'>): number | null {
+  const { start_value: s, target_value: t, current_value: c } = goal;
+  if (t === null || t === undefined || c === null || c === undefined) return null;
+  const start = s ?? 0;
+  if (t === start) return c >= t ? 100 : 0;
+  const pct = ((c - start) / (t - start)) * 100;
+  if (!Number.isFinite(pct)) return null;
+  return Math.max(0, Math.min(100, Math.round(pct * 100) / 100));
+}
