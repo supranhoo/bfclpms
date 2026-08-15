@@ -29,6 +29,15 @@ import {
   type GroupWriteResult,
   type KpiDetailArgs,
 } from '@/hooks/useBuConsole';
+import {
+  resolveSkipSummary,
+  previewTruncation,
+  skippedTruncation,
+  needsTypedConfirmation,
+  confirmationSatisfied,
+  affectedCount,
+  GROUP_ACTION_CONFIRM_WORD,
+} from '@/lib/review/groupPreviewSummary';
 
 interface Props {
   args: KpiDetailArgs | null;
@@ -52,6 +61,7 @@ export function GroupValueEntryDialog({ args, open, onOpenChange }: Props) {
   const [remarks, setRemarks] = useState('');
   const [policy, setPolicy] = useState<GroupWritePolicy>('pre_review_only');
   const [preview, setPreview] = useState<GroupWriteResult | null>(null);
+  const [confirmText, setConfirmText] = useState('');
 
   const previewMut = useGroupWritePreview();
   const commitMut = useGroupWriteCommit();
@@ -99,12 +109,12 @@ export function GroupValueEntryDialog({ args, open, onOpenChange }: Props) {
     handleClose(false);
   };
 
-  const skipGroups = useMemo(() => {
-    const rows = preview?.skipped_details ?? [];
-    const map = new Map<string, number>();
-    rows.forEach(r => map.set(r.reason, (map.get(r.reason) ?? 0) + 1));
-    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
-  }, [preview]);
+  const skipGroups = useMemo(() => resolveSkipSummary(preview), [preview]);
+  const previewNote = useMemo(() => previewTruncation(preview), [preview]);
+  const skippedNote = useMemo(() => skippedTruncation(preview), [preview]);
+  const affected = affectedCount(preview);
+  const bigScope = needsTypedConfirmation(preview);
+  const confirmed = confirmationSatisfied(preview, confirmText);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -187,12 +197,16 @@ export function GroupValueEntryDialog({ args, open, onOpenChange }: Props) {
 
             {skipGroups.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {skipGroups.map(([reason, count]) => (
+                {skipGroups.map(({ reason, count }) => (
                   <Badge key={reason} variant="outline" className="font-normal">
                     {GROUP_WRITE_SKIP_LABELS[reason] ?? reason}: {count}
                   </Badge>
                 ))}
               </div>
+            )}
+
+            {previewNote.message && (
+              <p className="text-xs text-muted-foreground">{previewNote.message}</p>
             )}
 
             <div className="max-h-72 overflow-y-auto rounded-md border">
@@ -239,8 +253,11 @@ export function GroupValueEntryDialog({ args, open, onOpenChange }: Props) {
             {(preview.skipped_details ?? []).length > 0 && (
               <details className="rounded-md border p-3 text-sm">
                 <summary className="cursor-pointer font-medium">
-                  Skipped employees ({preview.skipped_details!.length})
+                  Skipped employees ({preview.will_skip ?? preview.skipped_details!.length})
                 </summary>
+                {skippedNote.message && (
+                  <p className="mt-2 text-xs text-muted-foreground">{skippedNote.message}</p>
+                )}
                 <ul className="mt-2 space-y-1 text-muted-foreground">
                   {preview.skipped_details!.map(r => (
                     <li key={r.kpi_id}>
@@ -250,6 +267,24 @@ export function GroupValueEntryDialog({ args, open, onOpenChange }: Props) {
                   ))}
                 </ul>
               </details>
+            )}
+
+            {bigScope && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="space-y-2">
+                  <p>
+                    This will write to <strong>{affected}</strong> employees in one go. Type{' '}
+                    <strong>{GROUP_ACTION_CONFIRM_WORD}</strong> to confirm.
+                  </p>
+                  <Input
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    placeholder={GROUP_ACTION_CONFIRM_WORD}
+                    className="max-w-[200px]"
+                  />
+                </AlertDescription>
+              </Alert>
             )}
           </div>
         )}
@@ -266,10 +301,11 @@ export function GroupValueEntryDialog({ args, open, onOpenChange }: Props) {
           </Button>
           <Button
             onClick={runCommit}
-            disabled={!preview || (preview.will_write ?? 0) === 0 || commitMut.isPending}
+            disabled={!preview || affected === 0 || commitMut.isPending || !confirmed}
+            title={bigScope && !confirmed ? `Type ${GROUP_ACTION_CONFIRM_WORD} to confirm this large write` : undefined}
           >
             {commitMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Apply to {preview?.will_write ?? 0} employees
+            Apply to {affected} employees
           </Button>
         </DialogFooter>
       </DialogContent>
