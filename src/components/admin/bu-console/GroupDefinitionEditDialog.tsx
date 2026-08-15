@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertTriangle, Loader2 } from 'lucide-react';
@@ -26,6 +27,7 @@ import {
   textStateFromRow, type KpiTextState, type KpiScoringState, type ThresholdMode,
 } from '@/components/admin/kpi-form/kpiFormModel';
 import type { UomType } from '@/lib/qualitativeUom';
+import { useKraCategories } from '@/hooks/useOrganization';
 import {
   useGroupEditPreview, useGroupEditCommit,
   GROUP_EDIT_FIELDS, GROUP_EDIT_FIELD_LABELS, GROUP_EDIT_SKIP_LABELS,
@@ -46,12 +48,23 @@ interface Props {
 /** Text fields are edited from the shared split control, so `kpi_name` is excluded. */
 const TEXT_FIELDS = ['kpi_title', 'kpi_description', 'kpi_formula', 'kpi_scoring_logic'] as const;
 
+/** Same option sets as the Admin KPI Editor (POLICY §KPI-DEFINITION-FORM-PARITY). */
+const FREQUENCY_OPTIONS = ['Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
+
+/** Moving a group to another category / KRA is structural — always confirm. */
+const STRUCTURAL_FIELDS = ['category_id', 'kra_name'];
+
 export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange }: Props) {
   const [text, setText] = useState<KpiTextState>(() => textStateFromRow(definition as any));
   const [scoring, setScoring] = useState<KpiScoringState>(() => scoringFromDefinition(definition));
   const [weightage, setWeightage] = useState('');
   const [target, setTarget] = useState('');
   const [uom, setUom] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [kraName, setKraName] = useState('');
+  const [frequency, setFrequency] = useState('');
+  const [criteria, setCriteria] = useState('');
+  const [sourceOfData, setSourceOfData] = useState('');
   const [allowLocked, setAllowLocked] = useState(false);
   const [resetOverrides, setResetOverrides] = useState(false);
   const [preview, setPreview] = useState<GroupEditResult | null>(null);
@@ -59,6 +72,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
 
   const previewMut = useGroupEditPreview();
   const commitMut = useGroupEditCommit();
+  const { data: categories } = useKraCategories();
 
   // Re-seed the form each time the dialog opens on a (possibly different) KPI.
   useEffect(() => {
@@ -68,11 +82,16 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     setWeightage('');
     setTarget(definition?.target_value != null ? String(definition.target_value) : '');
     setUom(definition?.uom ?? '');
+    setCategoryId(definition?.category_id ?? args?.categoryId ?? '');
+    setKraName(definition?.kra_name ?? args?.kraName ?? '');
+    setFrequency(definition?.frequency ?? '');
+    setCriteria(definition?.criteria ?? '');
+    setSourceOfData(definition?.source_of_data ?? '');
     setPreview(null);
     setConfirmText('');
     setAllowLocked(false);
     setResetOverrides(false);
-  }, [open, definition]);
+  }, [open, definition, args?.categoryId, args?.kraName]);
 
   const original = useMemo(() => ({
     kpi_title: definition?.kpi_title ?? null,
@@ -87,7 +106,12 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     uom: definition?.uom ?? null,
     target_value: definition?.target_value ?? null,
     weightage: null,
-  }), [definition]);
+    category_id: definition?.category_id ?? args?.categoryId ?? null,
+    kra_name: definition?.kra_name ?? args?.kraName ?? null,
+    frequency: definition?.frequency ?? null,
+    criteria: definition?.criteria ?? null,
+    source_of_data: definition?.source_of_data ?? null,
+  }), [definition, args?.categoryId, args?.kraName]);
 
   const changes: ChangeSet = useMemo(() => {
     const next: Record<string, unknown> = {
@@ -103,14 +127,22 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
       uom,
       target_value: target,
       weightage,
+      category_id: categoryId,
+      kra_name: kraName,
+      frequency,
+      criteria,
+      source_of_data: sourceOfData,
     };
     return diffChanges(original, next, GROUP_EDIT_FIELDS as unknown as string[]);
-  }, [text, scoring, uom, target, weightage, original]);
+  }, [text, scoring, uom, target, weightage, categoryId, kraName, frequency, criteria, sourceOfData, original]);
 
   const changedFields = Object.keys(changes);
   const affected = preview?.will_write ?? 0;
-  const bigScope = needsTypedConfirmation(preview);
-  const confirmed = confirmationSatisfied(preview, confirmText);
+  const structural = changedFields.some((f) => STRUCTURAL_FIELDS.includes(f));
+  const bigScope = needsTypedConfirmation(preview) || (structural && affected > 0);
+  const confirmed = bigScope
+    ? confirmText.trim().toUpperCase() === GROUP_ACTION_CONFIRM_WORD
+    : confirmationSatisfied(preview, confirmText);
   const weightRows = uniqueByEmployee(preview?.weightage_impact);
   const deviations = weightageDeviations(weightRows);
 
