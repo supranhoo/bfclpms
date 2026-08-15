@@ -985,97 +985,28 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         </div>
       )}
 
-      {/* Tiered Options Builder */}
-      {formData.uom_type === 'tiered' && (
-        <div className="space-y-1.5">
-          <TieredOptionsBuilder
-            options={formData.qualitative_options}
-            onChange={(options) => setFormData(prev => ({ ...prev, qualitative_options: options }))}
-          />
-          {tieredValidationError && (
-            <p className="text-sm text-destructive">{tieredValidationError}</p>
-          )}
-        </div>
-      )}
+      {/* ADR-272 / ADR-271 — shared, type-aware scoring editor */}
+      <KpiScoringEditor
+        value={scoringState}
+        onChange={(next) => setFormData(prev => ({ ...prev, ...next }))}
+      />
 
-      {/* Binary polarity — compact */}
-      {formData.uom_type === 'binary' && (
-        <div className="flex items-center justify-between gap-3 p-3 border rounded-md bg-muted/30">
-          <div className="space-y-0.5">
-            <Label className="text-xs font-medium">Binary Polarity</Label>
-            <p className="text-xs text-muted-foreground">Safety KPIs: "No" should score highest</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Select
-              value={isBinaryInverted(formData.qualitative_options) ? 'inverted' : 'standard'}
-              onValueChange={(val) => {
-                setFormData(prev => ({
-                  ...prev,
-                  qualitative_options: val === 'inverted' ? BINARY_OPTIONS_INVERTED : BINARY_OPTIONS,
-                }));
-              }}
-            >
-              <SelectTrigger className="h-8 w-[160px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="standard">Standard (Yes=5)</SelectItem>
-                <SelectItem value="inverted">Inverted (No=5)</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="flex gap-2 text-xs font-medium">
-              {isBinaryInverted(formData.qualitative_options) ? (
-                <>
-                  <span className="text-destructive">Yes=R0</span>
-                  <span className="text-primary">No=R5</span>
-                </>
-              ) : (
-                <>
-                  <span className="text-primary">Yes=R5</span>
-                  <span className="text-destructive">No=R0</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ADR-272 — cycle coverage note, at parity with "Assign New KRA" */}
+      {(() => {
+        const scope = buildCycleScopeLabel(
+          formData.frequency,
+          formData.review_period,
+          formData.review_year ? parseInt(formData.review_year) : new Date().getFullYear(),
+          formData.frequency_cycle_start || null,
+        );
+        if (!scope?.isMultiMonth) return null;
+        return (
+          <p className="text-[11px] text-muted-foreground">
+            This cycle covers {scope.label}.
+          </p>
+        );
+      })()}
 
-      {/* Rating Thresholds — numeric only */}
-      {formData.uom_type === 'numeric' && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <Label className="text-xs whitespace-nowrap">Threshold Mode</Label>
-            <Select
-              value={formData.threshold_mode}
-              onValueChange={(value: 'absolute' | 'ratio') => setFormData(prev => ({ ...prev, threshold_mode: value }))}
-            >
-              <SelectTrigger className="h-8 w-[200px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="absolute">Absolute (Recommended)</SelectItem>
-                <SelectItem value="ratio">Ratio / Percentage</SelectItem>
-              </SelectContent>
-            </Select>
-            <span className="text-xs text-muted-foreground">
-              {formData.threshold_mode === 'absolute' ? 'Actual values' : '% of target'}
-            </span>
-          </div>
-          <div className="grid grid-cols-6 gap-1.5">
-            {(['r5', 'r4', 'r3', 'r2', 'r1', 'r0'] as const).map((field) => (
-              <div key={field} className="space-y-1">
-                <Label className="text-[10px] uppercase text-muted-foreground font-semibold">{field}</Label>
-                <Input
-                  className="h-8 text-xs"
-                  value={formData[field]}
-                  onChange={(e) => setFormData(prev => ({ ...prev, [field]: e.target.value }))}
-                  placeholder={formData.threshold_mode === 'absolute' ? '100' : '100%'}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* ═══ SETTINGS ═══ */}
       <SectionHeader>Settings</SectionHeader>
