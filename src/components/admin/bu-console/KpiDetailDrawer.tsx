@@ -234,7 +234,12 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
           </div>
         )}
       </SheetContent>
-      <GroupValueEntryDialog args={args} open={entryOpen} onOpenChange={setEntryOpen} />
+      <GroupValueEntryDialog
+        args={args}
+        open={entryOpen}
+        onOpenChange={setEntryOpen}
+        scoringModel={scoringModel}
+      />
       <GroupApprovalDialog args={args} open={approveOpen} onOpenChange={setApproveOpen} />
     </Sheet>
   );
