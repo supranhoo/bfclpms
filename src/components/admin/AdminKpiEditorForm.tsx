@@ -795,12 +795,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
             reviewYear={kpi?.review_year ?? null}
           />
         </div>
-        <Textarea
-          value={formData.kpi_name}
-          onChange={(e) => setFormData(prev => ({ ...prev, kpi_name: e.target.value }))}
-          rows={3}
-          className="min-h-[80px] resize-y"
-        />
+        <KpiTextSplitFields value={textState} onChange={handleTextChange} />
       </div>
 
       {/* ═══ MEASUREMENT ═══ */}
