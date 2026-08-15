@@ -46,6 +46,7 @@ import {
   GitBranch,
   Library,
   GitMerge,
+  FlaskConical,
   LayoutDashboard,
   Package,
   GraduationCap,
