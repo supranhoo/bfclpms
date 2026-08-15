@@ -93,6 +93,14 @@ export default function BuConsole() {
 
   const { data: tree, isFetching, refetch } = useBuConsoleTree(scope);
 
+  const selectedCategory = useMemo(
+    () => tree?.categories.find(c => c.category_id === categoryId) ?? null,
+    [tree, categoryId],
+  );
+  const selectedCategoryName = selectedCategory?.category_name ?? null;
+  const selectedKraName =
+    selectedCategory?.kras.find(k => k.kra_key === kraKey)?.kra_name ?? null;
+
   const applyScope = () => {
     setCategoryId(null);
     setKraKey(null);
