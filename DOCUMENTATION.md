@@ -8327,3 +8327,26 @@ Tests: `src/test/tni/continuityRule.test.ts`, `src/test/pip/*`.
   group approval land in later phases.
   Files: `src/hooks/useBuConsole.ts`, `src/pages/admin/BuConsole.tsx`,
   `src/components/admin/bu-console/*`.
+- v2.66.260 — ADR-261 BU Console Phase 3: one-value entry, many employees.
+  New SECURITY DEFINER RPC `bu_console_group_write(p_category_id, p_kra_name,
+  p_kpi_name, p_period, p_year, p_achieved_value, p_bu_ids, p_dept_ids,
+  p_is_na, p_remarks, p_overwrite_policy, p_dry_run)`.
+  * Resolves the scoped `kpis` rows exactly as `bu_console_kpi_detail` does
+    (normalised KRA/KPI keys, active employees only), derives each employee's
+    0-5 score from *their own* R1-R5 bands via
+    `fn_compute_rating_from_achievement`, then delegates the write to
+    `propagate_org_kpi_value` — no second write path was created.
+  * `p_dry_run = true` (the default) writes nothing and returns
+    `{ will_write, will_skip, preview[], skipped[] }`. Skip taxonomy:
+    `final_score_locked`, `approved_immutable`, `reviewer_locked`,
+    `not_in_kra_set`, `no_scoring_bands`, plus the engine's own
+    `not_authorized` / `kpi_not_found` / `race_lost_during_advance`.
+  * Commit stamps a shared `batch_id` on a `BU_CONSOLE_GROUP_WRITE`
+    `kpi_audit_logs` row per affected KPI for wholesale revert.
+  * Auto-advanced stubs with no self evidence stay refreshable (POLICY §88.5);
+    approved rows are hard-blocked regardless of overwrite policy (POLICY §88).
+  UI: `GroupValueEntryDialog.tsx` (value, N/A toggle, overwrite policy, remarks,
+  preview table with old vs new score, grouped skip reasons) launched from
+  `KpiDetailDrawer`. Hooks `useGroupWritePreview` / `useGroupWriteCommit`.
+  Rollback: the console remains feature-flagged; the RPC is additive and
+  droppable; batches revert through the existing audit path.
