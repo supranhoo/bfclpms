@@ -16983,6 +16983,8 @@ export type Database = {
           p_period: string
           p_remarks?: string
           p_target_stage: string
+          p_title_key?: string
+          p_variant_key?: string
           p_year: number
         }
         Returns: Json
@@ -17002,6 +17004,8 @@ export type Database = {
           p_overwrite_policy?: string
           p_period: string
           p_remarks?: string
+          p_title_key?: string
+          p_variant_key?: string
           p_year: number
         }
         Returns: Json
@@ -17018,6 +17022,8 @@ export type Database = {
           p_page?: number
           p_page_size?: number
           p_period: string
+          p_title_key?: string
+          p_variant_key?: string
           p_year: number
         }
         Returns: Json
@@ -17036,6 +17042,15 @@ export type Database = {
           p_year: number
         }
         Returns: Json
+      }
+      bu_console_variant_key: {
+        Args: {
+          p_desc: string
+          p_formula: string
+          p_scoring: string
+          p_target: number
+        }
+        Returns: string
       }
       bu_goal_archive: { Args: { p_id: string }; Returns: Json }
       bu_goal_kra_options: {
