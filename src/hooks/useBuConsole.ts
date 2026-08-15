@@ -297,6 +297,9 @@ export interface GroupWriteResult {
   will_skip?: number;
   propagated?: number;
   skipped?: number;
+  detail_limit?: number;
+  detail_truncated?: boolean;
+  skip_summary?: SkipSummaryEntry[];
   preview?: GroupWritePreviewRow[];
   skipped_details?: GroupWriteSkipRow[];
 }
@@ -423,6 +426,9 @@ export interface GroupAdvanceResult {
   will_skip?: number;
   advanced?: number;
   skipped?: number;
+  detail_limit?: number;
+  detail_truncated?: boolean;
+  skip_summary?: SkipSummaryEntry[];
   preview?: GroupAdvancePreviewRow[];
   skipped_details?: GroupWriteSkipRow[];
 }
