@@ -16,7 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScorePill } from './ScorePill';
 import { RUN_SKIP_LABELS, useEmployeeScorecard, useRunAdvanceCommit } from '@/hooks/useBuConsoleRun';
 import { useBuConsoleCapability } from '@/hooks/useBuConsoleCapability';
-import { stageLabel } from './PipelineTab';
+import { stageLabel } from './pipelineStages';
 import { ArrowRight, Lock } from 'lucide-react';
 
 interface Props {
