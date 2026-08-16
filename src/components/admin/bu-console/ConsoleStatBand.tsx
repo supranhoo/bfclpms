@@ -104,6 +104,25 @@ function Tile({
   );
 }
 
+/** ADR-283 — one metric on a single line: glyph, caption, value. */
+function Chip({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <span className="flex shrink-0 snap-start items-center gap-1.5">
+      <span className="text-muted-foreground" aria-hidden>{icon}</span>
+      <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className="text-sm font-semibold tabular-nums leading-none">{value}</span>
+    </span>
+  );
+}
+
 export function ConsoleStatBand({
   stats,
   scopeLabel,
