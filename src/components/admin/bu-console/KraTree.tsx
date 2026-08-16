@@ -82,6 +82,8 @@ function KraTreeRowView({
   row, depth, scope, handlers,
 }: { row: KraTreeRow; depth: number; scope: KraTreeScope; handlers: Handlers }) {
   const [open, setOpen] = useState(false);
+  // ADR-284 — write affordances only for tiers the server accepts writes from.
+  const { canWrite } = useBuConsoleCapability();
   const hasChildren = row.child_count > 0;
   const pct = row.progress_pct;
   const isLeaf = !hasChildren && row.goal_source === 'kpi_rollup';
