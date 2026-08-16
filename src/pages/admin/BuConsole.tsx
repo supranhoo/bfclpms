@@ -38,7 +38,7 @@ import { ChevronRight, FlaskConical, Compass } from 'lucide-react';
 
 export default function BuConsole() {
   const { data: flagEnabled, isLoading: flagLoading } = useBuConsoleFlag();
-  const { isReadOnly } = useBuConsoleCapability();
+  const { isReadOnly, isAdmin, canWrite } = useBuConsoleCapability();
 
   const [period, setPeriod] = useState(() => format(new Date(), 'MMMM'));
   const [year, setYear] = useState(() => new Date().getFullYear());
@@ -253,6 +253,12 @@ export default function BuConsole() {
             <p className="mt-2 rounded-md border border-warning/40 bg-warning/10 px-2 py-1 text-[11px] text-muted-foreground">
               Read-only view — you can explore every scope, but group edits, tuning and approvals
               stay with admins.
+            </p>
+          )}
+          {canWrite && !isAdmin && (
+            <p className="mt-2 rounded-md border border-warning/40 bg-warning/10 px-2 py-1 text-[11px] text-muted-foreground">
+              You can act on KPIs that have left KRA Set. KRA design — while a KPI is still in KRA
+              Set — stays with admins.
             </p>
           )}
           {scope && stats && (
