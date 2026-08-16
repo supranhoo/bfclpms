@@ -16,6 +16,7 @@ import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDial
 import { useGoalRollup, useGoalArchive, type KraTreeRow } from '@/hooks/useBuConsole';
 import { GoalFormDialog, type GoalFormSeed } from './GoalFormDialog';
 import { KraTree, type KraTreeScope } from './KraTree';
+import { useBuConsoleCapability } from '@/hooks/useBuConsoleCapability';
 import { Plus, Search } from 'lucide-react';
 
 interface Props {
@@ -31,6 +32,7 @@ interface Props {
 
 export function GoalsTab({ year, period, buIds, deptIds, buOptions, deptOptions, active }: Props) {
   const [formOpen, setFormOpen] = useState(false);
+  const { canWrite } = useBuConsoleCapability();
   const [editing, setEditing] = useState<GoalFormSeed | null>(null);
   const [parent, setParent] = useState<GoalFormSeed | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<KraTreeRow | null>(null);
@@ -89,9 +91,11 @@ export function GoalsTab({ year, period, buIds, deptIds, buOptions, deptOptions,
                 onBlur={() => setSearch(searchInput)}
               />
             </div>
-            <Button size="sm" onClick={() => { setEditing(null); setParent(null); setFormOpen(true); }}>
-              <Plus className="mr-2 h-4 w-4" />New KRA
-            </Button>
+            {canWrite && (
+              <Button size="sm" onClick={() => { setEditing(null); setParent(null); setFormOpen(true); }}>
+                <Plus className="mr-2 h-4 w-4" />New KRA
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent>
