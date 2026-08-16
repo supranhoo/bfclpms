@@ -34,6 +34,13 @@ import {
   type GroupEditResult, type KpiDetailArgs,
 } from '@/hooks/useBuConsole';
 import {
+  useGroupEditSpanPreview, useGroupEditSpanCommit, type GroupEditSpanResult,
+} from '@/hooks/useBuConsole';
+import {
+  resolveEditSpan, spanModesAvailable, describeSpan, aggregateSpan, periodLabel, toTarget,
+  EDIT_SPAN_LABELS, MAX_ROLLOUT_PERIODS, type EditSpanMode,
+} from './groupEditSpan';
+import {
   diffChanges, hasChanges, weightageDeviations, uniqueByEmployee,
   isMultiMonthFrequency, validateCycleChange, type ChangeSet,
 } from './groupEditModel';
@@ -86,12 +93,33 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const [sourceOfData, setSourceOfData] = useState('');
   const [allowLocked, setAllowLocked] = useState(false);
   const [resetOverrides, setResetOverrides] = useState(false);
-  const [preview, setPreview] = useState<GroupEditResult | null>(null);
+  const [spanMode, setSpanMode] = useState<EditSpanMode>('this');
+  const [spanCount, setSpanCount] = useState(3);
+  const [spanPreview, setSpanPreview] = useState<GroupEditSpanResult | null>(null);
   const [confirmText, setConfirmText] = useState('');
 
-  const previewMut = useGroupEditPreview();
-  const commitMut = useGroupEditCommit();
+  const previewMut = useGroupEditSpanPreview();
+  const commitMut = useGroupEditSpanCommit();
   const { data: categories } = useKraCategories();
+
+  const setPreview = (v: GroupEditSpanResult | null) => setSpanPreview(v);
+
+  const spanModes = useMemo(
+    () => (args ? spanModesAvailable(toTarget(args.period, args.year)) : (['this'] as EditSpanMode[])),
+    [args?.period, args?.year],
+  );
+
+  const targets = useMemo(
+    () => (args ? resolveEditSpan(toTarget(args.period, args.year), spanMode, spanCount) : []),
+    [args?.period, args?.year, spanMode, spanCount],
+  );
+
+  /** Detail lists (weightage, skips, clashes) always describe the selected month. */
+  const preview: GroupEditResult | null = spanPreview?.entries[0]?.result ?? null;
+  const spanTotals = useMemo(
+    () => aggregateSpan(spanPreview?.entries ?? []),
+    [spanPreview],
+  );
 
   // Re-seed the form each time the dialog opens on a (possibly different) KPI.
   useEffect(() => {
@@ -116,6 +144,8 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     setConfirmText('');
     setAllowLocked(false);
     setResetOverrides(false);
+    setSpanMode('this');
+    setSpanCount(3);
   }, [open, definition, args?.categoryId, args?.kraName]);
 
   const original = useMemo(() => ({
@@ -179,7 +209,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   ]);
 
   const changedFields = Object.keys(changes);
-  const affected = preview?.will_write ?? 0;
+  const affected = spanPreview ? spanTotals.willWrite : 0;
   const structural = changedFields.some((f) => STRUCTURAL_FIELDS.includes(f));
   const cycleMove = changedFields.some((f) => CYCLE_FIELDS.includes(f));
   const bigScope = needsTypedConfirmation(preview) || ((structural || cycleMove) && affected > 0);
@@ -213,15 +243,15 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const runPreview = () => {
     if (!args || !hasChanges(changes) || cycleError) return;
     previewMut.mutate(
-      { ...baseArgs(args), changes, allowLocked, resetOverrides },
+      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides },
       { onSuccess: (res) => { setPreview(res); setConfirmText(''); } },
     );
   };
 
   const runCommit = () => {
-    if (!args || !preview) return;
+    if (!args || !spanPreview) return;
     commitMut.mutate(
-      { ...baseArgs(args), changes, allowLocked, resetOverrides },
+      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides },
       { onSuccess: () => onOpenChange(false) },
     );
   };
