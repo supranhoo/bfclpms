@@ -419,6 +419,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
         row={overrideRow}
         open={!!overrideRow}
         onOpenChange={(o) => !o && setOverrideRow(null)}
+        onEditGroupDefinition={() => { setOverrideRow(null); setEditOpen(true); }}
       />
     </Dialog>
   );
