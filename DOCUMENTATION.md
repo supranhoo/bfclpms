@@ -8934,3 +8934,12 @@ built from, and `computeConsoleStats(categories, employeeTotal)` renders that
 number with the sub-label "distinct employees in scope". Per-KRA and per-KPI
 "N employees mapped" chips are unchanged — those are correct per node.
 Regression guard: `src/components/admin/bu-console/consoleLayout.test.tsx`.
+
+## ADR-282 — Per-employee tuning is scope-only
+
+The Performance Console "Tune" dialog is now type-aware. Yes/No and tiered KPIs show
+their real scoring options read-only (with a shortcut to the group definition editor)
+instead of an inapplicable R0–R5 grid; value-based KPIs are unchanged. The rule is
+enforced in the database by `bu_console_scoring_model_lock`, which makes any attempt to
+fork a scoring model per employee a skipped row rather than a silent write.
+See docs/adr/ADR-282.md and POLICY §KPI-SCORING-MODEL-GROUP-OWNED.
