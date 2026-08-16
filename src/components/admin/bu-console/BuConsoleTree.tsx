@@ -245,6 +245,191 @@ function KpiRow({
   );
 }
 
+/** Horizontal category strip with pills and overflow-aware scroll arrows. */
+function CategoryStrip({
+  categories,
+  selectedCategoryId,
+  onSelectCategory,
+}: {
+  categories: BuConsoleCategoryNode[];
+  selectedCategoryId: string | null;
+  onSelectCategory: (id: string) => void;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState({ left: false, right: false });
+
+  const measure = () => {
+    const el = trackRef.current;
+    if (!el) return;
+    setOverflow({
+      left: el.scrollLeft > 4,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
+    });
+  };
+
+  useEffect(() => {
+    measure();
+    const el = trackRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', measure, { passive: true });
+    window.addEventListener('resize', measure);
+    return () => {
+      el.removeEventListener('scroll', measure);
+      window.removeEventListener('resize', measure);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categories.length]);
+
+  const nudge = (dir: -1 | 1) =>
+    trackRef.current?.scrollBy({ left: dir * 240, behavior: 'smooth' });
+
+  return (
+    <div className="relative rounded-lg border bg-card p-1.5">
+      {overflow.left && (
+        <button
+          type="button"
+          aria-label="Scroll categories left"
+          onClick={() => nudge(-1)}
+          className="absolute left-1 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-sm hover:text-foreground"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+      )}
+      {overflow.right && (
+        <button
+          type="button"
+          aria-label="Scroll categories right"
+          onClick={() => nudge(1)}
+          className="absolute right-1 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border bg-card text-muted-foreground shadow-sm hover:text-foreground"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      )}
+      {overflow.left && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 rounded-l-lg bg-gradient-to-r from-card to-transparent"
+        />
+      )}
+      {overflow.right && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 rounded-r-lg bg-gradient-to-l from-card to-transparent"
+        />
+      )}
+      <div
+        ref={trackRef}
+        role="tablist"
+        aria-label="KPI categories"
+        className="flex snap-x gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {categories.map(c => {
+          const active = c.category_id === selectedCategoryId;
+          return (
+            <button
+              key={c.category_id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => onSelectCategory(c.category_id)}
+              className={cn(
+                'flex min-h-11 shrink-0 snap-start items-center gap-2 whitespace-nowrap rounded-md px-3 text-sm transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                active
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              {c.category_name}
+              <span
+                className={cn(
+                  'rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums',
+                  active
+                    ? 'bg-primary-foreground/20 text-primary-foreground'
+                    : 'bg-muted text-muted-foreground',
+                )}
+              >
+                {c.kpi_count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Right-hand context panel so a thin category doesn't leave a dead canvas. */
+function CategoryGlance({ category }: { category: BuConsoleCategoryNode }) {
+  const summary = useMemo(() => {
+    const kpis = category.kras.flatMap(k => k.kpis);
+    const scored = kpis.filter(k => k.avg_score !== null && k.avg_score !== undefined);
+    const avg =
+      scored.length > 0
+        ? scored.reduce((n, k) => n + Number(k.avg_score), 0) / scored.length
+        : null;
+    return {
+      top: [...kpis].sort((a, b) => (b.employee_count ?? 0) - (a.employee_count ?? 0)).slice(0, 5),
+      avg,
+      unsplit: kpis.filter(k => !k.is_structured).length,
+      orgLevel: kpis.filter(k => k.is_org_level).length,
+      unscored: kpis.length - scored.length,
+    };
+  }, [category]);
+
+  return (
+    <Card className="hidden xl:block">
+      <CardContent className="space-y-4 p-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" aria-hidden />
+          <p className="text-sm font-semibold">Category at a glance</p>
+        </div>
+
+        <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
+          <span className="text-xs text-muted-foreground">Average score</span>
+          <ScorePill value={summary.avg} />
+        </div>
+
+        <div>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Top KPIs by employee impact
+          </p>
+          {summary.top.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No KPIs in this category.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {summary.top.map(k => (
+                <li key={k.kpi_key} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="min-w-0 truncate">{k.kpi_title || k.kpi_name}</span>
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted px-2 py-0.5 font-medium tabular-nums text-muted-foreground">
+                    <Users className="h-3 w-3" aria-hidden />
+                    {k.employee_count}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <dl className="grid grid-cols-3 gap-2 border-t pt-3 text-center">
+          {[
+            { label: 'Org-level', value: summary.orgLevel },
+            { label: 'Unsplit text', value: summary.unsplit },
+            { label: 'Unscored', value: summary.unscored },
+          ].map(x => (
+            <div key={x.label}>
+              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                {x.label}
+              </dt>
+              <dd className="text-sm font-semibold tabular-nums">{x.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function BuConsoleTree({
   categories,
   selectedCategoryId,
