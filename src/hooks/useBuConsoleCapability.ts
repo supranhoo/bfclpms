@@ -37,33 +37,37 @@ export interface BuConsoleCapability {
   isLoading: boolean;
 }
 
-export function useBuConsoleCapability(): BuConsoleCapability {
-  const { effectiveRole, loading } = useAuth();
-  const { canPerform, isLoading } = useMenuAccess();
-
-  const isAdmin = effectiveRole === 'admin';
-
-  // Mirrors `bu_console_can_write`. An explicit profile-level 'update' right on
-  // the console menu key is honoured as well, so access can be widened from
-  // Menu Access without a code change.
+/**
+ * Pure resolver — mirrors `bu_console_can_write` + `bu_console_kpi_actionable`.
+ * Kept side-effect free so the tier matrix is unit-testable without React.
+ */
+export function resolveConsoleCapability(input: {
+  role: string | null | undefined;
+  menuUpdate: boolean;
+}): Pick<BuConsoleCapability, 'canWrite' | 'isAdmin' | 'canActOnStatus' | 'isReadOnly'> {
+  const isAdmin = input.role === 'admin';
   const canWrite =
-    isAdmin ||
-    effectiveRole === 'management' ||
-    effectiveRole === 'auditor' ||
-    canPerform(BU_CONSOLE_MENU_KEY, 'update');
+    isAdmin || input.role === 'management' || input.role === 'auditor' || input.menuUpdate;
 
-  // Mirrors `bu_console_kpi_actionable`.
   const canActOnStatus = (status?: string | null) => {
     if (!canWrite) return false;
     if (isAdmin) return true;
     return status !== KRA_SET_STATUS;
   };
 
-  return {
-    canWrite,
-    isAdmin,
-    canActOnStatus,
-    isReadOnly: !canWrite,
-    isLoading: loading || isLoading,
-  };
+  return { canWrite, isAdmin, canActOnStatus, isReadOnly: !canWrite };
+}
+
+export function useBuConsoleCapability(): BuConsoleCapability {
+  const { effectiveRole, loading } = useAuth();
+  const { canPerform, isLoading } = useMenuAccess();
+
+  // An explicit profile-level 'update' right on the console menu key is honoured
+  // too, so access can be widened from Menu Access without a code change.
+  const resolved = resolveConsoleCapability({
+    role: effectiveRole,
+    menuUpdate: canPerform(BU_CONSOLE_MENU_KEY, 'update'),
+  });
+
+  return { ...resolved, isLoading: loading || isLoading };
 }
