@@ -189,3 +189,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Performance Console Access & Pipeline](mem://features/admin/performance-console-access-and-pipeline) — Read tiers (management/auditor/HR PMS), admin-only writes, read-only Review Pipeline tab
 - [Performance Console Single Surface](mem://features/admin/performance-console-single-surface) — No tabs: one tree, Configure/Review modes, stage rail, overflow dialogs (ADR-289)
 - [Performance Console Review Run](mem://features/admin/performance-console-review-run) — KPI x employee worksheet, scorecard drawer, tiered target rules (ADR-286/288)
+- [Console Stage Supersede](mem://features/admin/console-stage-supersede) — Console worksheet leapfrog: higher stage closes lower stages with carried score + per-stage audit (ADR-290)
