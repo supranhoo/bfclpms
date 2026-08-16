@@ -577,6 +577,8 @@ export function BuConsoleTree({
             />
           </CardContent>
         </Card>
+        <CategoryGlance category={category} />
+        </div>
       )}
     </div>
   );
