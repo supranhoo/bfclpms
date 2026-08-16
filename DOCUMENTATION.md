@@ -8882,3 +8882,26 @@ so a large KRA can't push the rest of the list off screen. KPI row content
 Presentation only — no change to data loading, RPCs, scoring, the detail drawer
 or group actions. `onSelectKra` now accepts `null` to collapse. Regression
 guard: `src/components/admin/bu-console/consoleLayout.test.tsx`.
+
+## ADR-279 — Performance Console visual language
+
+The console now carries product-level signal instead of a wireframe. A stat band
+(`ConsoleStatBand`) summarises the loaded scope — Categories, KRAs, KPIs,
+Employees impacted and the average score — computed from the already-fetched
+tree by `computeConsoleStats`; a muted placeholder variant keeps the page
+structured before a scope is applied. Scores render through `ScorePill`, which
+bands a value against its scale (low / mid / high) using the new semantic
+`--success` and `--warning` tokens and can show a micro progress bar; KRA rows
+gained an Avg score column, a people-icon employee chip, a heavier title and a
+primary-tinted surface when expanded. The category strip became pills with
+overflow-aware scroll arrows and edge fades, the expanded KPI panel gained a
+tree rail and inner shadow, and on `xl+` the list is paired with a
+"Category at a glance" panel (top KPIs by employee impact, average score,
+org-level / unsplit / unscored counts). Loading skeletons mirror the stat band
+and 56px row heights.
+
+Presentation only — no change to `useBuConsole`, RPC signatures, ADR-229
+cascading filters, ADR-264 virtualization thresholds, ADR-271 dirty-scope
+behaviour or ADR-278 inline expansion. Two colour tokens were added to
+`src/index.css` (light + dark) and mapped in `tailwind.config.ts`. Regression
+guard: `src/components/admin/bu-console/consoleLayout.test.tsx`.

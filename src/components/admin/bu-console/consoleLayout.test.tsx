@@ -6,6 +6,8 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ConsoleMetricRow, ConsoleMetricHeader } from './ConsoleMetricRow';
+import { ConsoleStatBand, computeConsoleStats } from './ConsoleStatBand';
+import { scoreBand } from './ScorePill';
 
 describe('ConsoleMetricRow (ADR-277)', () => {
   it('exposes the title, metrics and a button role when clickable', () => {
@@ -62,5 +64,41 @@ describe('KRA disclosure (ADR-278)', () => {
     expect(row.getAttribute('aria-expanded')).toBe('true');
     expect(row.getAttribute('aria-controls')).toBe('p1');
     expect(row.querySelector('svg')?.getAttribute('class')).toContain('rotate-90');
+  });
+});
+
+describe('Console stat band + score bands (ADR-279)', () => {
+  it('aggregates the loaded tree without touching data', () => {
+    const stats = computeConsoleStats([
+      {
+        kra_count: 2,
+        kpi_count: 3,
+        kras: [
+          { kpis: [{ employee_count: 4, avg_score: 5 }, { employee_count: 2, avg_score: null }] },
+          { kpis: [{ employee_count: 1, avg_score: 3 }] },
+        ],
+      },
+    ]);
+    expect(stats).toEqual({ categories: 1, kras: 2, kpis: 3, employees: 7, avgScore: 4 });
+  });
+
+  it('renders the stat tiles with their counts', () => {
+    render(
+      <ConsoleStatBand
+        stats={{ categories: 1, kras: 2, kpis: 3, employees: 7, avgScore: 4 }}
+        scopeLabel="July 2026"
+      />,
+    );
+    expect(screen.getByText('Categories')).toBeTruthy();
+    expect(screen.getByText('Employees impacted')).toBeTruthy();
+    expect(screen.getByText('7')).toBeTruthy();
+    expect(screen.getByText('4.00')).toBeTruthy();
+  });
+
+  it('bands scores against the review scale', () => {
+    expect(scoreBand(null)).toBe('none');
+    expect(scoreBand(1.5)).toBe('low');
+    expect(scoreBand(3.2)).toBe('mid');
+    expect(scoreBand(4.6)).toBe('high');
   });
 });
