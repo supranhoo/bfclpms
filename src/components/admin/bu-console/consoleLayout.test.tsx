@@ -8,6 +8,70 @@ import { render, screen } from '@testing-library/react';
 import { ConsoleMetricRow, ConsoleMetricHeader } from './ConsoleMetricRow';
 import { ConsoleStatBand, computeConsoleStats } from './ConsoleStatBand';
 import { scoreBand } from './ScorePill';
+import { BuConsoleTree } from './BuConsoleTree';
+
+const tree = [
+  {
+    category_id: 'c1',
+    category_name: 'Production',
+    kra_count: 1,
+    kpi_count: 1,
+    kras: [
+      {
+        kra_key: 'kra-1',
+        kra_name: 'Power generation',
+        kpi_count: 1,
+        kpis: [
+          {
+            kpi_key: 'k1',
+            kpi_name: 'Dust emission',
+            kpi_title: 'Dust emission',
+            employee_count: 3,
+            avg_score: 4,
+            variants: [],
+          },
+        ],
+      },
+    ],
+  },
+] as any;
+
+describe('Console single surface (ADR-289)', () => {
+  const noop = () => {};
+
+  it('shows the KPI definition list inside the open KRA in configure mode', () => {
+    render(
+      <BuConsoleTree
+        categories={tree}
+        selectedCategoryId="c1"
+        selectedKraKey="kra-1"
+        onSelectCategory={noop}
+        onSelectKra={noop}
+        onSelectKpi={noop}
+      />,
+    );
+    expect(screen.getByText('Dust emission')).toBeTruthy();
+  });
+
+  it('swaps the same panel for the review worksheet when one is supplied', () => {
+    render(
+      <BuConsoleTree
+        categories={tree}
+        selectedCategoryId="c1"
+        selectedKraKey="kra-1"
+        onSelectCategory={noop}
+        onSelectKra={noop}
+        onSelectKpi={noop}
+        renderKraPanel={(kra, categoryId) => (
+          <div>worksheet for {kra.kra_name} in {categoryId}</div>
+        )}
+      />,
+    );
+    expect(screen.getByText('worksheet for Power generation in c1')).toBeTruthy();
+    // The definition list is replaced, not stacked below it.
+    expect(screen.queryByText('Dust emission')).toBeNull();
+  });
+});
 
 describe('ConsoleMetricRow (ADR-277)', () => {
   it('exposes the title, metrics and a button role when clickable', () => {
