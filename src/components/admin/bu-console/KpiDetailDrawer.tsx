@@ -48,8 +48,9 @@ const fmt = (v: number | null | undefined) =>
 
 export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }: Props) {
   const { data, isLoading, error } = useBuConsoleKpiDetail(args);
-  // ADR-284 — group writes / tuning are admin-only (server enforces the same).
-  const { canWrite } = useBuConsoleCapability();
+  // ADR-284 / ADR-285 — admin writes at any stage; management & audit write
+  // once the KPI has left KRA Set. The server enforces the same contract.
+  const { canWrite, isAdmin, canActOnStatus } = useBuConsoleCapability();
   const [entryOpen, setEntryOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -71,6 +72,11 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
   if (bulkWeightage.trim()) bulkChanges.weightage = bulkWeightage.trim();
   if (bulkTarget.trim()) bulkChanges.target_value = bulkTarget.trim();
   const canApplyBulk = selectedIds.length > 0 && Object.keys(bulkChanges).length > 0;
+  // ADR-285 — a non-admin has nothing to act on when every row is still in KRA Set.
+  const rows = data?.rows ?? [];
+  const kraSetOnly =
+    !isAdmin && rows.length > 0 && rows.every((r: any) => r.status === 'kra_set');
+  const showGroupActions = !!data?.authorized && canWrite && !kraSetOnly;
 
   const applyBulk = () => {
     if (!canApplyBulk) return;
@@ -144,7 +150,17 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
           </div>
         )}
 
-        {data?.authorized && canWrite && (
+        {data?.authorized && canWrite && kraSetOnly && (
+          <div className="mb-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-xs">
+            <p className="font-medium">This KPI is still in KRA Set.</p>
+            <p className="mt-1 text-muted-foreground">
+              KRA design stays with admins. You can act on this KPI once it moves into self
+              review.
+            </p>
+          </div>
+        )}
+
+        {showGroupActions && (
           <div className="sticky top-0 z-10 -mx-6 mb-4 flex flex-wrap items-center gap-2 border-b bg-background/95 px-6 pb-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
             <Button
               className="h-10"
