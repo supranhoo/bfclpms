@@ -42,12 +42,14 @@ export function MergeProposalsTab() {
             Approving a proposal records the decision — it never edits past scores.
           </CardDescription>
         </div>
-        <Button onClick={() => generate.mutate(undefined)} disabled={generate.isPending}>
-          {generate.isPending
-            ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            : <ScanSearch className="mr-2 h-4 w-4" />}
-          Scan for duplicates
-        </Button>
+        {canWrite && (
+          <Button onClick={() => generate.mutate(undefined)} disabled={generate.isPending}>
+            {generate.isPending
+              ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              : <ScanSearch className="mr-2 h-4 w-4" />}
+            Scan for duplicates
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         <Tabs value={status} onValueChange={(v) => { setStatus(v as StatusTab); setPage(1); }}>
@@ -114,7 +116,7 @@ export function MergeProposalsTab() {
                         {p.similarity != null && ` · ${Math.round(Number(p.similarity) * 100)}%`}
                       </Badge>
                     </TableCell>
-                    {status === 'pending' && (
+                    {status === 'pending' && canWrite && (
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button
