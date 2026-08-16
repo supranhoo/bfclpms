@@ -244,6 +244,7 @@ export default function BuConsole() {
             </h1>
             <TabsList className="ml-auto h-8">
               <TabsTrigger value="console" className="text-xs">Console</TabsTrigger>
+              <TabsTrigger value="run" className="text-xs">Review Run</TabsTrigger>
               <TabsTrigger value="pipeline" className="text-xs">Pipeline</TabsTrigger>
               <TabsTrigger value="goals" className="text-xs">KRA Tree</TabsTrigger>
               <TabsTrigger value="library" className="text-xs">KPI Library</TabsTrigger>
@@ -386,6 +387,10 @@ export default function BuConsole() {
 
         <TabsContent value="pipeline" className="mt-2">
           <PipelineTab scope={scope} />
+        </TabsContent>
+
+        <TabsContent value="run" className="mt-2">
+          <ReviewRunTab scope={scope} />
         </TabsContent>
 
         <TabsContent value="goals" className="mt-4">

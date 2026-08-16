@@ -4038,6 +4038,68 @@ export type Database = {
           },
         ]
       }
+      bu_console_target_rules: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          kpi_key: string
+          kpi_name: string
+          kra_name: string
+          match_dimension: string
+          match_value: string | null
+          notes: string | null
+          priority: number
+          review_period: string | null
+          review_year: number | null
+          target_value: string
+          updated_at: string
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kpi_key: string
+          kpi_name: string
+          kra_name: string
+          match_dimension: string
+          match_value?: string | null
+          notes?: string | null
+          priority?: number
+          review_period?: string | null
+          review_year?: number | null
+          target_value: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kpi_key?: string
+          kpi_name?: string
+          kra_name?: string
+          match_dimension?: string
+          match_value?: string | null
+          notes?: string | null
+          priority?: number
+          review_period?: string | null
+          review_year?: number | null
+          target_value?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bu_console_target_rules_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bu_goals: {
         Row: {
           aligns_to_id: string | null
@@ -17158,6 +17220,10 @@ export type Database = {
       }
       bu_console_edit_runs_list: { Args: { p_limit?: number }; Returns: Json }
       bu_console_editable_fields: { Args: never; Returns: string[] }
+      bu_console_employee_scorecard: {
+        Args: { p_employee_id: string; p_period: string; p_year: number }
+        Returns: Json
+      }
       bu_console_generate_merge_proposals: {
         Args: { p_fuzzy_threshold?: number }
         Returns: Json
@@ -17226,6 +17292,15 @@ export type Database = {
         Args: { _kpi_id: string; _uid: string }
         Returns: boolean
       }
+      bu_console_kpi_advance: {
+        Args: {
+          p_dry_run?: boolean
+          p_kpi_ids: string[]
+          p_remarks?: string
+          p_target_stage: string
+        }
+        Returns: Json
+      }
       bu_console_kpi_detail: {
         Args: {
           p_bu_ids?: string[]
@@ -17266,9 +17341,41 @@ export type Database = {
         Args: { p_allow_locked?: boolean; p_changes: Json; p_kpi_id: string }
         Returns: Json
       }
+      bu_console_run_snapshot: {
+        Args: {
+          p_bu_ids?: string[]
+          p_category_id?: string
+          p_dept_ids?: string[]
+          p_division_ids?: string[]
+          p_kra_name?: string
+          p_manager_ids?: string[]
+          p_page?: number
+          p_page_size?: number
+          p_period: string
+          p_stage?: string
+          p_year: number
+        }
+        Returns: Json
+      }
       bu_console_scoring_model_lock: {
         Args: { p_changes: Json; p_kpi_id: string }
         Returns: string
+      }
+      bu_console_target_rules_apply: {
+        Args: {
+          p_bu_ids?: string[]
+          p_category_id: string
+          p_dept_ids?: string[]
+          p_division_ids?: string[]
+          p_dry_run?: boolean
+          p_kpi_name: string
+          p_kra_name: string
+          p_manager_ids?: string[]
+          p_period: string
+          p_reset_overrides?: boolean
+          p_year: number
+        }
+        Returns: Json
       }
       bu_console_tree: {
         Args: {
