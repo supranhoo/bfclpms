@@ -297,6 +297,10 @@ export function KraWorksheet({ scope, categoryId, kraName, stage }: Props) {
             <p className="text-xs font-medium">
               {selected} cell{selected === 1 ? '' : 's'} selected · move to {stageLabel(stage)}
             </p>
+            <p className="w-full text-[11px] text-muted-foreground">
+              Rows still waiting at an earlier stage can be signed from here — the stages in
+              between are closed with the same score and recorded on the audit trail (ADR-290).
+            </p>
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" onClick={() => { setSelection(new Set()); setResult(null); }}>
                 Clear
@@ -322,6 +326,9 @@ export function KraWorksheet({ scope, categoryId, kraName, stage }: Props) {
               </span>
               {' · '}
               {(result.dry_run ? result.will_skip : result.skipped) ?? 0} skipped
+              {((result.dry_run ? result.will_supersede : result.superseded) ?? 0) > 0 && (
+                <> · {(result.dry_run ? result.will_supersede : result.superseded)} close earlier stages</>
+              )}
               {result.skip_summary?.length ? (
                 <ul className="mt-1 space-y-0.5">
                   {result.skip_summary.map((s) => (
