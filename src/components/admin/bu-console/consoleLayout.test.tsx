@@ -68,8 +68,9 @@ describe('KRA disclosure (ADR-278)', () => {
 });
 
 describe('Console stat band + score bands (ADR-279)', () => {
-  it('aggregates the loaded tree without touching data', () => {
-    const stats = computeConsoleStats([
+  it('aggregates the loaded tree and uses the distinct employee total (ADR-281)', () => {
+    const stats = computeConsoleStats(
+      [
       {
         kra_count: 2,
         kpi_count: 3,
@@ -78,8 +79,11 @@ describe('Console stat band + score bands (ADR-279)', () => {
           { kpis: [{ employee_count: 1, avg_score: 3 }] },
         ],
       },
-    ]);
-    expect(stats).toEqual({ categories: 1, kras: 2, kpis: 3, employees: 7, avgScore: 4 });
+      ],
+      5,
+    );
+    // 4+2+1 = 7 KPI-row memberships, but only 5 distinct people.
+    expect(stats).toEqual({ categories: 1, kras: 2, kpis: 3, employees: 5, avgScore: 4 });
   });
 
   it('renders the stat tiles with their counts', () => {

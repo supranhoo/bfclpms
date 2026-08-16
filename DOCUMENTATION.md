@@ -8922,3 +8922,15 @@ cascading filters, ADR-264 virtualization thresholds, ADR-271 dirty-scope
 behaviour or ADR-278 inline expansion. Two colour tokens were added to
 `src/index.css` (light + dark) and mapped in `tailwind.config.ts`. Regression
 guard: `src/components/admin/bu-console/consoleLayout.test.tsx`.
+
+## ADR-281 — Employees impacted is a distinct count
+
+The Performance Console stat band's "Employees impacted" tile previously added
+up each KPI's mapped-employee count, so a person mapped to many KPIs was
+counted many times (August 2026 read 2744 against 181 real people).
+`public.bu_console_tree` now returns `employee_total`, a
+`count(DISTINCT employee_id)` over the exact same filtered KPI set the tree is
+built from, and `computeConsoleStats(categories, employeeTotal)` renders that
+number with the sub-label "distinct employees in scope". Per-KRA and per-KPI
+"N employees mapped" chips are unchanged — those are correct per node.
+Regression guard: `src/components/admin/bu-console/consoleLayout.test.tsx`.

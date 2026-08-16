@@ -6389,3 +6389,12 @@ risk / behind), and a hand-set status always wins over the derived one and is
 labelled as manual. Every level of the tree is server-paged and loaded on
 expand; a level with more rows than one page shows a "Load more" control and is
 never silently truncated.
+
+## §CONSOLE-DISTINCT-PEOPLE — Scope-level people counts (ADR-281)
+
+Any headline "employees" figure that describes a *scope* (console stat bands,
+report summaries, dashboard tiles) must be produced server-side as
+`count(DISTINCT employee_id)` over the same filter set as the surface it
+labels. Summing per-KPI or per-row employee counts on the client is forbidden:
+it multiplies each person by their number of mapped records. Per-node counts
+(one KPI, one KRA) may continue to show their own local count.

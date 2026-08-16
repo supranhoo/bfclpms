@@ -67,6 +67,8 @@ export interface BuConsoleTree {
   authorized: boolean;
   period: string;
   year: number;
+  /** ADR-281 — distinct employees in the loaded scope (never a row sum). */
+  employee_total?: number | null;
   categories: BuConsoleCategoryNode[];
 }
 

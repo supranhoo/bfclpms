@@ -122,7 +122,7 @@ export default function BuConsole() {
 
   // ADR-279 — stat band derives from the already-fetched tree; no extra reads.
   const stats = useMemo(
-    () => (tree?.authorized ? computeConsoleStats(tree.categories) : null),
+    () => (tree?.authorized ? computeConsoleStats(tree.categories, tree.employee_total) : null),
     [tree],
   );
 
