@@ -184,3 +184,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [BU Console Goal Objects](mem://features/admin/bu-console-goal-objects) — bu_goals scope rows, weighted roll-up, stored sub-period summary rule (ADR-263)
 - [KPI Type Parity](mem://features/review/kpi-type-parity) — Binary/tiered/value-based scoring parity across all review surfaces (ADR-271)
 - [Performance Console Group Edit](mem://features/admin/performance-console-group-edit) — Editable field whitelist, frequency+cycle anchor pairing, override/bulk-override rules (ADR-274/275)
+- [Scoring Model Group-Owned](mem://features/admin/scoring-model-group-owned) — Per-employee tuning is scope-only; scoring model edits are group-wide (ADR-282)

@@ -1,10 +1,12 @@
 /**
  * ADR-274 — Tune one employee's copy of a shared KPI.
  *
- * Only weightage, target, unit and the numeric scoring ladder can be tuned per
- * employee; the KPI text stays group-owned so the title never diverges. Fields
- * saved here are recorded as overrides and are protected from later group
- * edits unless the admin explicitly resets them.
+ * ADR-282 — tuning is scope-only: weightage, target, frequency/cycle and source
+ * of data. The scoring model stays group-owned. A value-based KPI additionally
+ * exposes its unit, direction and R0–R5 ladder (a target-level adjustment);
+ * Yes/No and tiered KPIs show their real options read-only instead of an
+ * inapplicable 0–5 grid. Fields saved here are recorded as overrides and are
+ * protected from later group edits unless the admin explicitly resets them.
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -23,17 +25,8 @@ import {
 import { KPI_DIRECTION_OPTIONS, directionConflictsWithLadder } from '@/components/admin/kpi-form/kpiFormModel';
 import { diffChanges, hasChanges, isMultiMonthFrequency, validateCycleChange } from './groupEditModel';
 import { getCycleOptionsForFrequency, deriveCycleOptionFromCycleStart } from '@/lib/frequencyCycleOptions';
-
-/**
- * ADR-274a — per-employee tuning covers the same scoring inputs as the group
- * editor, minus the structural category / KRA move which must stay group-wide.
- */
-const ROW_FIELDS = [
-  'weightage', 'target_value', 'uom', 'frequency', 'criteria', 'source_of_data',
-  'r5', 'r4', 'r3', 'r2', 'r1', 'r0',
-  // ADR-275 — the cycle anchor and day counting are per-employee tunable too.
-  'frequency_cycle_start', 'day_count_type',
-] as const;
+import { KpiScoringScale, KpiTypeBadge } from '@/components/review/KpiScoringScale';
+import { rowEditableFields, isQualitativeKpi, scoringModelLockReason } from './rowOverrideModel';
 
 const FREQUENCY_OPTIONS = ['Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
 
@@ -46,31 +39,45 @@ interface Props {
   row: BuConsoleEmployeeRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Opens the group definition editor — the only place the scoring model lives. */
+  onEditGroupDefinition?: () => void;
 }
 
-export function RowOverrideDialog({ row, open, onOpenChange }: Props) {
+export function RowOverrideDialog({ row, open, onOpenChange, onEditGroupDefinition }: Props) {
   const [form, setForm] = useState<Record<string, string>>({});
   const [allowLocked, setAllowLocked] = useState(false);
   const mut = useRowOverride();
   const clearMut = useClearRowOverrides();
 
+  const kpiForModel = useMemo(() => {
+    const r = (row ?? {}) as unknown as Record<string, any>;
+    return {
+      uom_type: r.uom_type ?? null,
+      qualitative_options: r.qualitative_options ?? null,
+      r0: r.r0, r1: r.r1, r2: r.r2, r3: r.r3, r4: r.r4, r5: r.r5,
+    };
+  }, [row]);
+
+  const qualitative = isQualitativeKpi(kpiForModel);
+  const editableFields = useMemo(() => rowEditableFields(kpiForModel), [kpiForModel]);
+
   useEffect(() => {
     if (!open || !row) return;
     const r = row as unknown as Record<string, any>;
     const seed: Record<string, string> = {};
-    ROW_FIELDS.forEach((f) => { seed[f] = r[f] != null ? String(r[f]) : ''; });
+    editableFields.forEach((f) => { seed[f] = r[f] != null ? String(r[f]) : ''; });
     setForm(seed);
     setAllowLocked(false);
-  }, [open, row]);
+  }, [open, row, editableFields]);
 
   const original = useMemo(() => {
     const r = (row ?? {}) as unknown as Record<string, any>;
-    return Object.fromEntries(ROW_FIELDS.map((f) => [f, r[f] ?? null]));
-  }, [row]);
+    return Object.fromEntries(editableFields.map((f) => [f, r[f] ?? null]));
+  }, [row, editableFields]);
 
-  const changes = diffChanges(original, form, ROW_FIELDS as unknown as string[]);
+  const changes = diffChanges(original, form, editableFields);
   const ladderConflict = directionConflictsWithLadder(form.criteria, form.r5, form.r1);
-  const cycleError = validateCycleChange(changes);
+  const cycleError = validateCycleChange(changes) ?? scoringModelLockReason(kpiForModel, changes);
   const overrides = (row?.override_fields ?? []) as string[];
 
   const cycleOptions = useMemo(() => {
@@ -95,19 +102,22 @@ export function RowOverrideDialog({ row, open, onOpenChange }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Tune for {row?.employee_name ?? 'this employee'}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            Tune for {row?.employee_name ?? 'this employee'}
+            <KpiTypeBadge kpi={kpiForModel} />
+          </DialogTitle>
           <DialogDescription>
             Changes here apply to this employee only and are protected from future group edits.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className={`grid gap-3 ${qualitative ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
           <Field label="Weightage" k="weightage" form={form} setForm={setForm} />
           <Field label="Target" k="target_value" form={form} setForm={setForm} />
-          <Field label="Unit" k="uom" form={form} setForm={setForm} />
+          {!qualitative && <Field label="Unit" k="uom" form={form} setForm={setForm} />}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className={`grid gap-3 ${qualitative ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
           <div className="space-y-1">
             <Label className="text-xs">Frequency</Label>
             <Select
@@ -128,18 +138,20 @@ export function RowOverrideDialog({ row, open, onOpenChange }: Props) {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Direction</Label>
-            <Select
-              value={form.criteria || undefined}
-              onValueChange={(v) => setForm((prev) => ({ ...prev, criteria: v }))}
-            >
-              <SelectTrigger><SelectValue placeholder="Unchanged" /></SelectTrigger>
-              <SelectContent>
-                {KPI_DIRECTION_OPTIONS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+          {!qualitative && (
+            <div className="space-y-1">
+              <Label className="text-xs">Direction</Label>
+              <Select
+                value={form.criteria || undefined}
+                onValueChange={(v) => setForm((prev) => ({ ...prev, criteria: v }))}
+              >
+                <SelectTrigger><SelectValue placeholder="Unchanged" /></SelectTrigger>
+                <SelectContent>
+                  {KPI_DIRECTION_OPTIONS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <Field label="Source of data" k="source_of_data" form={form} setForm={setForm} />
         </div>
 
@@ -175,20 +187,39 @@ export function RowOverrideDialog({ row, open, onOpenChange }: Props) {
           </div>
         )}
 
-        <div className="space-y-1.5">
-          <Label className="text-xs uppercase text-muted-foreground">Scoring ladder</Label>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {(['r5', 'r4', 'r3', 'r2', 'r1', 'r0'] as const).map((k) => (
-              <Field key={k} label={k.toUpperCase()} k={k} form={form} setForm={setForm} />
-            ))}
-          </div>
-          {ladderConflict && (
-            <p className="flex items-center gap-1 text-xs text-destructive">
-              <AlertTriangle className="h-3 w-3" />
-              The ladder runs against the chosen direction. Check the thresholds.
+        {qualitative ? (
+          <div className="space-y-1.5 rounded-md border bg-muted/30 p-3">
+            <KpiScoringScale kpi={kpiForModel} />
+            <p className="text-[11px] text-muted-foreground">
+              Scoring options are shared by every employee mapped to this KPI — change them from
+              {' '}<span className="font-medium">Edit definition</span>, not here.
             </p>
-          )}
-        </div>
+            {onEditGroupDefinition && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => { onOpenChange(false); onEditGroupDefinition(); }}
+              >
+                Edit definition for everyone
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase text-muted-foreground">Scoring ladder</Label>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {(['r5', 'r4', 'r3', 'r2', 'r1', 'r0'] as const).map((k) => (
+                <Field key={k} label={k.toUpperCase()} k={k} form={form} setForm={setForm} />
+              ))}
+            </div>
+            {ladderConflict && (
+              <p className="flex items-center gap-1 text-xs text-destructive">
+                <AlertTriangle className="h-3 w-3" />
+                The ladder runs against the chosen direction. Check the thresholds.
+              </p>
+            )}
+          </div>
+        )}
 
         {cycleError && (
           <p className="flex items-center gap-1 text-xs text-destructive">

@@ -6390,6 +6390,21 @@ labelled as manual. Every level of the tree is server-paged and loaded on
 expand; a level with more rows than one page shows a "Load more" control and is
 never silently truncated.
 
+## §KPI-SCORING-MODEL-GROUP-OWNED — Scoring model is never per-employee (ADR-282)
+
+A KPI's scoring model — its type (`uom_type`), its qualitative options, the
+R0–R5 ladder, the direction and the threshold mode — belongs to the shared
+group definition. Per-employee tuning in the Performance Console may only change
+scope: weightage, target, frequency, cycle anchor, day counting and source of
+data. Value-based KPIs are the single exception for the ladder, which is a
+target-level adjustment on a model that does not change.
+
+Any surface offering per-employee tuning must resolve the type first
+(§KPI-TYPE-PARITY, ADR-271) and must never present a 0–5 grid for a Yes/No or
+tiered KPI. The rule is enforced server-side by
+`public.bu_console_scoring_model_lock`; violations are reported as skipped rows,
+never as a failed run.
+
 ## §CONSOLE-DISTINCT-PEOPLE — Scope-level people counts (ADR-281)
 
 Any headline "employees" figure that describes a *scope* (console stat bands,

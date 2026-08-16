@@ -17247,6 +17247,10 @@ export type Database = {
         Args: { p_allow_locked?: boolean; p_changes: Json; p_kpi_id: string }
         Returns: Json
       }
+      bu_console_scoring_model_lock: {
+        Args: { p_changes: Json; p_kpi_id: string }
+        Returns: string
+      }
       bu_console_tree: {
         Args: {
           p_bu_ids?: string[]

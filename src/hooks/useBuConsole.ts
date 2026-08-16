@@ -113,6 +113,8 @@ export interface BuConsoleEmployeeRowExtras {
   source_of_data: string | null;
   uom_type: string | null;
   threshold_mode: string | null;
+  /** ADR-282 — group-owned scoring options for binary / tiered KPIs. */
+  qualitative_options?: unknown;
   r0: string | null; r1: string | null; r2: string | null;
   r3: string | null; r4: string | null; r5: string | null;
   /** Field names already tuned for this employee (protected from group edits). */
@@ -964,6 +966,7 @@ export const GROUP_EDIT_SKIP_LABELS: Record<string, string> = {
   past_kra_set: 'Already in review — enable "include rows already in review" to edit',
   individual_override: 'Individually overridden — tick "reset overrides" to include',
   cycle_anchor_conflict: 'The new cycle overlaps an existing cycle for this KPI',
+  scoring_model_locked: 'Scoring model is group-owned — edit it for all employees (ADR-282)',
   no_change: 'Nothing changed',
   not_found: 'This KPI row no longer exists',
 };
