@@ -450,7 +450,6 @@ export function BuConsoleTree({
 
   return (
     <div className="space-y-3">
-      {/* Category tab strip — one scrollable row instead of a wrapped chip grid */}
       {categories.length === 0 ? (
         <div className="rounded-lg border border-dashed p-8 text-center">
           <p className="text-sm font-medium">No KPIs found for this scope and period</p>
@@ -459,54 +458,15 @@ export function BuConsoleTree({
           </p>
         </div>
       ) : (
-        <div className="relative">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-background to-transparent"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-background to-transparent"
-          />
-          <div
-            role="tablist"
-            aria-label="KPI categories"
-            className="flex snap-x gap-1 overflow-x-auto border-b px-1 pb-px [scrollbar-width:thin]"
-          >
-          {categories.map(c => {
-            const active = c.category_id === selectedCategoryId;
-            return (
-              <button
-                key={c.category_id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => onSelectCategory(c.category_id)}
-                className={cn(
-                  'flex min-h-11 shrink-0 snap-start items-center gap-2 whitespace-nowrap border-b-2 px-3 text-sm transition-colors',
-                  active
-                    ? 'border-primary font-semibold text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {c.category_name}
-                <span
-                  className={cn(
-                    'rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
-                    active ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
-                  )}
-                >
-                  {c.kpi_count}
-                </span>
-              </button>
-            );
-          })}
-          </div>
-        </div>
+        <CategoryStrip
+          categories={categories}
+          selectedCategoryId={selectedCategoryId}
+          onSelectCategory={onSelectCategory}
+        />
       )}
 
-      {/* KRA list */}
       {category && (
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_300px]">
         <Card className="overflow-hidden">
           <CardContent className="p-0">
             <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2">
@@ -517,13 +477,20 @@ export function BuConsoleTree({
                 {category.kra_count} KRAs · {category.kpi_count} KPIs
               </p>
             </div>
-            <ConsoleMetricHeader labels={['KPI count', 'Employee impact']} />
+            <ConsoleMetricHeader labels={['KPI count', 'Employee impact', 'Avg score']} />
             <VirtualRows
               items={category.kras}
               estimateSize={56}
               maxHeightClass="max-h-[420px]"
               renderRow={(k, i) => {
                 const employees = k.kpis.reduce((n, kpi) => n + (kpi.employee_count ?? 0), 0);
+                const scored = k.kpis.filter(
+                  kpi => kpi.avg_score !== null && kpi.avg_score !== undefined,
+                );
+                const kraAvg =
+                  scored.length > 0
+                    ? scored.reduce((n, kpi) => n + Number(kpi.avg_score), 0) / scored.length
+                    : null;
                 const isOpen = k.kra_key === selectedKraKey;
                 const panelId = `kra-panel-${k.kra_key.replace(/[^\w-]/g, '_')}`;
                 return (
@@ -531,7 +498,7 @@ export function BuConsoleTree({
                     <ConsoleMetricRow
                       index={i + 1}
                       title={k.kra_name}
-                      subtitle={`${k.kpi_count} mapped KPI${k.kpi_count === 1 ? '' : 's'}`}
+                      subtitle={`${k.kpi_count} mapped KPI${k.kpi_count === 1 ? '' : 's'} · ${employees} employee${employees === 1 ? '' : 's'}`}
                       selected={isOpen}
                       onClick={() => onSelectKra(isOpen ? null : k.kra_key)}
                       hideMetricLabels
@@ -540,12 +507,31 @@ export function BuConsoleTree({
                       ariaControls={panelId}
                       metrics={[
                         { label: 'KPI count', value: k.kpi_count },
-                        { label: 'Employee impact', value: employees },
+                        {
+                          label: 'Employee impact',
+                          value: (
+                            <span className="inline-flex items-center justify-end gap-1">
+                              <Users className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                              {employees}
+                            </span>
+                          ),
+                        },
+                        {
+                          label: 'Avg score',
+                          value: <ScorePill value={kraAvg} withBar className="items-end" />,
+                        },
                       ]}
                     />
                     {isOpen && (
-                      <div id={panelId} className="border-t bg-muted/30 py-2 pl-3 pr-2 sm:pl-8">
-                        <div className="overflow-hidden rounded-md border bg-background">
+                      <div
+                        id={panelId}
+                        className="relative border-t bg-muted/40 py-2 pl-3 pr-2 shadow-[inset_0_6px_8px_-8px_hsl(var(--foreground)/0.35)] sm:pl-8"
+                      >
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute bottom-4 left-4 top-0 hidden w-px bg-border sm:block"
+                        />
+                        <div className="overflow-hidden rounded-md border bg-background shadow-sm">
                           <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-1.5">
                             <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                               KPIs · {k.kpi_count}
