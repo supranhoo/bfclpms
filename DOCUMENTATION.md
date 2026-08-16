@@ -8951,3 +8951,5 @@ one bar, the five stat tiles became a single-line strip, the breadcrumb moved on
 category strip row, and the filter bar collapses to a summary chip on scroll (never
 while filters are unapplied). No data or workflow change.
 See docs/adr/ADR-283.md and POLICY §CONSOLE-CHROME-BUDGET.
+
+- **ADR-284 — Performance Console access tiers + Review Pipeline** — console opened to management / auditor / HR PMS in read-only mode (`useBuConsoleCapability`), new `bu_console_pipeline` RPC and Pipeline tab with per-stage pending counts and paged employee drill-through.
