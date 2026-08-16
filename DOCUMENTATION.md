@@ -8953,3 +8953,19 @@ while filters are unapplied). No data or workflow change.
 See docs/adr/ADR-283.md and POLICY §CONSOLE-CHROME-BUDGET.
 
 - **ADR-284 — Performance Console access tiers + Review Pipeline** — console opened to management / auditor / HR PMS in read-only mode (`useBuConsoleCapability`), new `bu_console_pipeline` RPC and Pipeline tab with per-stage pending counts and paged employee drill-through.
+
+- **ADR-285 — Management & Audit can act in the Performance Console (once a KPI has left KRA Set)** —
+  two new SSOT gates, `bu_console_can_write(uid)` (admin / management / auditor; HR PMS read-only)
+  and `bu_console_kpi_actionable(uid, kpi_id)` (KPIs still in `kra_set` are admin-only). All console
+  write RPCs were re-pointed at them: `bu_console_group_write`, `bu_console_group_advance`,
+  `bu_console_group_edit_definition`, `bu_console_row_override`, `bu_console_bulk_row_overrides`,
+  `bu_console_clear_row_overrides`, `bu_console_undo_edit_run`, `bu_console_edit_runs_list`,
+  `bu_goal_upsert`, `bu_goal_archive`, `bu_console_decide_merge_proposal`,
+  `bu_console_generate_merge_proposals`.
+  Gap closed: `bu_console_group_write` and `bu_console_group_advance` were gated on the READ check,
+  which had silently admitted HR PMS writes since ADR-284.
+  Rows blocked by the stage rule are returned as skipped with reason `kra_set_admin_only`, so a run
+  never fails outright. UI mirrors this via `useBuConsoleCapability().canActOnStatus()` — per-row
+  "Tune" disables on KRA Set rows, the group action bar hides when every row in scope is in KRA Set,
+  and non-admin writers see a stage-scoped banner instead of the read-only banner.
+  See POLICY §CONSOLE-WRITE-TIERS.
