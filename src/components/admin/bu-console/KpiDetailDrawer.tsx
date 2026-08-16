@@ -87,17 +87,26 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
   };
 
   return (
-    <Sheet open={!!args} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-3xl overflow-y-auto">
-        <SheetHeader>
-          <SheetTitle className="pr-8">
+    <Dialog open={!!args} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex max-h-[92vh] w-[96vw] max-w-[1180px] flex-col gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 space-y-1 border-b bg-muted/30 px-6 py-4 text-left">
+          <DialogTitle className="pr-10 text-lg font-semibold leading-snug">
             {args?.kpiTitle || def.kpi_title || args?.kpiName || 'KPI'}
-          </SheetTitle>
-          <SheetDescription>
-            {args?.kraName} · {args?.period} {args?.year}
-          </SheetDescription>
-        </SheetHeader>
+          </DialogTitle>
+          <DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+            <span className="truncate">{args?.kraName}</span>
+            <span aria-hidden>·</span>
+            <span>{args?.period} {args?.year}</span>
+            {data?.authorized && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 font-medium text-foreground">
+                <Users className="h-3 w-3" aria-hidden />
+                {data.total} mapped
+              </span>
+            )}
+          </DialogDescription>
+        </DialogHeader>
 
+        <div className="flex-1 overflow-y-auto px-6 py-4">
         {data?.authorized && (variantCount > 1 || args?.variantKey) && (
           <div className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
             <p className="font-medium">
