@@ -70,7 +70,8 @@ interface Props {
   selectedCategoryId: string | null;
   selectedKraKey: string | null;
   onSelectCategory: (categoryId: string) => void;
-  onSelectKra: (kraKey: string) => void;
+  /** null collapses the open KRA (ADR-278). */
+  onSelectKra: (kraKey: string | null) => void;
   onSelectKpi: (
     categoryId: string,
     kraName: string,
@@ -245,12 +246,12 @@ export function BuConsoleTree({
   onFixTextSplit,
 }: Props) {
   const category = categories.find(c => c.category_id === selectedCategoryId) ?? null;
-  const kra: BuConsoleKraNode | null =
+  const openKra: BuConsoleKraNode | null =
     category?.kras.find(k => k.kra_key === selectedKraKey) ?? null;
-  // ADR-273 — computed per KRA list, so a mis-split title is visible next to
-  // the row it duplicates instead of looking like a second KPI.
+  // ADR-273 — computed for the expanded KRA only, so a mis-split title is
+  // visible next to the row it duplicates instead of looking like a second KPI.
   const lookalikes = lookalikeCounts(
-    (kra?.kpis ?? []).map(k => ({ key: k.kpi_key, title: k.kpi_title || k.kpi_name })),
+    (openKra?.kpis ?? []).map(k => ({ key: k.kpi_key, title: k.kpi_title || k.kpi_name })),
   );
 
   return (
@@ -338,7 +339,7 @@ export function BuConsoleTree({
                       title={k.kra_name}
                       subtitle={`${k.kpi_count} mapped KPI${k.kpi_count === 1 ? '' : 's'}`}
                       selected={isOpen}
-                      onClick={() => onSelectKra(k.kra_key)}
+                      onClick={() => onSelectKra(isOpen ? null : k.kra_key)}
                       hideMetricLabels
                       expandable
                       expanded={isOpen}
