@@ -9020,3 +9020,7 @@ per-employee tuning cannot fork the group scoring model.
 
 Last verified run: August 2026, all checks passed —
 `docs/verification/console-dashboard-parity.md`.
+
+### Performance Console — multi-month group definition edit (ADR-291)
+
+`GroupDefinitionEditDialog` exposes an **Apply to** control (This month only / This and all future months / Next N months). `src/components/admin/bu-console/groupEditSpan.ts` resolves the span into an ordered target list using `src/lib/rolloverTargets.ts`; `useGroupEditSpanPreview` and `useGroupEditSpanCommit` in `src/hooks/useBuConsole.ts` call the unchanged `bu_console_group_edit_definition` RPC once per month. Cap: 12 periods. See POLICY §CONSOLE-GROUP-EDIT-SPAN and docs/adr/ADR-291.md.
