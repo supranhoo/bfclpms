@@ -107,7 +107,7 @@ export function ConsoleMetricRow({
       {metrics.length > 0 && (
         <div className="grid shrink-0 grid-cols-2 gap-x-4 gap-y-1 sm:flex sm:gap-3">
           {metrics.map(m => (
-            <div key={m.label} className={cn('min-w-[72px] text-right', `sm:${''}`, METRIC_COL.replace('w-', 'sm:w-'))}>
+            <div key={m.label} className="min-w-[72px] text-right sm:w-[92px] sm:min-w-[92px]">
               <p
                 className={cn(
                   'text-[10px] uppercase tracking-wide text-muted-foreground',
