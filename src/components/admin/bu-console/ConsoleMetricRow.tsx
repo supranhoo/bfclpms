@@ -93,22 +93,36 @@ export function ConsoleMetricRow({
       aria-expanded={expandable ? !!expanded : undefined}
       aria-controls={expandable && expanded ? ariaControls : undefined}
       className={cn(
-        'relative flex w-full min-h-[56px] items-center gap-3 px-3 py-2.5 text-left',
+        'group relative flex w-full min-h-[56px] items-center gap-3 px-3 py-2.5 text-left',
         'before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-transparent before:transition-colors',
         interactive &&
           'transition-colors hover:bg-accent/60 hover:before:bg-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
-        selected && 'bg-accent before:bg-primary',
+        selected && 'bg-primary/5 before:bg-primary',
         className,
       )}
     >
       {typeof index === 'number' && (
-        <span className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-[11px] font-semibold tabular-nums text-muted-foreground sm:flex">
+        <span
+          className={cn(
+            'hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold tabular-nums sm:flex',
+            selected
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted text-muted-foreground group-hover:bg-muted-foreground/20',
+          )}
+        >
           {String(index).padStart(2, '0')}
         </span>
       )}
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium leading-tight">{title}</p>
+        <p
+          className={cn(
+            'truncate text-[15px] font-semibold leading-tight',
+            selected && 'text-primary',
+          )}
+        >
+          {title}
+        </p>
         {subtitle && (
           <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</p>
         )}
