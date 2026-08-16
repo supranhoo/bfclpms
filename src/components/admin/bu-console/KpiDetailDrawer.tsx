@@ -393,7 +393,8 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
             </section>
           </div>
         )}
-      </SheetContent>
+        </div>
+      </DialogContent>
       <GroupValueEntryDialog
         args={args}
         open={entryOpen}
@@ -412,7 +413,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
         open={!!overrideRow}
         onOpenChange={(o) => !o && setOverrideRow(null)}
       />
-    </Sheet>
+    </Dialog>
   );
 }
 
