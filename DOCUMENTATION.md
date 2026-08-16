@@ -8883,6 +8883,23 @@ Presentation only — no change to data loading, RPCs, scoring, the detail drawe
 or group actions. `onSelectKra` now accepts `null` to collapse. Regression
 guard: `src/components/admin/bu-console/consoleLayout.test.tsx`.
 
+## ADR-280 — KPI detail opens as a centered wide modal
+
+The Performance Console KPI detail is no longer a right-side sheet. It opens as
+a centered dialog (`96vw` up to `1180px`, `92vh` tall) with a sticky header
+carrying the KPI title, its KRA · period line and a mapped-count chip, a sticky
+action bar (Enter value / Group approve / Edit definition / Tune several, all
+40px tall) that stays reachable while scrolling, and a single scrolling body.
+On `lg+` the body splits 7/5 — unit / frequency / cycle-anchor metadata plus the
+description, formula and scoring logic on the left, the scoring scale on the
+right — so the mapped-employee table sits above the fold instead of far below
+it. That table now has a sticky header row, hover feedback and its own 420px
+scroll region.
+
+Presentation only — the `KpiDetailDrawer` export, its props, the nested group
+dialogs, server-side pagination and every RPC are unchanged. Remaining amber
+literals moved onto the `warning` token added in ADR-279.
+
 ## ADR-279 — Performance Console visual language
 
 The console now carries product-level signal instead of a wireframe. A stat band
