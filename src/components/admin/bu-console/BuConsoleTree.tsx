@@ -329,53 +329,70 @@ export function BuConsoleTree({
               maxHeightClass="max-h-[420px]"
               renderRow={(k, i) => {
                 const employees = k.kpis.reduce((n, kpi) => n + (kpi.employee_count ?? 0), 0);
+                const isOpen = k.kra_key === selectedKraKey;
+                const panelId = `kra-panel-${k.kra_key.replace(/[^\w-]/g, '_')}`;
                 return (
-                  <ConsoleMetricRow
-                    key={k.kra_key}
-                    index={i + 1}
-                    title={k.kra_name}
-                    subtitle={`${k.kpi_count} mapped KPI${k.kpi_count === 1 ? '' : 's'}`}
-                    selected={k.kra_key === selectedKraKey}
-                    onClick={() => onSelectKra(k.kra_key)}
-                    hideMetricLabels
-                    metrics={[
-                      { label: 'KPI count', value: k.kpi_count },
-                      { label: 'Employee impact', value: employees },
-                    ]}
-                  />
+                  <div key={k.kra_key}>
+                    <ConsoleMetricRow
+                      index={i + 1}
+                      title={k.kra_name}
+                      subtitle={`${k.kpi_count} mapped KPI${k.kpi_count === 1 ? '' : 's'}`}
+                      selected={isOpen}
+                      onClick={() => onSelectKra(k.kra_key)}
+                      hideMetricLabels
+                      expandable
+                      expanded={isOpen}
+                      ariaControls={panelId}
+                      metrics={[
+                        { label: 'KPI count', value: k.kpi_count },
+                        { label: 'Employee impact', value: employees },
+                      ]}
+                    />
+                    {isOpen && (
+                      <div id={panelId} className="border-t bg-muted/30 py-2 pl-3 pr-2 sm:pl-8">
+                        <div className="overflow-hidden rounded-md border bg-background">
+                          <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-1.5">
+                            <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              KPIs · {k.kpi_count}
+                            </p>
+                            <span className="hidden shrink-0 gap-3 sm:flex">
+                              {['Employees', 'Weightage', 'Avg score'].map(l => (
+                                <span
+                                  key={l}
+                                  className="w-[92px] text-right text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                                >
+                                  {l}
+                                </span>
+                              ))}
+                              <span className="w-[120px]" aria-hidden />
+                            </span>
+                          </div>
+                          {k.kpis.length === 0 ? (
+                            <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                              No KPIs mapped under this KRA for the loaded scope.
+                            </p>
+                          ) : (
+                            <div className="max-h-[420px] divide-y overflow-y-auto">
+                              {k.kpis.map((kpi, ki) => (
+                                <KpiRow
+                                  key={kpi.kpi_key}
+                                  kpi={kpi}
+                                  index={ki + 1}
+                                  lookalikeCount={lookalikes.get(kpi.kpi_key)}
+                                  onFixTextSplit={onFixTextSplit}
+                                  onOpen={(variantKey) =>
+                                    onSelectKpi(category.category_id, k.kra_name, kpi, variantKey)
+                                  }
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 );
               }}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {/* KPI list */}
-      {category && kra && (
-        <Card className="overflow-hidden">
-          <CardContent className="p-0">
-            <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2">
-              <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {kra.kra_name} · KPIs
-              </p>
-              <p className="shrink-0 text-xs text-muted-foreground">{kra.kpi_count} KPIs</p>
-            </div>
-            <VirtualRows
-              items={kra.kpis}
-              estimateSize={64}
-              maxHeightClass="max-h-[520px]"
-              renderRow={(kpi, i) => (
-                <KpiRow
-                  key={kpi.kpi_key}
-                  kpi={kpi}
-                  index={i + 1}
-                  lookalikeCount={lookalikes.get(kpi.kpi_key)}
-                  onFixTextSplit={onFixTextSplit}
-                  onOpen={(variantKey) =>
-                    onSelectKpi(category.category_id, kra.kra_name, kpi, variantKey)
-                  }
-                />
-              )}
             />
           </CardContent>
         </Card>
