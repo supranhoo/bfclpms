@@ -274,8 +274,9 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
                 </div>
               )}
 
-              <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-semibold">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="flex items-center gap-2 text-sm font-semibold">
+                  <Users className="h-4 w-4 text-muted-foreground" aria-hidden />
                   Mapped employees <Badge variant="secondary">{data.total}</Badge>
                 </h3>
                 {totalPages > 1 && (
@@ -301,9 +302,9 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
                 )}
               </div>
 
-              <div className="rounded-md border">
+              <div className="max-h-[420px] overflow-auto rounded-md border">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 z-10 bg-muted/60 backdrop-blur">
                     <TableRow>
                       {bulkMode && (
                         <TableHead className="w-[36px]">
@@ -331,7 +332,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
                   </TableHeader>
                   <TableBody>
                     {data.rows.map(r => (
-                      <TableRow key={r.kpi_id}>
+                      <TableRow key={r.kpi_id} className="hover:bg-muted/50">
                         {bulkMode && (
                           <TableCell>
                             <Checkbox
@@ -426,8 +427,10 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
 function Meta({ label, value }: { label: string; value?: string | null }) {
   return (
     <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="font-medium">{value || '—'}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-0.5 truncate font-medium" title={value ?? undefined}>{value || '—'}</p>
     </div>
   );
 }
