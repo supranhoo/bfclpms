@@ -108,7 +108,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
         {data?.authorized && (variantCount > 1 || args?.variantKey) && (
-          <div className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
+          <div className="mb-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-xs">
             <p className="font-medium">
               {args?.variantKey
                 ? 'Scoped to one variant of this KPI.'
@@ -132,7 +132,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
         )}
 
         {data?.authorized && mixedTypes && (
-          <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs">
+          <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs">
             <p className="font-medium">This title is set up with more than one KPI type.</p>
             <p className="mt-1 text-muted-foreground">
               Types in scope: {(def.uom_types as string[]).join(', ')}. Group value entry is
@@ -142,9 +142,9 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
         )}
 
         {data?.authorized && (
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="sticky top-0 z-10 -mx-6 mb-4 flex flex-wrap items-center gap-2 border-b bg-background/95 px-6 pb-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
             <Button
-              size="sm"
+              className="h-10"
               onClick={() => setEntryOpen(true)}
               disabled={!args || data.total === 0 || mixedTypes}
               title={mixedTypes ? 'Mixed KPI types in this group' : undefined}
@@ -152,7 +152,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
               Enter value for all {data.total} employees
             </Button>
             <Button
-              size="sm"
+              className="h-10"
               variant="secondary"
               onClick={() => setApproveOpen(true)}
               disabled={!args || data.total === 0}
@@ -160,7 +160,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
               Group approve stage
             </Button>
             <Button
-              size="sm"
+              className="h-10"
               variant="outline"
               onClick={() => setEditOpen(true)}
               disabled={!args || data.total === 0}
@@ -168,7 +168,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
               Edit definition for all {data.total}
             </Button>
             <Button
-              size="sm"
+              className="h-10"
               variant={bulkMode ? 'default' : 'outline'}
               onClick={() => { setBulkMode((v) => !v); setSelected({}); }}
               disabled={!args || data.total === 0}
@@ -179,53 +179,59 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
         )}
 
         {isLoading && (
-          <div className="mt-6 space-y-2">
+          <div className="space-y-2">
             {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
           </div>
         )}
 
         {error && (
-          <p className="mt-6 text-sm text-destructive">
+          <p className="text-sm text-destructive">
             Could not load this KPI. {(error as Error).message}
           </p>
         )}
 
         {data && !data.authorized && (
-          <p className="mt-6 text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             You do not have access to this console.
           </p>
         )}
 
         {data?.authorized && (
-          <div className="mt-6 space-y-6">
-            <section className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-              <Meta label="Unit" value={def.uom} />
-              <Meta label="Frequency" value={def.frequency} />
-              <Meta label="Cycle anchor" value={def.frequency_cycle_start} />
-              {def.frequency === 'Daily' && <Meta label="Day counting" value={def.day_count_type} />}
-              {def.is_org_level && <Meta label="Org-level scope" value={def.org_level_scope || 'organization'} />}
-              <Meta label="Variants" value={String(variantCount)} />
-              <div>
-                <p className="text-xs uppercase text-muted-foreground">KPI type</p>
-                <div className="mt-0.5"><KpiTypeBadge kpi={def as any} /></div>
+          <div className="space-y-6">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+              <div className="space-y-4">
+                <section className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-md border bg-muted/20 p-4 text-sm sm:grid-cols-3">
+                  <Meta label="Unit" value={def.uom} />
+                  <Meta label="Frequency" value={def.frequency} />
+                  <Meta label="Cycle anchor" value={def.frequency_cycle_start} />
+                  {def.frequency === 'Daily' && <Meta label="Day counting" value={def.day_count_type} />}
+                  {def.is_org_level && <Meta label="Org-level scope" value={def.org_level_scope || 'organization'} />}
+                  <Meta label="Variants" value={String(variantCount)} />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      KPI type
+                    </p>
+                    <div className="mt-1"><KpiTypeBadge kpi={def as any} /></div>
+                  </div>
+                </section>
+
+                <section className="rounded-md border p-4">
+                  <KpiTextBlocks
+                    kpi={{
+                      kpi_name: def.kpi_name ?? args?.kpiName ?? '',
+                      kpi_title: def.kpi_title ?? null,
+                      kpi_description: def.kpi_description ?? null,
+                      kpi_formula: def.kpi_formula ?? null,
+                      kpi_scoring_logic: def.kpi_scoring_logic ?? null,
+                    }}
+                  />
+                </section>
               </div>
-            </section>
 
-            <section className="rounded-md border p-3">
-              <KpiTextBlocks
-                kpi={{
-                  kpi_name: def.kpi_name ?? args?.kpiName ?? '',
-                  kpi_title: def.kpi_title ?? null,
-                  kpi_description: def.kpi_description ?? null,
-                  kpi_formula: def.kpi_formula ?? null,
-                  kpi_scoring_logic: def.kpi_scoring_logic ?? null,
-                }}
-              />
-            </section>
-
-            <section>
-              <KpiScoringScale kpi={def as any} />
-            </section>
+              <section className="rounded-md border p-4">
+                <KpiScoringScale kpi={def as any} />
+              </section>
+            </div>
 
             <section>
               {bulkMode && (
