@@ -6427,9 +6427,23 @@ it multiplies each person by their number of mapped records. Per-node counts
 ## §CONSOLE-ACCESS-TIERS (ADR-284)
 
 The Performance Console is readable by admin, management, auditor and HR PMS
-(server SSOT: `bu_console_can_read`). Writing stays admin-only — every console
-write RPC enforces `has_role(uid, 'admin')`. The UI MUST hide write affordances for
+(server SSOT: `bu_console_can_read`). The UI MUST hide write affordances for
 non-writers via `useBuConsoleCapability()`; a visible button that the server
 will reject is a defect. The Pipeline tab is read-only for every tier and must
 derive the pending stage from the resolved workflow chain (POLICY §105), never
 from a hardcoded stage ladder.
+
+## §CONSOLE-WRITE-TIERS (ADR-285)
+
+Amends §CONSOLE-ACCESS-TIERS. Writing from the Performance Console is allowed for
+admin, management and auditor (server SSOT: `bu_console_can_write`). HR PMS remains
+strictly read-only.
+
+Stage rule: a KPI still in `kra_set` is Admin-only design space. Management and
+Audit may act on a KPI only once it has left KRA Set (server SSOT:
+`bu_console_kpi_actionable(uid, kpi_id)`). Every console write RPC MUST call these
+two functions — never `has_role(uid,'admin')` inline, and never the READ gate.
+
+Blocked rows are reported as **skipped** with reason `kra_set_admin_only`; a group
+or bulk run MUST NOT fail because some rows are still in KRA Set. The UI mirrors the
+contract through `useBuConsoleCapability().canActOnStatus(status)`.

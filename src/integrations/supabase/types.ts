@@ -17139,6 +17139,7 @@ export type Database = {
         Returns: Json
       }
       bu_console_can_read: { Args: { _uid: string }; Returns: boolean }
+      bu_console_can_write: { Args: { _uid: string }; Returns: boolean }
       bu_console_clear_row_overrides: {
         Args: { p_fields?: string[]; p_kpi_id: string }
         Returns: Json
@@ -17220,6 +17221,10 @@ export type Database = {
           p_year: number
         }
         Returns: Json
+      }
+      bu_console_kpi_actionable: {
+        Args: { _kpi_id: string; _uid: string }
+        Returns: boolean
       }
       bu_console_kpi_detail: {
         Args: {
