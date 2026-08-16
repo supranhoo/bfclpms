@@ -89,12 +89,28 @@ describe('Console stat band + score bands (ADR-279)', () => {
   it('renders the stat tiles with their counts', () => {
     render(
       <ConsoleStatBand
+        variant="tiles"
         stats={{ categories: 1, kras: 2, kpis: 3, employees: 7, avgScore: 4 }}
         scopeLabel="July 2026"
       />,
     );
     expect(screen.getByText('Categories')).toBeTruthy();
     expect(screen.getByText('Employees impacted')).toBeTruthy();
+    expect(screen.getByText('7')).toBeTruthy();
+    expect(screen.getByText('4.00')).toBeTruthy();
+  });
+
+  it('renders every metric on one line in the strip variant (ADR-283)', () => {
+    render(
+      <ConsoleStatBand
+        stats={{ categories: 1, kras: 2, kpis: 3, employees: 7, avgScore: 4 }}
+        scopeLabel="July 2026"
+      />,
+    );
+    for (const label of ['Categories', 'KRAs', 'KPIs', 'Employees', 'Avg score']) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
+    // The distinct server total is shown, never a per-KPI sum.
     expect(screen.getByText('7')).toBeTruthy();
     expect(screen.getByText('4.00')).toBeTruthy();
   });
