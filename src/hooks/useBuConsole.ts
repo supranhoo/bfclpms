@@ -1070,6 +1070,82 @@ export function useGroupEditPreview() {
   });
 }
 
+/* ------------------------------------------------------------------ */
+/* ADR-291 — multi-period group edit (this month + future months)      */
+/* ------------------------------------------------------------------ */
+
+export interface GroupEditSpanArgs extends Omit<GroupEditArgs, 'dryRun' | 'period' | 'year'> {
+  /** Ordered list of target periods; one RPC call per entry. */
+  targets: Array<{ month: string; year: number }>;
+}
+
+export interface GroupEditSpanEntry {
+  target: { month: string; year: number };
+  result: GroupEditResult | null;
+  error?: string | null;
+}
+
+export interface GroupEditSpanResult {
+  entries: GroupEditSpanEntry[];
+  /** Shared id so a multi-month rollout can be traced as one action. */
+  spanId: string;
+}
+
+async function runSpan(
+  a: GroupEditSpanArgs,
+  dryRun: boolean,
+  spanId: string,
+): Promise<GroupEditSpanResult> {
+  const { targets, ...rest } = a;
+  const entries: GroupEditSpanEntry[] = [];
+  for (const t of targets) {
+    try {
+      const result = await callGroupEdit({ ...rest, period: t.month, year: t.year, dryRun });
+      entries.push({ target: t, result });
+    } catch (e: any) {
+      entries.push({ target: t, result: null, error: e?.message ?? 'Failed' });
+      // A commit must not silently continue past a hard failure.
+      if (!dryRun) break;
+    }
+  }
+  return { entries, spanId };
+}
+
+/** Dry-run every target month. Writes nothing. */
+export function useGroupEditSpanPreview() {
+  return useMutation<GroupEditSpanResult, Error, GroupEditSpanArgs>({
+    mutationFn: (a) => runSpan(a, true, crypto.randomUUID()),
+    onError: (e: any) => toast.error(e?.message ?? 'Could not build the edit preview.'),
+  });
+}
+
+/** Commits month by month; each month writes its own undoable run. */
+export function useGroupEditSpanCommit() {
+  const qc = useQueryClient();
+  return useMutation<GroupEditSpanResult, Error, GroupEditSpanArgs>({
+    mutationFn: (a) => runSpan(a, false, crypto.randomUUID()),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['bu-console-kpi-detail'] });
+      qc.invalidateQueries({ queryKey: ['bu-console-tree'] });
+      qc.invalidateQueries({ queryKey: ['bu-console-edit-runs'] });
+      const ok = res.entries.filter((e) => !e.error);
+      const failed = res.entries.filter((e) => e.error);
+      const rows = ok.reduce((n, e) => n + Number(e.result?.updated ?? 0), 0);
+      if (failed.length) {
+        toast.warning(
+          `${rows} row${rows === 1 ? '' : 's'} updated across ${ok.length} month${ok.length === 1 ? '' : 's'} — stopped at ${failed[0].target.month} ${failed[0].target.year}`,
+          { description: failed[0].error ?? undefined },
+        );
+        return;
+      }
+      toast.success(
+        `${rows} row${rows === 1 ? '' : 's'} updated across ${ok.length} month${ok.length === 1 ? '' : 's'}`,
+      );
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not apply the definition edit.'),
+  });
+}
+
 /** Commits the definition edit after the admin confirms the preview. */
 export function useGroupEditCommit() {
   const qc = useQueryClient();
