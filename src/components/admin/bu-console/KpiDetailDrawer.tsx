@@ -398,7 +398,17 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
                         </TableCell>
                         <TableCell className="text-right">
                           {canWrite && (
-                            <Button size="sm" variant="ghost" onClick={() => setOverrideRow(r)}>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setOverrideRow(r)}
+                              disabled={!canActOnStatus(r.status)}
+                              title={
+                                canActOnStatus(r.status)
+                                  ? undefined
+                                  : 'Still in KRA Set — admins only'
+                              }
+                            >
                               Tune
                             </Button>
                           )}
