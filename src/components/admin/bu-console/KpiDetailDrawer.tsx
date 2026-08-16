@@ -2,16 +2,24 @@
  * ADR-259 — KPI detail drawer: definition, scoring scale and the paged
  * mapped-employee table (server-side pagination, max 200 rows per page).
  * Phase 3 adds one-value group entry via a preview-first dialog.
+ * ADR-280 — presented as a centered, wide modal (was a right-side sheet):
+ * sticky header + action bar, scrollable body, two-column definition layout.
  */
 import { useState } from 'react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Users } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
