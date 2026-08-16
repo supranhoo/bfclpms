@@ -6508,3 +6508,7 @@ A higher stage supersedes the lower ones in the Performance Console, exactly as 
    `scripts/consoleDashboardParity.ts` (live, write→read→restore). The live
    script must be re-run after any change to a `bu_console_*` write RPC.
    Result of record: `docs/verification/console-dashboard-parity.md`.
+
+## §CONSOLE-GROUP-EDIT-SPAN — Group definition edits may span future months (ADR-291)
+
+A Performance Console group definition edit may be applied to the selected month only, to the selected month and every later month of the same fiscal year (July–June), or to the next N months (2–12, inclusive). Past months are never written: if the selected period is already past, only the single-month option is available. Every target month is dry-run before commit and shown in a per-month preview; the commit runs sequentially and stops at the first failure, reporting the months already written. Each month produces its own audited, individually undoable edit run.

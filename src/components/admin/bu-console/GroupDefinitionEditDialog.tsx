@@ -34,6 +34,13 @@ import {
   type GroupEditResult, type KpiDetailArgs,
 } from '@/hooks/useBuConsole';
 import {
+  useGroupEditSpanPreview, useGroupEditSpanCommit, type GroupEditSpanResult,
+} from '@/hooks/useBuConsole';
+import {
+  resolveEditSpan, spanModesAvailable, describeSpan, aggregateSpan, periodLabel, toTarget,
+  EDIT_SPAN_LABELS, MAX_ROLLOUT_PERIODS, type EditSpanMode,
+} from './groupEditSpan';
+import {
   diffChanges, hasChanges, weightageDeviations, uniqueByEmployee,
   isMultiMonthFrequency, validateCycleChange, type ChangeSet,
 } from './groupEditModel';
@@ -86,12 +93,33 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const [sourceOfData, setSourceOfData] = useState('');
   const [allowLocked, setAllowLocked] = useState(false);
   const [resetOverrides, setResetOverrides] = useState(false);
-  const [preview, setPreview] = useState<GroupEditResult | null>(null);
+  const [spanMode, setSpanMode] = useState<EditSpanMode>('this');
+  const [spanCount, setSpanCount] = useState(3);
+  const [spanPreview, setSpanPreview] = useState<GroupEditSpanResult | null>(null);
   const [confirmText, setConfirmText] = useState('');
 
-  const previewMut = useGroupEditPreview();
-  const commitMut = useGroupEditCommit();
+  const previewMut = useGroupEditSpanPreview();
+  const commitMut = useGroupEditSpanCommit();
   const { data: categories } = useKraCategories();
+
+  const setPreview = (v: GroupEditSpanResult | null) => setSpanPreview(v);
+
+  const spanModes = useMemo(
+    () => (args ? spanModesAvailable(toTarget(args.period, args.year)) : (['this'] as EditSpanMode[])),
+    [args?.period, args?.year],
+  );
+
+  const targets = useMemo(
+    () => (args ? resolveEditSpan(toTarget(args.period, args.year), spanMode, spanCount) : []),
+    [args?.period, args?.year, spanMode, spanCount],
+  );
+
+  /** Detail lists (weightage, skips, clashes) always describe the selected month. */
+  const preview: GroupEditResult | null = spanPreview?.entries[0]?.result ?? null;
+  const spanTotals = useMemo(
+    () => aggregateSpan(spanPreview?.entries ?? []),
+    [spanPreview],
+  );
 
   // Re-seed the form each time the dialog opens on a (possibly different) KPI.
   useEffect(() => {
@@ -116,6 +144,8 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     setConfirmText('');
     setAllowLocked(false);
     setResetOverrides(false);
+    setSpanMode('this');
+    setSpanCount(3);
   }, [open, definition, args?.categoryId, args?.kraName]);
 
   const original = useMemo(() => ({
@@ -179,7 +209,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   ]);
 
   const changedFields = Object.keys(changes);
-  const affected = preview?.will_write ?? 0;
+  const affected = spanPreview ? spanTotals.willWrite : 0;
   const structural = changedFields.some((f) => STRUCTURAL_FIELDS.includes(f));
   const cycleMove = changedFields.some((f) => CYCLE_FIELDS.includes(f));
   const bigScope = needsTypedConfirmation(preview) || ((structural || cycleMove) && affected > 0);
@@ -213,15 +243,15 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const runPreview = () => {
     if (!args || !hasChanges(changes) || cycleError) return;
     previewMut.mutate(
-      { ...baseArgs(args), changes, allowLocked, resetOverrides },
+      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides },
       { onSuccess: (res) => { setPreview(res); setConfirmText(''); } },
     );
   };
 
   const runCommit = () => {
-    if (!args || !preview) return;
+    if (!args || !spanPreview) return;
     commitMut.mutate(
-      { ...baseArgs(args), changes, allowLocked, resetOverrides },
+      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides },
       { onSuccess: () => onOpenChange(false) },
     );
   };
@@ -445,12 +475,85 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
               )}
           </div>
 
-          {preview && (
+          {/* ADR-291 — repeat the same edit into future months of the fiscal cycle. */}
+          <div className="space-y-2 rounded-md border p-3">
+            <Label className="text-xs font-medium">Apply to</Label>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={spanMode}
+                onValueChange={(v) => { setSpanMode(v as EditSpanMode); setPreview(null); }}
+              >
+                <SelectTrigger className="w-[240px]"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {spanModes.map((m) => (
+                    <SelectItem key={m} value={m}>{EDIT_SPAN_LABELS[m]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {spanMode === 'next_n' && (
+                <Input
+                  type="number"
+                  min={2}
+                  max={MAX_ROLLOUT_PERIODS}
+                  value={spanCount}
+                  onChange={(e) => {
+                    const n = Math.max(2, Math.min(MAX_ROLLOUT_PERIODS, Number(e.target.value) || 2));
+                    setSpanCount(n);
+                    setPreview(null);
+                  }}
+                  className="w-20"
+                />
+              )}
+              <Badge variant="secondary">{describeSpan(targets)}</Badge>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {spanModes.length === 1
+                ? 'The selected month is in the past, so this edit can only be applied to that month.'
+                : `Past months are never touched. Each month is previewed and written separately, and each one can be undone on its own (max ${MAX_ROLLOUT_PERIODS} periods).`}
+            </p>
+          </div>
+
+          {spanPreview && (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2 text-sm">
-                <Badge>{preview.will_write ?? 0} rows will change</Badge>
-                <Badge variant="outline">{preview.will_skip ?? 0} skipped</Badge>
+                <Badge>{spanTotals.willWrite} rows will change</Badge>
+                <Badge variant="outline">{spanTotals.willSkip} skipped</Badge>
+                {targets.length > 1 && (
+                  <Badge variant="outline">
+                    {spanTotals.monthsWithWork} of {targets.length} months affected
+                  </Badge>
+                )}
               </div>
+
+              {targets.length > 1 && (
+                <details className="rounded-md border p-3 text-sm" open>
+                  <summary className="cursor-pointer font-medium">Per-month preview</summary>
+                  <Table className="mt-2">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Period</TableHead>
+                        <TableHead className="text-right">Rows</TableHead>
+                        <TableHead className="text-right">Skipped</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {spanPreview.entries.map((e) => (
+                        <TableRow key={periodLabel(e.target)}>
+                          <TableCell>{periodLabel(e.target)}</TableCell>
+                          <TableCell className="text-right">
+                            {e.error
+                              ? <span className="text-destructive">{e.error}</span>
+                              : (e.result?.will_write ?? 0) === 0
+                                ? <span className="text-muted-foreground">no matching rows</span>
+                                : e.result?.will_write}
+                          </TableCell>
+                          <TableCell className="text-right">{e.result?.will_skip ?? 0}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </details>
+              )}
 
               {deviations.length > 0 && (
                 <Alert>
@@ -527,7 +630,8 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription className="space-y-2">
                     <p>
-                      This edits <strong>{affected}</strong> employee rows. Type{' '}
+                      This edits <strong>{affected}</strong> employee rows across{' '}
+                      <strong>{targets.length}</strong> period{targets.length === 1 ? '' : 's'}. Type{' '}
                       <strong>{GROUP_ACTION_CONFIRM_WORD}</strong> to confirm.
                     </p>
                     <Input
@@ -555,10 +659,10 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
           </Button>
           <Button
             onClick={runCommit}
-            disabled={!preview || affected === 0 || commitMut.isPending || !confirmed}
+            disabled={!spanPreview || affected === 0 || commitMut.isPending || !confirmed}
           >
             {commitMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Apply to {affected} rows
+            Apply to {affected} rows{targets.length > 1 ? ` · ${targets.length} months` : ''}
           </Button>
         </DialogFooter>
       </DialogContent>
