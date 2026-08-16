@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/sheet';
 import { ReviewPeriodSelector } from '@/components/ui/ReviewPeriodSelector';
 import { OrgFilterCombobox, type ComboboxOption } from '@/components/admin/OrgFilterCombobox';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { RefreshCw, SlidersHorizontal } from 'lucide-react';
 
 export interface ScopeFilterConfig {
@@ -62,19 +63,27 @@ export function ScopeToolbar({
   const activeCount = filters.reduce((n, f) => n + (f.values.length > 0 ? 1 : 0), 0);
 
   return (
-    <div className="sticky top-0 z-30 -mx-4 border-b bg-background/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <ReviewPeriodSelector
-          selectedPeriod={period}
-          selectedYear={year}
-          onPeriodChange={onPeriodChange}
-          onYearChange={onYearChange}
-        />
+    <div className="sticky top-0 z-30 rounded-lg border bg-card px-3 py-2.5 shadow-sm sm:px-4">
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Review period
+          </p>
+          <ReviewPeriodSelector
+            selectedPeriod={period}
+            selectedYear={year}
+            onPeriodChange={onPeriodChange}
+            onYearChange={onYearChange}
+          />
+        </div>
 
         {/* Desktop: inline filters */}
-        <div className="hidden flex-1 flex-wrap items-center gap-2 md:flex">
+        <div className="hidden flex-1 flex-wrap items-end gap-2 md:flex">
           {filters.map(f => (
-            <div key={f.key} className="min-w-[150px] max-w-[220px] flex-1">
+            <div key={f.key} className="min-w-[150px] max-w-[220px] flex-1 space-y-1">
+              <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {f.label}
+              </p>
               <OrgFilterCombobox
                 multiSelect
                 values={f.values}
@@ -139,7 +148,7 @@ export function ScopeToolbar({
           </Sheet>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-end gap-2">
           <Button
             className="min-h-11"
             onClick={onApply}
@@ -149,26 +158,33 @@ export function ScopeToolbar({
             {isDirty && hasScope ? 'Apply filters' : 'Load console'}
           </Button>
           {hasScope && onRefresh && (
-            <Button
-              variant="outline"
-              size="icon"
-              className="min-h-11 min-w-11"
-              onClick={onRefresh}
-              disabled={isBusy}
-              aria-label="Refresh console data"
-            >
-              <RefreshCw className={`h-4 w-4 ${isBusy ? 'animate-spin' : ''}`} />
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="min-h-11 min-w-11"
+                    onClick={onRefresh}
+                    disabled={isBusy}
+                    aria-label="Refresh console data"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isBusy ? 'animate-spin' : ''}`} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Refresh console data</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       </div>
 
       {isDirty && hasScope && (
-        <p className="pt-1 text-xs font-medium text-amber-600 dark:text-amber-400" role="status">
+        <p className="pt-2 text-xs font-medium text-warning-foreground" role="status">
           Filters changed — results below still show the previously loaded scope. Apply filters to refresh.
         </p>
       )}
-      {hint && <p className="pt-1 text-xs text-muted-foreground">{hint}</p>}
+      {hint && <p className="pt-2 text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }
