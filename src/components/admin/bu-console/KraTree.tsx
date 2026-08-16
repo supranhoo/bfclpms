@@ -176,7 +176,7 @@ function KraTreeLevel({
   parentId, depth, scope, handlers,
 }: { parentId: string | null; depth: number; scope: KraTreeScope; handlers: Handlers }) {
   const [pages, setPages] = useState(1);
-  const pageSize = 100;
+  const PAGE_SIZE = 100;
 
   const args = useMemo(
     () => ({
@@ -188,15 +188,14 @@ function KraTreeLevel({
       categoryIds: scope.categoryIds,
       search: scope.search,
       page: 1,
-      pageSize,
+      // One growing window instead of separate pages: clicking "Load more"
+      // widens the window so no intermediate page can be skipped.
+      pageSize: PAGE_SIZE * pages,
     }),
-    [scope, parentId],
+    [scope, parentId, pages],
   );
 
-  // Pages are fetched one after another and concatenated, so a level with more
-  // rows than one page is never silently truncated.
   const first = useKraTree(args);
-  const more = useKraTree(pages > 1 ? { ...args, page: pages } : null);
 
   if (first.isLoading) {
     return (
@@ -215,7 +214,7 @@ function KraTreeLevel({
     );
   }
 
-  const rows = [...(first.data?.rows ?? []), ...(pages > 1 ? more.data?.rows ?? [] : [])];
+  const rows = first.data?.rows ?? [];
   const total = first.data?.total ?? 0;
 
   if (rows.length === 0) {
@@ -233,8 +232,8 @@ function KraTreeLevel({
       ))}
       {rows.length < total && (
         <div className="px-2 py-2" style={{ paddingLeft: 8 + depth * 20 }}>
-          <Button variant="outline" size="sm" onClick={() => setPages(p => p + 1)} disabled={more.isFetching}>
-            {more.isFetching ? 'Loading…' : `Load more (${rows.length} of ${total})`}
+          <Button variant="outline" size="sm" onClick={() => setPages(p => p + 1)} disabled={first.isFetching}>
+            {first.isFetching ? 'Loading…' : `Load more (${rows.length} of ${total})`}
           </Button>
         </div>
       )}
