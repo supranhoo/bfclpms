@@ -116,6 +116,23 @@ export default function BuConsole() {
   const selectedKraName =
     selectedCategory?.kras.find(k => k.kra_key === kraKey)?.kra_name ?? null;
 
+  // Human-readable summary of the loaded scope (presentation only).
+  const scopeSummary = useMemo(() => {
+    if (!scope) return '';
+    const nameOf = (ids: string[], opts: { value: string; label: string }[], allLabel: string) =>
+      ids.length === 0
+        ? allLabel
+        : ids.length === 1
+          ? (opts.find(o => o.value === ids[0])?.label ?? allLabel)
+          : `${ids.length} ${allLabel.replace(/^all /i, '')}`;
+    return [
+      nameOf(scope.divisionIds, divisionOptions, 'all divisions'),
+      nameOf(scope.buIds, buOptions, 'all business units'),
+      nameOf(scope.deptIds, deptOptions, 'all departments'),
+      nameOf(scope.managerIds, managerOptions, 'all managers'),
+    ].join(' · ');
+  }, [scope, divisionOptions, buOptions, deptOptions, managerOptions]);
+
   const applyScope = () => {
     setCategoryId(null);
     setKraKey(null);
