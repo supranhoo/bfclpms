@@ -180,7 +180,7 @@ export function ScopeToolbar({
       </div>
 
       {isDirty && hasScope && (
-        <p className="pt-2 text-xs font-medium text-warning-foreground" role="status">
+        <p className="pt-2 text-xs font-medium text-amber-600 dark:text-amber-400" role="status">
           Filters changed — results below still show the previously loaded scope. Apply filters to refresh.
         </p>
       )}
