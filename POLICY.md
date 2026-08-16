@@ -6447,3 +6447,12 @@ two functions — never `has_role(uid,'admin')` inline, and never the READ gate.
 Blocked rows are reported as **skipped** with reason `kra_set_admin_only`; a group
 or bulk run MUST NOT fail because some rows are still in KRA Set. The UI mirrors the
 contract through `useBuConsoleCapability().canActOnStatus(status)`.
+
+## §CONSOLE-REVIEW-RUN (ADR-286 / ADR-288)
+
+- The Performance Console Review Run is the supported way to process a shared KPI across many employees. Selection is cell/row/column; every move is an audited `bu_console_kpi_advance` batch with a dry-run preview.
+- Approved rows (`final_score IS NOT NULL`) are never selectable or writable from the console (reaffirms §88).
+- The worksheet never auto-loads and refuses scopes above 25,000 cells; the operator must narrow the scope.
+- Tier rules are unchanged: admin acts at any stage, management/audit only once a KPI has left KRA Set, HR PMS is read-only (§CONSOLE-WRITE-TIERS).
+- Tiered targets for one shared KPI are expressed as rules (level / designation / department / manages-people / everyone-else), resolved first-match by priority with `default` last. Hand-tuned per-employee targets win unless the admin explicitly replaces them.
+- Target rules change the target only. The scoring model stays group-owned (§KPI-SCORING-MODEL-GROUP-OWNED).

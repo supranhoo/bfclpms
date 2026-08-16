@@ -8969,3 +8969,11 @@ See docs/adr/ADR-283.md and POLICY §CONSOLE-CHROME-BUDGET.
   "Tune" disables on KRA Set rows, the group action bar hides when every row in scope is in KRA Set,
   and non-admin writers see a stage-scoped banner instead of the read-only banner.
   See POLICY §CONSOLE-WRITE-TIERS.
+
+### Performance Console — Review Run (ADR-286, ADR-288)
+
+- `ReviewRunTab.tsx` — KPI x employee worksheet (virtualized columns, 100 employees/page) fed by `bu_console_run_snapshot`.
+- `EmployeeScorecardDrawer.tsx` — person-first view; moves a full scorecard in one batch.
+- `TargetRulesDialog.tsx` + `targetRuleModel.ts` — tiered targets per shared KPI, preview then apply.
+- `useBuConsoleRun.ts` — all reads/writes via RPC (`bu_console_run_snapshot`, `bu_console_kpi_advance`, `bu_console_employee_scorecard`, `bu_console_target_rules_apply`).
+- Tests: `reviewRunModel.test.ts`, `targetRuleModel.test.ts` (16 cases).
