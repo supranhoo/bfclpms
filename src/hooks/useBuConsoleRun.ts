@@ -122,7 +122,7 @@ export function useRunSnapshot(args: RunSnapshotArgs | null) {
 export const RUN_SKIP_LABELS: Record<string, string> = {
   final_score_locked: 'Final score approved — immutable (POLICY §88)',
   final_approval_not_supported: 'Next stage is final approval — not allowed from the console',
-  stage_mismatch: 'Not waiting at this stage right now',
+  stage_mismatch: 'Already at or past this stage — use a rollback request to go back',
   stage_not_in_workflow: 'This stage is not part of the employee’s workflow',
   status_not_in_workflow: 'Current status is not part of the resolved workflow',
   terminal_stage: 'Already at the last stage of the workflow',
@@ -130,6 +130,8 @@ export const RUN_SKIP_LABELS: Record<string, string> = {
   no_submission: 'No submission row yet — enter a value first',
   not_scored: 'No score to carry forward',
   kra_set_admin_only: 'Still in KRA Set — admins only',
+  self_not_submitted: 'Self review not submitted — cannot supersede an empty self stage',
+  auditor_takes_precedence: 'Auditor has already signed — HR PMS cannot overwrite it',
 };
 
 export interface RunAdvanceRow {
@@ -142,6 +144,8 @@ export interface RunAdvanceRow {
   current_status: string | null;
   next_status?: string | null;
   carry_forward_score?: number | null;
+  /** ADR-290 — stages closed out on the way to the target stage. */
+  superseded_stages?: string[];
   reason?: string;
 }
 
@@ -152,8 +156,10 @@ export interface RunAdvanceResult {
   target_stage?: string;
   will_advance?: number;
   will_skip?: number;
+  will_supersede?: number;
   advanced?: number;
   skipped?: number;
+  superseded?: number;
   skip_summary?: { reason: string; count: number }[];
   preview?: RunAdvanceRow[];
   skipped_details?: RunAdvanceRow[];
