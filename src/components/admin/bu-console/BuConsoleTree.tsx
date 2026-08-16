@@ -5,14 +5,23 @@
  * ADR-264 — the KRA and KPI lists are virtualized, so a category holding
  * thousands of rows renders (and scrolls) without dropping any of them.
  */
-import { useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ChevronRight, Users, Layers, AlertTriangle, Wrench } from 'lucide-react';
+import {
+  ChevronRight,
+  ChevronLeft,
+  Users,
+  Layers,
+  AlertTriangle,
+  Wrench,
+  Sparkles,
+} from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { ConsoleMetricRow, ConsoleMetricHeader } from './ConsoleMetricRow';
+import { ScorePill } from './ScorePill';
 import { lookalikeCounts } from './lookalikeTitles';
 import type {
   BuConsoleCategoryNode,
@@ -162,7 +171,7 @@ function KpiRow({
                   ? Number(weights[0]).toFixed(2)
                   : `${weights.length} values`,
           },
-          { label: 'Avg score', value: fmtScore(kpi.avg_score) },
+          { label: 'Avg score', value: <ScorePill value={kpi.avg_score} /> },
         ]}
         trailing={
           <span className="flex items-center gap-2">
@@ -196,7 +205,7 @@ function KpiRow({
                 {variantCount} variant{variantCount === 1 ? '' : 's'}
               </span>
             )}
-            <span className="flex items-center gap-1 text-xs font-medium text-primary">
+            <span className="flex items-center gap-1 text-xs font-medium text-primary opacity-60 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
               Open <ChevronRight className="h-4 w-4" />
             </span>
           </span>
