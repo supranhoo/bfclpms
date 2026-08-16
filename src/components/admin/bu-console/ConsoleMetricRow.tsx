@@ -63,6 +63,11 @@ interface ConsoleMetricRowProps {
   className?: string;
   /** Hide the per-row metric labels when a column header rail is present. */
   hideMetricLabels?: boolean;
+  /** Render the row as a disclosure toggle (ADR-278) instead of a link-like row. */
+  expandable?: boolean;
+  expanded?: boolean;
+  /** id of the panel this row discloses. */
+  ariaControls?: string;
 }
 
 export function ConsoleMetricRow({
@@ -75,6 +80,9 @@ export function ConsoleMetricRow({
   trailing,
   className,
   hideMetricLabels,
+  expandable,
+  expanded,
+  ariaControls,
 }: ConsoleMetricRowProps) {
   const interactive = typeof onClick === 'function';
   const Comp: any = interactive ? 'button' : 'div';
@@ -82,6 +90,8 @@ export function ConsoleMetricRow({
     <Comp
       type={interactive ? 'button' : undefined}
       onClick={onClick}
+      aria-expanded={expandable ? !!expanded : undefined}
+      aria-controls={expandable && expanded ? ariaControls : undefined}
       className={cn(
         'relative flex w-full min-h-[56px] items-center gap-3 px-3 py-2.5 text-left',
         'before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-transparent before:transition-colors',
@@ -124,7 +134,13 @@ export function ConsoleMetricRow({
 
       {trailing}
       {interactive && !trailing && (
-        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <ChevronRight
+          aria-hidden
+          className={cn(
+            'h-4 w-4 shrink-0 text-muted-foreground motion-safe:transition-transform',
+            expandable && expanded && 'rotate-90',
+          )}
+        />
       )}
     </Comp>
   );

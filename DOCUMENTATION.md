@@ -8868,3 +8868,17 @@ skeletons match final row height so nothing jumps when data lands.
 No change to `useBuConsole`, RPC signatures, cascading filter rules (ADR-229),
 virtualization thresholds (ADR-264) or the dirty-scope behaviour (ADR-271).
 Regression guard: `src/components/admin/bu-console/consoleLayout.test.tsx`.
+
+## ADR-278 — Console KPIs expand inline under their KRA
+
+The KRA row in the Performance Console is now a disclosure: its KPI list opens
+as an indented, tinted panel directly beneath the clicked row instead of as a
+separate card at the bottom of the page. Clicking the open KRA collapses it,
+one KRA is open at a time, and the panel carries its own `KPIs · n` header with
+Employees / Weightage / Avg score column labels plus an internal scroll region
+so a large KRA can't push the rest of the list off screen. KPI row content
+(badges, Fix text split, variants, Open) is untouched.
+
+Presentation only — no change to data loading, RPCs, scoring, the detail drawer
+or group actions. `onSelectKra` now accepts `null` to collapse. Regression
+guard: `src/components/admin/bu-console/consoleLayout.test.tsx`.
