@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stageLabel, sortStages } from './PipelineTab';
+import { stageLabel, sortStages } from './pipelineStages';
 
 describe('ADR-284 pipeline stage rail', () => {
   it('labels canonical workflow stages in business language', () => {
