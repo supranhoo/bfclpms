@@ -17243,6 +17243,20 @@ export type Database = {
         Args: { p_page?: number; p_page_size?: number; p_status?: string }
         Returns: Json
       }
+      bu_console_pipeline: {
+        Args: {
+          p_bu_ids?: string[]
+          p_dept_ids?: string[]
+          p_division_ids?: string[]
+          p_manager_ids?: string[]
+          p_page?: number
+          p_page_size?: number
+          p_period: string
+          p_stage?: string
+          p_year: number
+        }
+        Returns: Json
+      }
       bu_console_row_override: {
         Args: { p_allow_locked?: boolean; p_changes: Json; p_kpi_id: string }
         Returns: Json
