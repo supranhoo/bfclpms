@@ -6390,6 +6390,16 @@ labelled as manual. Every level of the tree is server-paged and loaded on
 expand; a level with more rows than one page shows a "Load more" control and is
 never silently truncated.
 
+## §CONSOLE-CHROME-BUDGET — Chrome must not crowd out the work (ADR-283)
+
+On the Performance Console the chrome above the first data row must stay under
+roughly 220px at 1280x800. Any new scope-level summary extends the existing
+one-line stat strip; it must not add another card or another full-width row.
+Filter controls may collapse on scroll, but never while the selections are dirty
+— the apply action must remain visible — and every collapsed or tooltipped
+element keeps a visible affordance. Density is taken from chrome, never from the
+data rows.
+
 ## §KPI-SCORING-MODEL-GROUP-OWNED — Scoring model is never per-employee (ADR-282)
 
 A KPI's scoring model — its type (`uom_type`), its qualitative options, the
