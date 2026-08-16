@@ -443,6 +443,7 @@ export function BuConsoleTree({
   onSelectKra,
   onSelectKpi,
   onFixTextSplit,
+  breadcrumb,
 }: Props) {
   const category = categories.find(c => c.category_id === selectedCategoryId) ?? null;
   const openKra: BuConsoleKraNode | null =
@@ -454,7 +455,7 @@ export function BuConsoleTree({
   );
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {categories.length === 0 ? (
         <div className="rounded-lg border border-dashed p-8 text-center">
           <p className="text-sm font-medium">No KPIs found for this scope and period</p>
@@ -467,6 +468,7 @@ export function BuConsoleTree({
           categories={categories}
           selectedCategoryId={selectedCategoryId}
           onSelectCategory={onSelectCategory}
+          breadcrumb={breadcrumb}
         />
       )}
 
