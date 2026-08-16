@@ -8977,3 +8977,19 @@ See docs/adr/ADR-283.md and POLICY §CONSOLE-CHROME-BUDGET.
 - `TargetRulesDialog.tsx` + `targetRuleModel.ts` — tiered targets per shared KPI, preview then apply.
 - `useBuConsoleRun.ts` — all reads/writes via RPC (`bu_console_run_snapshot`, `bu_console_kpi_advance`, `bu_console_employee_scorecard`, `bu_console_target_rules_apply`).
 - Tests: `reviewRunModel.test.ts`, `targetRuleModel.test.ts` (16 cases).
+
+### Performance Console — one surface, no tabs (ADR-289)
+
+The console no longer has Console / Review Run / Pipeline / KRA Tree / KPI Library tabs.
+There is a single drilldown tree (Category → KRA → KPI) with a **Configure / Review** mode switch:
+
+- **Configure** — the KRA disclosure shows the KPI definition list (unchanged, ADR-278).
+- **Review** — a `StageRail` (pending counts per stage, from `bu_console_pipeline`) sits above the
+  tree and selects the working stage; the same KRA disclosure renders `KraWorksheet.tsx`
+  (KPI x employee grid for that KRA only, via `bu_console_run_snapshot` with `p_kra_name`).
+- `BuConsoleTree` takes a `renderKraPanel` prop — the panel is replaced, never stacked.
+- KRA alignment (`GoalsTab`) and KPI library / duplicates (`MergeProposalsTab`) moved to the header
+  overflow menu as dialogs. `PipelineTab.tsx` and `ReviewRunTab.tsx` are deleted; the shared stage
+  labelling lives in `pipelineStages.ts`.
+- No RPC, scoring, access-tier or write-path change — presentation and composition only.
+- Tests: `consoleLayout.test.tsx` (panel swap), `pipelineStages.test.ts`.
