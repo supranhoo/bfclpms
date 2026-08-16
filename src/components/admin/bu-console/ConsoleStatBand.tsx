@@ -17,17 +17,23 @@ export interface ConsoleStats {
   avgScore: number | null;
 }
 
-/** Aggregates the loaded tree — presentation-side only, no data change. */
+/**
+ * Aggregates the loaded tree — presentation-side only, no data change.
+ *
+ * ADR-281: `employeeTotal` is the DISTINCT employee count supplied by the
+ * `bu_console_tree` RPC. It must never be derived by summing per-KPI
+ * `employee_count`, which multiplies every employee by their KPI count.
+ */
 export function computeConsoleStats(
   categories: {
     kra_count: number;
     kpi_count: number;
     kras: { kpis: { employee_count: number; avg_score: number | null }[] }[];
   }[],
+  employeeTotal?: number | null,
 ): ConsoleStats {
   let kras = 0;
   let kpis = 0;
-  let employees = 0;
   let scoreSum = 0;
   let scoreCount = 0;
   for (const c of categories) {
@@ -35,7 +41,6 @@ export function computeConsoleStats(
     kpis += c.kpi_count ?? 0;
     for (const k of c.kras ?? []) {
       for (const kpi of k.kpis ?? []) {
-        employees += kpi.employee_count ?? 0;
         if (kpi.avg_score !== null && kpi.avg_score !== undefined) {
           scoreSum += Number(kpi.avg_score);
           scoreCount += 1;
@@ -47,7 +52,7 @@ export function computeConsoleStats(
     categories: categories.length,
     kras,
     kpis,
-    employees,
+    employees: employeeTotal ?? 0,
     avgScore: scoreCount > 0 ? scoreSum / scoreCount : null,
   };
 }
@@ -135,6 +140,7 @@ export function ConsoleStatBand({
         icon={<Users className="h-4 w-4" />}
         label="Employees impacted"
         value={dash ?? s.employees}
+        context={placeholder ? undefined : 'distinct employees in scope'}
         muted={placeholder}
       />
       <Tile
