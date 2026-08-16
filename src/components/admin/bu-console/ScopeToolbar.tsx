@@ -136,10 +136,9 @@ export function ScopeToolbar({
         {/* Desktop: inline filters */}
         <div className="hidden flex-1 flex-wrap items-center gap-2 md:flex">
           {filters.map(f => (
-            <div key={f.key} className="min-w-[150px] max-w-[220px] flex-1">
+            <div key={f.key} className="min-w-[150px] max-w-[220px] flex-1" title={f.label}>
               <OrgFilterCombobox
                 multiSelect
-                aria-label={f.label}
                 values={f.values}
                 onValuesChange={f.onValuesChange}
                 options={f.options}
@@ -206,7 +205,7 @@ export function ScopeToolbar({
           {isDirty && hasScope && (
             <span
               role="status"
-              className="hidden rounded-md bg-warning/15 px-2 py-1 text-xs font-medium text-warning-foreground sm:inline"
+              className="hidden rounded-md bg-warning/10 px-2 py-1 text-xs font-medium text-warning sm:inline"
             >
               Filters changed — apply to refresh
             </span>
