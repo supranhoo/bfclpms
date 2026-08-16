@@ -31,6 +31,7 @@ import {
   ConsoleStatBand,
   computeConsoleStats,
 } from '@/components/admin/bu-console/ConsoleStatBand';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ChevronRight, FlaskConical, Compass } from 'lucide-react';
 
 export default function BuConsole() {
@@ -220,28 +221,38 @@ export default function BuConsole() {
   }
 
   return (
-    <div className="space-y-4 p-4 sm:p-6">
+    <div className="space-y-2 p-3 sm:p-4">
       <Tabs defaultValue="console">
-        <header className="rounded-lg border bg-card">
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 pb-3 pt-4">
-            <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight sm:text-2xl">
+        {/* ADR-283 — title, tabs and the scope metrics share one compact block. */}
+        <header className="rounded-lg border bg-card px-3 py-2 sm:px-4">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="flex items-center gap-2 text-base font-semibold tracking-tight sm:text-lg">
               Performance Console
-              <Badge variant="secondary">Beta</Badge>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="secondary" className="cursor-help">Beta</Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Review performance by KPI group instead of employee by employee.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </h1>
-            <p className="truncate text-sm text-muted-foreground">
-              Review performance by KPI group instead of employee by employee.
-            </p>
-          </div>
-          <div className="border-t px-4 py-2">
-            <TabsList>
-          <TabsTrigger value="console">Console</TabsTrigger>
-          <TabsTrigger value="goals">KRA Tree</TabsTrigger>
-          <TabsTrigger value="library">KPI Library</TabsTrigger>
+            <TabsList className="ml-auto h-8">
+              <TabsTrigger value="console" className="text-xs">Console</TabsTrigger>
+              <TabsTrigger value="goals" className="text-xs">KRA Tree</TabsTrigger>
+              <TabsTrigger value="library" className="text-xs">KPI Library</TabsTrigger>
             </TabsList>
           </div>
+          {scope && stats && (
+            <div className="mt-2 border-t pt-2">
+              <ConsoleStatBand stats={stats} scopeLabel={`${scope.period} ${scope.year} · ${scopeSummary}`} />
+            </div>
+          )}
         </header>
 
-        <TabsContent value="console" className="mt-4 space-y-3">
+        <TabsContent value="console" className="mt-2 space-y-2">
           <ScopeToolbar
             period={period}
             year={year}
@@ -258,40 +269,13 @@ export default function BuConsole() {
             isBusy={isFetching}
             hasScope={!!scope}
             isDirty={scopeDirty}
+            summary={scope ? `${scope.period} ${scope.year} · ${scopeSummary}` : undefined}
             hint={!scope ? 'Nothing loads until you apply a scope — this keeps large BUs responsive.' : undefined}
           />
 
-          {scope && (
-            <>
-              <ConsoleStatBand
-                stats={stats ?? undefined}
-                scopeLabel={`${scope.period} ${scope.year} · ${scopeSummary}`}
-              />
-            <nav aria-label="Console drilldown" className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">{scope.period} {scope.year}</span>
-              <span className="mx-1 text-muted-foreground/60">·</span>
-              <span>{scopeSummary}</span>
-              {selectedCategoryName && (
-                <>
-                  <ChevronRight className="h-3 w-3" />
-                  <button type="button" className="hover:text-foreground" onClick={() => setKraKey(null)}>
-                    {selectedCategoryName}
-                  </button>
-                </>
-              )}
-              {kraKey && selectedKraName && (
-                <>
-                  <ChevronRight className="h-3 w-3" />
-                  <span className="text-foreground">{selectedKraName}</span>
-                </>
-              )}
-            </nav>
-            </>
-          )}
-
           {!scope && !isFetching && (
             <>
-              <ConsoleStatBand placeholder />
+              <ConsoleStatBand placeholder variant="tiles" />
               <div className="rounded-lg border border-dashed px-6 py-12 text-center">
               <Compass className="mx-auto h-8 w-8 text-muted-foreground" />
               <p className="mt-3 text-sm font-medium">Pick a scope to load the console</p>
@@ -330,6 +314,32 @@ export default function BuConsole() {
               categories={tree.categories}
               selectedCategoryId={categoryId}
               selectedKraKey={kraKey}
+              breadcrumb={
+                <nav
+                  aria-label="Console drilldown"
+                  className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
+                >
+                  <span className="truncate">{scope?.period} {scope?.year} · {scopeSummary}</span>
+                  {selectedCategoryName && (
+                    <>
+                      <ChevronRight className="h-3 w-3 shrink-0" />
+                      <button
+                        type="button"
+                        className="truncate hover:text-foreground"
+                        onClick={() => setKraKey(null)}
+                      >
+                        {selectedCategoryName}
+                      </button>
+                    </>
+                  )}
+                  {kraKey && selectedKraName && (
+                    <>
+                      <ChevronRight className="h-3 w-3 shrink-0" />
+                      <span className="truncate text-foreground">{selectedKraName}</span>
+                    </>
+                  )}
+                </nav>
+              }
               onFixTextSplit={(kpi) =>
                 navigate(
                   `/admin/kpi-standardization?tab=split&q=${encodeURIComponent(kpi.kpi_name)}`,

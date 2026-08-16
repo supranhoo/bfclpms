@@ -3,11 +3,16 @@
  * Derives its numbers from the already-loaded tree (one memoised reduce in the
  * caller); it never fetches. Also exposes a muted placeholder shell so the page
  * keeps its structure before a scope is loaded.
+ *
+ * ADR-283 — the loaded state renders as a single-line strip so the console's
+ * chrome stays inside its vertical budget. The tile grid is kept for the
+ * pre-scope placeholder, where the page has room to spare.
  */
 import type { ReactNode } from 'react';
 import { Layers, ListTree, Target, Users, Gauge } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScorePill } from './ScorePill';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export interface ConsoleStats {
   categories: number;
@@ -99,18 +104,84 @@ function Tile({
   );
 }
 
+/** ADR-283 — one metric on a single line: glyph, caption, value. */
+function Chip({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: ReactNode;
+}) {
+  return (
+    <span className="flex shrink-0 snap-start items-center gap-1.5">
+      <span className="text-muted-foreground" aria-hidden>{icon}</span>
+      <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className="text-sm font-semibold tabular-nums leading-none">{value}</span>
+    </span>
+  );
+}
+
 export function ConsoleStatBand({
   stats,
   scopeLabel,
   placeholder,
+  variant = 'strip',
 }: {
   stats?: ConsoleStats;
   scopeLabel?: string;
   /** Render the muted structural shell used before a scope is loaded. */
   placeholder?: boolean;
+  /** `strip` = one dense line (default). `tiles` = the roomy 5-tile grid. */
+  variant?: 'strip' | 'tiles';
 }) {
   const s = stats ?? { categories: 0, kras: 0, kpis: 0, employees: 0, avgScore: null };
   const dash = placeholder ? '—' : undefined;
+
+  if (variant === 'strip' && !placeholder) {
+    return (
+      <TooltipProvider>
+        <section
+          aria-label="Loaded scope summary"
+          className="flex snap-x items-center gap-x-4 gap-y-1 overflow-x-auto text-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          <Chip icon={<Layers className="h-3.5 w-3.5" />} label="Categories" value={s.categories} />
+          <Chip icon={<ListTree className="h-3.5 w-3.5" />} label="KRAs" value={s.kras} />
+          <Chip icon={<Target className="h-3.5 w-3.5" />} label="KPIs" value={s.kpis} />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="shrink-0 snap-start">
+                <Chip
+                  icon={<Users className="h-3.5 w-3.5" />}
+                  label="Employees"
+                  value={s.employees}
+                />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Distinct employees in scope</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="flex shrink-0 snap-start items-center gap-1.5">
+                <Gauge className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                  Avg score
+                </span>
+                <ScorePill value={s.avgScore} />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>Average across scored KPIs</TooltipContent>
+          </Tooltip>
+          {scopeLabel && (
+            <span className="ml-auto hidden shrink-0 truncate pl-2 text-xs text-muted-foreground lg:block">
+              {scopeLabel}
+            </span>
+          )}
+        </section>
+      </TooltipProvider>
+    );
+  }
 
   return (
     <section

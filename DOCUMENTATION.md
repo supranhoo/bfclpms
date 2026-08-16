@@ -8943,3 +8943,11 @@ instead of an inapplicable R0–R5 grid; value-based KPIs are unchanged. The rul
 enforced in the database by `bu_console_scoring_model_lock`, which makes any attempt to
 fork a scoring model per employee a skipped row rather than a silent write.
 See docs/adr/ADR-282.md and POLICY §KPI-SCORING-MODEL-GROUP-OWNED.
+
+## ADR-283 — Performance Console information density
+
+Console chrome shrank from about 460px to about 210px: header and tabs merged into
+one bar, the five stat tiles became a single-line strip, the breadcrumb moved onto the
+category strip row, and the filter bar collapses to a summary chip on scroll (never
+while filters are unapplied). No data or workflow change.
+See docs/adr/ADR-283.md and POLICY §CONSOLE-CHROME-BUDGET.
