@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { ChevronRight, Users, Layers, AlertTriangle, Wrench } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { ConsoleMetricRow } from './ConsoleMetricRow';
+import { ConsoleMetricRow, ConsoleMetricHeader } from './ConsoleMetricRow';
 import { lookalikeCounts } from './lookalikeTitles';
 import type {
   BuConsoleCategoryNode,
@@ -149,6 +149,7 @@ function KpiRow({
           </span>
         }
         onClick={() => onOpen(null)}
+        hideMetricLabels
         metrics={[
           { label: 'Employees', value: kpi.employee_count },
           {
@@ -256,15 +257,27 @@ export function BuConsoleTree({
     <div className="space-y-3">
       {/* Category tab strip — one scrollable row instead of a wrapped chip grid */}
       {categories.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No KPIs found for this scope and period.
-        </p>
+        <div className="rounded-lg border border-dashed p-8 text-center">
+          <p className="text-sm font-medium">No KPIs found for this scope and period</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Widen the scope or pick another review period, then load the console again.
+          </p>
+        </div>
       ) : (
-        <div
-          role="tablist"
-          aria-label="KPI categories"
-          className="-mx-1 flex gap-1 overflow-x-auto border-b px-1 pb-px [scrollbar-width:thin]"
-        >
+        <div className="relative">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-background to-transparent"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-background to-transparent"
+          />
+          <div
+            role="tablist"
+            aria-label="KPI categories"
+            className="flex snap-x gap-1 overflow-x-auto border-b px-1 pb-px [scrollbar-width:thin]"
+          >
           {categories.map(c => {
             const active = c.category_id === selectedCategoryId;
             return (
@@ -275,27 +288,33 @@ export function BuConsoleTree({
                 aria-selected={active}
                 onClick={() => onSelectCategory(c.category_id)}
                 className={cn(
-                  'flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 text-sm transition-colors',
+                  'flex min-h-11 shrink-0 snap-start items-center gap-2 whitespace-nowrap border-b-2 px-3 text-sm transition-colors',
                   active
                     ? 'border-primary font-semibold text-primary'
                     : 'border-transparent text-muted-foreground hover:text-foreground',
                 )}
               >
                 {c.category_name}
-                <Badge variant="secondary" className="h-5 px-1.5 text-[11px]">
+                <span
+                  className={cn(
+                    'rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
+                    active ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
+                  )}
+                >
                   {c.kpi_count}
-                </Badge>
+                </span>
               </button>
             );
           })}
+          </div>
         </div>
       )}
 
       {/* KRA list */}
       {category && (
-        <Card>
+        <Card className="overflow-hidden">
           <CardContent className="p-0">
-            <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+            <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {category.category_name} · KRAs
               </p>
@@ -303,6 +322,7 @@ export function BuConsoleTree({
                 {category.kra_count} KRAs · {category.kpi_count} KPIs
               </p>
             </div>
+            <ConsoleMetricHeader labels={['KPI count', 'Employee impact']} />
             <VirtualRows
               items={category.kras}
               estimateSize={56}
@@ -317,6 +337,7 @@ export function BuConsoleTree({
                     subtitle={`${k.kpi_count} mapped KPI${k.kpi_count === 1 ? '' : 's'}`}
                     selected={k.kra_key === selectedKraKey}
                     onClick={() => onSelectKra(k.kra_key)}
+                    hideMetricLabels
                     metrics={[
                       { label: 'KPI count', value: k.kpi_count },
                       { label: 'Employee impact', value: employees },
@@ -331,9 +352,9 @@ export function BuConsoleTree({
 
       {/* KPI list */}
       {category && kra && (
-        <Card>
+        <Card className="overflow-hidden">
           <CardContent className="p-0">
-            <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+            <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-2">
               <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {kra.kra_name} · KPIs
               </p>

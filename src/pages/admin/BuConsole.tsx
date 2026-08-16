@@ -27,7 +27,7 @@ import { ScopeToolbar } from '@/components/admin/bu-console/ScopeToolbar';
 import { KpiDetailDrawer } from '@/components/admin/bu-console/KpiDetailDrawer';
 import { MergeProposalsTab } from '@/components/admin/bu-console/MergeProposalsTab';
 import { GoalsTab } from '@/components/admin/bu-console/GoalsTab';
-import { ChevronRight, FlaskConical } from 'lucide-react';
+import { ChevronRight, FlaskConical, Compass } from 'lucide-react';
 
 export default function BuConsole() {
   const { data: flagEnabled, isLoading: flagLoading } = useBuConsoleFlag();
@@ -116,6 +116,23 @@ export default function BuConsole() {
   const selectedKraName =
     selectedCategory?.kras.find(k => k.kra_key === kraKey)?.kra_name ?? null;
 
+  // Human-readable summary of the loaded scope (presentation only).
+  const scopeSummary = useMemo(() => {
+    if (!scope) return '';
+    const nameOf = (ids: string[], opts: { value: string; label: string }[], allLabel: string) =>
+      ids.length === 0
+        ? allLabel
+        : ids.length === 1
+          ? (opts.find(o => o.value === ids[0])?.label ?? allLabel)
+          : `${ids.length} ${allLabel.replace(/^all /i, '')}`;
+    return [
+      nameOf(scope.divisionIds, divisionOptions, 'all divisions'),
+      nameOf(scope.buIds, buOptions, 'all business units'),
+      nameOf(scope.deptIds, deptOptions, 'all departments'),
+      nameOf(scope.managerIds, managerOptions, 'all managers'),
+    ].join(' · ');
+  }, [scope, divisionOptions, buOptions, deptOptions, managerOptions]);
+
   const applyScope = () => {
     setCategoryId(null);
     setKraKey(null);
@@ -193,25 +210,28 @@ export default function BuConsole() {
   }
 
   return (
-    <div className="space-y-3 p-4 sm:p-6">
-      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h1 className="flex items-center gap-2 text-xl font-semibold sm:text-2xl">
-          Performance Console
-          <Badge variant="secondary">Beta</Badge>
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Review performance by KPI group instead of employee by employee.
-        </p>
-      </header>
-
+    <div className="space-y-4 p-4 sm:p-6">
       <Tabs defaultValue="console">
-        <TabsList>
+        <header className="rounded-lg border bg-card">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 pb-3 pt-4">
+            <h1 className="flex items-center gap-2 text-xl font-semibold tracking-tight sm:text-2xl">
+              Performance Console
+              <Badge variant="secondary">Beta</Badge>
+            </h1>
+            <p className="truncate text-sm text-muted-foreground">
+              Review performance by KPI group instead of employee by employee.
+            </p>
+          </div>
+          <div className="border-t px-4 py-2">
+            <TabsList>
           <TabsTrigger value="console">Console</TabsTrigger>
           <TabsTrigger value="goals">KRA Tree</TabsTrigger>
           <TabsTrigger value="library">KPI Library</TabsTrigger>
-        </TabsList>
+            </TabsList>
+          </div>
+        </header>
 
-        <TabsContent value="console" className="mt-3 space-y-3">
+        <TabsContent value="console" className="mt-4 space-y-3">
           <ScopeToolbar
             period={period}
             year={year}
@@ -233,7 +253,9 @@ export default function BuConsole() {
 
           {scope && (
             <nav aria-label="Console drilldown" className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-              <span>{scope.period} {scope.year}</span>
+              <span className="font-medium text-foreground">{scope.period} {scope.year}</span>
+              <span className="mx-1 text-muted-foreground/60">·</span>
+              <span>{scopeSummary}</span>
               {selectedCategoryName && (
                 <>
                   <ChevronRight className="h-3 w-3" />
@@ -251,9 +273,24 @@ export default function BuConsole() {
             </nav>
           )}
 
+          {!scope && !isFetching && (
+            <div className="rounded-lg border border-dashed px-6 py-12 text-center">
+              <Compass className="mx-auto h-8 w-8 text-muted-foreground" />
+              <p className="mt-3 text-sm font-medium">Pick a scope to load the console</p>
+              <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
+                Choose a review period and, optionally, divisions, business units, departments or
+                managers — then load the console. Nothing is fetched until you do, which keeps
+                large business units responsive.
+              </p>
+            </div>
+          )}
+
           {isFetching && (
-            <div className="space-y-2">
-              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+            <div className="space-y-2 rounded-lg border p-2">
+              <Skeleton className="h-8 w-full" />
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full" />
+              ))}
             </div>
           )}
 

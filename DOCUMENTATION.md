@@ -8853,3 +8853,18 @@ would have silently dropped rows. Regression guard:
 
 **Rollback.** Additive: the new columns are nullable, `kra_tree_list` can be
 dropped, and the previous list RPC (`bu_goal_list`) is still in place.
+
+## ADR-277 — Performance Console layout polish
+
+Presentation-only pass over the Console tab. Header and tab strip now share one
+bordered card surface; `ScopeToolbar` sits on a `bg-card` control bar with a
+small uppercase label above every filter and a tooltipped refresh icon; the
+category strip gains edge fade masks, snap scrolling and tonal count pills; and
+`ConsoleMetricRow` uses fixed 92px right-aligned metric columns with a shared
+`ConsoleMetricHeader` rail, a left accent bar on hover/selection and a 56px min
+height. Pre-load and no-result states are real empty states, and loading
+skeletons match final row height so nothing jumps when data lands.
+
+No change to `useBuConsole`, RPC signatures, cascading filter rules (ADR-229),
+virtualization thresholds (ADR-264) or the dirty-scope behaviour (ADR-271).
+Regression guard: `src/components/admin/bu-console/consoleLayout.test.tsx`.
