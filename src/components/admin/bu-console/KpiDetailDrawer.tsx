@@ -48,6 +48,8 @@ const fmt = (v: number | null | undefined) =>
 
 export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }: Props) {
   const { data, isLoading, error } = useBuConsoleKpiDetail(args);
+  // ADR-284 — group writes / tuning are admin-only (server enforces the same).
+  const { canWrite } = useBuConsoleCapability();
   const [entryOpen, setEntryOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -142,7 +144,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
           </div>
         )}
 
-        {data?.authorized && (
+        {data?.authorized && canWrite && (
           <div className="sticky top-0 z-10 -mx-6 mb-4 flex flex-wrap items-center gap-2 border-b bg-background/95 px-6 pb-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
             <Button
               className="h-10"
@@ -379,9 +381,11 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
                           <Badge variant="outline">{r.status ?? '—'}</Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button size="sm" variant="ghost" onClick={() => setOverrideRow(r)}>
-                            Tune
-                          </Button>
+                          {canWrite && (
+                            <Button size="sm" variant="ghost" onClick={() => setOverrideRow(r)}>
+                              Tune
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
