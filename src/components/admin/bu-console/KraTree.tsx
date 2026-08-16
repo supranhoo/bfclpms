@@ -144,6 +144,7 @@ function KraTreeRowView({
               </div>
             )}
           </div>
+          {canWrite && (
           <div className="flex shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
             <Button
               variant="ghost" size="sm" title={row.goal_source === 'manual' ? 'Entered manually' : 'Recompute progress'}
@@ -162,6 +163,7 @@ function KraTreeRowView({
               <Archive className="h-4 w-4" />
             </Button>
           </div>
+          )}
         </div>
       </div>
 
