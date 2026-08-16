@@ -5,7 +5,7 @@
  * "Filters (n)" sheet trigger below `md`. Filter state and the cascading rules
  * (ADR-229) stay owned by the page — this component is layout only.
  */
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -44,6 +44,8 @@ interface ScopeToolbarProps {
   /** ADR-271 — filters changed since the loaded scope; results below are stale. */
   isDirty?: boolean;
   hint?: ReactNode;
+  /** ADR-283 — one-line summary shown when the bar collapses on scroll. */
+  summary?: string;
 }
 
 export function ScopeToolbar({
@@ -58,17 +60,71 @@ export function ScopeToolbar({
   hasScope,
   isDirty,
   hint,
+  summary,
 }: ScopeToolbarProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const activeCount = filters.reduce((n, f) => n + (f.values.length > 0 ? 1 : 0), 0);
 
-  return (
-    <div className="sticky top-0 z-30 rounded-lg border bg-card px-3 py-2.5 shadow-sm sm:px-4">
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="space-y-1">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Review period
+  /**
+   * ADR-283 — once the user scrolls into the data the sticky bar shrinks to a
+   * summary chip. It never collapses while the filters are dirty: the "Apply
+   * filters" call to action must stay visible.
+   */
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const [scrolled, setScrolled] = useState(false);
+  const [forceOpen, setForceOpen] = useState(false);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([entry]) => setScrolled(!entry.isIntersecting), {
+      threshold: 1,
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  const collapsed = scrolled && !!hasScope && !isDirty && !forceOpen;
+
+  if (collapsed) {
+    return (
+      <>
+        <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+        <div className="sticky top-0 z-30 flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 shadow-sm">
+          <SlidersHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+            {summary ?? `${period} ${year}`}
+            {activeCount > 0 && ` · ${activeCount} filter${activeCount === 1 ? '' : 's'}`}
           </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="min-h-11 shrink-0"
+            onClick={() => setForceOpen(true)}
+          >
+            Change
+          </Button>
+          {onRefresh && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="min-h-11 min-w-11 shrink-0"
+              onClick={onRefresh}
+              disabled={isBusy}
+              aria-label="Refresh console data"
+            >
+              <RefreshCw className={`h-4 w-4 ${isBusy ? 'animate-spin' : ''}`} />
+            </Button>
+          )}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+    <div ref={sentinelRef} aria-hidden className="h-px w-full" />
+    <div className="sticky top-0 z-30 rounded-lg border bg-card px-3 py-2.5 shadow-sm sm:px-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <div>
           <ReviewPeriodSelector
             selectedPeriod={period}
             selectedYear={year}
@@ -78,14 +134,12 @@ export function ScopeToolbar({
         </div>
 
         {/* Desktop: inline filters */}
-        <div className="hidden flex-1 flex-wrap items-end gap-2 md:flex">
+        <div className="hidden flex-1 flex-wrap items-center gap-2 md:flex">
           {filters.map(f => (
-            <div key={f.key} className="min-w-[150px] max-w-[220px] flex-1 space-y-1">
-              <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {f.label}
-              </p>
+            <div key={f.key} className="min-w-[150px] max-w-[220px] flex-1">
               <OrgFilterCombobox
                 multiSelect
+                aria-label={f.label}
                 values={f.values}
                 onValuesChange={f.onValuesChange}
                 options={f.options}
@@ -148,7 +202,15 @@ export function ScopeToolbar({
           </Sheet>
         </div>
 
-        <div className="ml-auto flex items-end gap-2">
+        <div className="ml-auto flex items-center gap-2">
+          {isDirty && hasScope && (
+            <span
+              role="status"
+              className="hidden rounded-md bg-warning/15 px-2 py-1 text-xs font-medium text-warning-foreground sm:inline"
+            >
+              Filters changed — apply to refresh
+            </span>
+          )}
           <Button
             className="min-h-11"
             onClick={onApply}
@@ -180,11 +242,12 @@ export function ScopeToolbar({
       </div>
 
       {isDirty && hasScope && (
-        <p className="pt-2 text-xs font-medium text-amber-600 dark:text-amber-400" role="status">
-          Filters changed — results below still show the previously loaded scope. Apply filters to refresh.
+        <p className="pt-1.5 text-xs font-medium text-warning sm:hidden" role="status">
+          Filters changed — apply to refresh the results below.
         </p>
       )}
-      {hint && <p className="pt-2 text-xs text-muted-foreground">{hint}</p>}
+      {hint && <p className="pt-1.5 text-xs text-muted-foreground">{hint}</p>}
     </div>
+    </>
   );
 }
