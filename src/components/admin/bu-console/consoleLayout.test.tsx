@@ -50,7 +50,9 @@ describe('Console single surface (ADR-289)', () => {
         onSelectKpi={noop}
       />,
     );
-    expect(screen.getByText('Dust emission')).toBeTruthy();
+    // The KPI panel header only exists when the definition list is rendered.
+    expect(screen.getByText('KPIs · 1')).toBeTruthy();
+    expect(screen.getAllByText('Dust emission').length).toBeGreaterThan(0);
   });
 
   it('swaps the same panel for the review worksheet when one is supplied', () => {
@@ -69,7 +71,7 @@ describe('Console single surface (ADR-289)', () => {
     );
     expect(screen.getByText('worksheet for Power generation in c1')).toBeTruthy();
     // The definition list is replaced, not stacked below it.
-    expect(screen.queryByText('Dust emission')).toBeNull();
+    expect(screen.queryByText('KPIs · 1')).toBeNull();
   });
 });
 
