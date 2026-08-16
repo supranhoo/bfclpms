@@ -5,7 +5,7 @@
  * ADR-264 — the KRA and KPI lists are virtualized, so a category holding
  * thousands of rows renders (and scrolls) without dropping any of them.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -89,6 +89,8 @@ interface Props {
   ) => void;
   /** ADR-273 — opens the Text Split screen filtered to this KPI's raw text. */
   onFixTextSplit?: (kpi: BuConsoleKpiNode) => void;
+  /** ADR-283 — scope / drill path shown on the category strip row. */
+  breadcrumb?: ReactNode;
 }
 
 const fmtScore = (v: number | null | undefined) =>
@@ -250,10 +252,12 @@ function CategoryStrip({
   categories,
   selectedCategoryId,
   onSelectCategory,
+  breadcrumb,
 }: {
   categories: BuConsoleCategoryNode[];
   selectedCategoryId: string | null;
   onSelectCategory: (id: string) => void;
+  breadcrumb?: ReactNode;
 }) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [overflow, setOverflow] = useState({ left: false, right: false });
@@ -285,6 +289,7 @@ function CategoryStrip({
 
   return (
     <div className="relative rounded-lg border bg-card p-1.5">
+      {breadcrumb && <div className="px-2 pb-1 pt-0.5">{breadcrumb}</div>}
       {overflow.left && (
         <button
           type="button"
