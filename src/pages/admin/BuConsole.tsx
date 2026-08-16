@@ -27,6 +27,10 @@ import { ScopeToolbar } from '@/components/admin/bu-console/ScopeToolbar';
 import { KpiDetailDrawer } from '@/components/admin/bu-console/KpiDetailDrawer';
 import { MergeProposalsTab } from '@/components/admin/bu-console/MergeProposalsTab';
 import { GoalsTab } from '@/components/admin/bu-console/GoalsTab';
+import {
+  ConsoleStatBand,
+  computeConsoleStats,
+} from '@/components/admin/bu-console/ConsoleStatBand';
 import { ChevronRight, FlaskConical, Compass } from 'lucide-react';
 
 export default function BuConsole() {
@@ -115,6 +119,12 @@ export default function BuConsole() {
   const selectedCategoryName = selectedCategory?.category_name ?? null;
   const selectedKraName =
     selectedCategory?.kras.find(k => k.kra_key === kraKey)?.kra_name ?? null;
+
+  // ADR-279 — stat band derives from the already-fetched tree; no extra reads.
+  const stats = useMemo(
+    () => (tree?.authorized ? computeConsoleStats(tree.categories) : null),
+    [tree],
+  );
 
   // Human-readable summary of the loaded scope (presentation only).
   const scopeSummary = useMemo(() => {
@@ -252,6 +262,11 @@ export default function BuConsole() {
           />
 
           {scope && (
+            <>
+              <ConsoleStatBand
+                stats={stats ?? undefined}
+                scopeLabel={`${scope.period} ${scope.year} · ${scopeSummary}`}
+              />
             <nav aria-label="Console drilldown" className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">{scope.period} {scope.year}</span>
               <span className="mx-1 text-muted-foreground/60">·</span>
@@ -271,10 +286,13 @@ export default function BuConsole() {
                 </>
               )}
             </nav>
+            </>
           )}
 
           {!scope && !isFetching && (
-            <div className="rounded-lg border border-dashed px-6 py-12 text-center">
+            <>
+              <ConsoleStatBand placeholder />
+              <div className="rounded-lg border border-dashed px-6 py-12 text-center">
               <Compass className="mx-auto h-8 w-8 text-muted-foreground" />
               <p className="mt-3 text-sm font-medium">Pick a scope to load the console</p>
               <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
@@ -282,15 +300,20 @@ export default function BuConsole() {
                 managers — then load the console. Nothing is fetched until you do, which keeps
                 large business units responsive.
               </p>
-            </div>
+              </div>
+            </>
           )}
 
           {isFetching && (
-            <div className="space-y-2 rounded-lg border p-2">
-              <Skeleton className="h-8 w-full" />
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-14 w-full" />
-              ))}
+            <div className="space-y-3">
+              <Skeleton className="h-[74px] w-full rounded-lg" />
+              <Skeleton className="h-[56px] w-full rounded-lg" />
+              <div className="space-y-px overflow-hidden rounded-lg border">
+                <Skeleton className="h-8 w-full rounded-none" />
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-14 w-full rounded-none" />
+                ))}
+              </div>
             </div>
           )}
 
