@@ -6491,3 +6491,20 @@ A higher stage supersedes the lower ones in the Performance Console, exactly as 
    (`BU_CONSOLE_STAGE_SUPERSEDED`).
 6. Unchanged: final-score immutability (§88), access/write tiers
    (§CONSOLE-ACCESS-TIERS, §CONSOLE-WRITE-TIERS) and the KRA Set admin-only gate (ADR-285).
+
+## §CONSOLE-DASHBOARD-PARITY — Console changes must land on the dashboard, per KPI type
+
+1. The Performance Console and the employee/reviewer dashboard read the SAME KPI
+   row. A console write is authoritative for the dashboard; no console-only copy
+   of a value, target or scoring model may exist.
+2. Both surfaces MUST resolve the scoring model through
+   `resolveKpiScoringModel` (`src/lib/kpiScoringModel.ts`). Numeric, binary and
+   tiered KPIs must produce an identical model on both sides — including
+   inverted safety binaries where No = 5.
+3. Console writes remain scope-only per employee (§KPI-SCORING-MODEL-GROUP-OWNED)
+   and are refused once a row has moved past `kra_set` (§CONSOLE-WRITE-TIERS),
+   or once `final_score` is set (§88).
+4. Regression guards: `src/test/consoleDashboardParity.test.ts` (CI) and
+   `scripts/consoleDashboardParity.ts` (live, write→read→restore). The live
+   script must be re-run after any change to a `bu_console_*` write RPC.
+   Result of record: `docs/verification/console-dashboard-parity.md`.

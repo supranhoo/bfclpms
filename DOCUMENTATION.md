@@ -9003,3 +9003,20 @@ Intermediate stages are closed in the same audited batch with the carried-forwar
 each one is logged as `BU_CONSOLE_STAGE_SUPERSEDED`. The dry run reports `will_supersede`;
 the commit reports `superseded`. New skip reasons: `self_not_submitted`,
 `auditor_takes_precedence`. UI logic lives in `src/lib/review/supersedeChain.ts`.
+
+### Console → Dashboard parity verification (POLICY §CONSOLE-DASHBOARD-PARITY)
+
+`scripts/consoleDashboardParity.ts` is a live smoke test: it signs in with a
+minted session, calls `bu_console_can_read` / `bu_console_can_write` /
+`bu_console_tree` / `bu_console_kpi_detail`, then for one numeric, one binary and
+one tiered KPI writes a probe target through `bu_console_row_override`, reads it
+back on the dashboard's own `kpis` path and restores the byte-identical original
+(null stays null). `--restore <kpiId> <value|null>` performs a manual undo.
+
+`src/test/consoleDashboardParity.test.ts` is the CI counterpart: it asserts the
+console payload and the dashboard row resolve to the same `KpiScoringModel` for
+every KPI type, that qualitative KPIs never expose numeric thresholds, and that
+per-employee tuning cannot fork the group scoring model.
+
+Last verified run: August 2026, all checks passed —
+`docs/verification/console-dashboard-parity.md`.
