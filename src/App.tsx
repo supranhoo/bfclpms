@@ -354,7 +354,7 @@ const App = () => (
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/bu-console" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin', 'management', 'auditor', 'hr_pms']} menuKey="admin-bu-console">
                     <Suspense fallback={<PageFallback />}><BuConsole /></Suspense>
                   </ProtectedRoute>
                 } />

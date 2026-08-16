@@ -16,12 +16,15 @@ import {
   useGenerateMergeProposals,
   useDecideMergeProposal,
 } from '@/hooks/useBuConsole';
+import { useBuConsoleCapability } from '@/hooks/useBuConsoleCapability';
 
 type StatusTab = 'pending' | 'approved' | 'rejected';
 
 export function MergeProposalsTab() {
   const [status, setStatus] = useState<StatusTab>('pending');
   const [page, setPage] = useState(1);
+  // ADR-284 — decisions are admin-only; other tiers get a read-only queue.
+  const { canWrite } = useBuConsoleCapability();
   const { data, isLoading } = useMergeProposals(status, page);
   const generate = useGenerateMergeProposals();
   const decide = useDecideMergeProposal();
@@ -42,12 +45,14 @@ export function MergeProposalsTab() {
             Approving a proposal records the decision — it never edits past scores.
           </CardDescription>
         </div>
-        <Button onClick={() => generate.mutate(undefined)} disabled={generate.isPending}>
-          {generate.isPending
-            ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            : <ScanSearch className="mr-2 h-4 w-4" />}
-          Scan for duplicates
-        </Button>
+        {canWrite && (
+          <Button onClick={() => generate.mutate(undefined)} disabled={generate.isPending}>
+            {generate.isPending
+              ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              : <ScanSearch className="mr-2 h-4 w-4" />}
+            Scan for duplicates
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         <Tabs value={status} onValueChange={(v) => { setStatus(v as StatusTab); setPage(1); }}>
@@ -92,7 +97,7 @@ export function MergeProposalsTab() {
                   <TableHead className="text-right">KPI rows</TableHead>
                   <TableHead className="text-right">Employees</TableHead>
                   <TableHead>Match</TableHead>
-                  {status === 'pending' && <TableHead className="text-right">Decision</TableHead>}
+                  {status === 'pending' && canWrite && <TableHead className="text-right">Decision</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -114,7 +119,7 @@ export function MergeProposalsTab() {
                         {p.similarity != null && ` · ${Math.round(Number(p.similarity) * 100)}%`}
                       </Badge>
                     </TableCell>
-                    {status === 'pending' && (
+                    {status === 'pending' && canWrite && (
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button
@@ -140,7 +145,7 @@ export function MergeProposalsTab() {
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={status === 'pending' ? 6 : 5} className="text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={status === 'pending' && canWrite ? 6 : 5} className="text-center text-sm text-muted-foreground">
                       {scanError
                         ? 'The list could not be refreshed because the last scan failed.'
                         : 'Nothing in this list. Run a scan to look for duplicates.'}

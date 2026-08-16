@@ -27,6 +27,8 @@ import { ScopeToolbar } from '@/components/admin/bu-console/ScopeToolbar';
 import { KpiDetailDrawer } from '@/components/admin/bu-console/KpiDetailDrawer';
 import { MergeProposalsTab } from '@/components/admin/bu-console/MergeProposalsTab';
 import { GoalsTab } from '@/components/admin/bu-console/GoalsTab';
+import { PipelineTab } from '@/components/admin/bu-console/PipelineTab';
+import { useBuConsoleCapability } from '@/hooks/useBuConsoleCapability';
 import {
   ConsoleStatBand,
   computeConsoleStats,
@@ -36,6 +38,7 @@ import { ChevronRight, FlaskConical, Compass } from 'lucide-react';
 
 export default function BuConsole() {
   const { data: flagEnabled, isLoading: flagLoading } = useBuConsoleFlag();
+  const { isReadOnly } = useBuConsoleCapability();
 
   const [period, setPeriod] = useState(() => format(new Date(), 'MMMM'));
   const [year, setYear] = useState(() => new Date().getFullYear());
@@ -241,10 +244,17 @@ export default function BuConsole() {
             </h1>
             <TabsList className="ml-auto h-8">
               <TabsTrigger value="console" className="text-xs">Console</TabsTrigger>
+              <TabsTrigger value="pipeline" className="text-xs">Pipeline</TabsTrigger>
               <TabsTrigger value="goals" className="text-xs">KRA Tree</TabsTrigger>
               <TabsTrigger value="library" className="text-xs">KPI Library</TabsTrigger>
             </TabsList>
           </div>
+          {isReadOnly && (
+            <p className="mt-2 rounded-md border border-warning/40 bg-warning/10 px-2 py-1 text-[11px] text-muted-foreground">
+              Read-only view — you can explore every scope, but group edits, tuning and approvals
+              stay with admins.
+            </p>
+          )}
           {scope && stats && (
             <div className="mt-2 border-t pt-2">
               <ConsoleStatBand stats={stats} scopeLabel={`${scope.period} ${scope.year} · ${scopeSummary}`} />
@@ -366,6 +376,10 @@ export default function BuConsole() {
 
         <TabsContent value="library" className="mt-4">
           <MergeProposalsTab />
+        </TabsContent>
+
+        <TabsContent value="pipeline" className="mt-2">
+          <PipelineTab scope={scope} />
         </TabsContent>
 
         <TabsContent value="goals" className="mt-4">

@@ -1363,3 +1363,78 @@ export function useKraTree(args: KraTreeArgs | null) {
     },
   });
 }
+
+/* ------------------------------------------------------------------ *
+ * ADR-284 — Review Pipeline
+ * ------------------------------------------------------------------ */
+
+export interface BuConsolePipelineStage {
+  stage: string;
+  kpi_count: number;
+  employee_count: number;
+}
+
+export interface BuConsolePipelineRow {
+  employee_id: string;
+  employee_name: string | null;
+  employee_code: string | null;
+  department_name: string | null;
+  pending_stage: string;
+  pending_kpis: number;
+  total_kpis: number;
+  last_activity_at: string | null;
+}
+
+export interface BuConsolePipeline {
+  authorized: boolean;
+  period: string;
+  year: number;
+  stage: string | null;
+  page: number;
+  page_size: number;
+  total: number;
+  employee_total: number;
+  stages: BuConsolePipelineStage[];
+  rows: BuConsolePipelineRow[];
+}
+
+export interface BuConsolePipelineArgs extends BuConsoleScope {
+  stage?: string | null;
+  page?: number;
+  pageSize?: number;
+}
+
+const EMPTY_PIPELINE: BuConsolePipeline = {
+  authorized: false, period: '', year: 0, stage: null, page: 1, page_size: 50,
+  total: 0, employee_total: 0, stages: [], rows: [],
+};
+
+/**
+ * Stage-level pending counts + a server-paged employee list for the loaded
+ * scope. Pending stage is derived from each employee's resolved workflow
+ * chain (POLICY §105 — never a hardcoded ladder) applied to
+ * `kpis.status` (last COMPLETED stage).
+ */
+export function useBuConsolePipeline(args: BuConsolePipelineArgs | null) {
+  return useQuery<BuConsolePipeline>({
+    queryKey: ['bu-console-pipeline', args],
+    enabled: !!args,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const a = args!;
+      const { data, error } = await supabase.rpc('bu_console_pipeline' as any, {
+        p_period: a.period,
+        p_year: a.year,
+        p_bu_ids: a.buIds?.length ? a.buIds : null,
+        p_dept_ids: a.deptIds?.length ? a.deptIds : null,
+        p_division_ids: a.divisionIds?.length ? a.divisionIds : null,
+        p_manager_ids: a.managerIds?.length ? a.managerIds : null,
+        p_stage: a.stage ?? null,
+        p_page: a.page ?? 1,
+        p_page_size: a.pageSize ?? 50,
+      });
+      if (error) throw error;
+      return (data ?? EMPTY_PIPELINE) as unknown as BuConsolePipeline;
+    },
+  });
+}

@@ -13,6 +13,7 @@
 import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useBuConsoleCapability } from '@/hooks/useBuConsoleCapability';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -82,6 +83,8 @@ function KraTreeRowView({
   row, depth, scope, handlers,
 }: { row: KraTreeRow; depth: number; scope: KraTreeScope; handlers: Handlers }) {
   const [open, setOpen] = useState(false);
+  // ADR-284 — write affordances only for tiers the server accepts writes from.
+  const { canWrite } = useBuConsoleCapability();
   const hasChildren = row.child_count > 0;
   const pct = row.progress_pct;
   const isLeaf = !hasChildren && row.goal_source === 'kpi_rollup';
@@ -144,6 +147,7 @@ function KraTreeRowView({
               </div>
             )}
           </div>
+          {canWrite && (
           <div className="flex shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
             <Button
               variant="ghost" size="sm" title={row.goal_source === 'manual' ? 'Entered manually' : 'Recompute progress'}
@@ -162,6 +166,7 @@ function KraTreeRowView({
               <Archive className="h-4 w-4" />
             </Button>
           </div>
+          )}
         </div>
       </div>
 

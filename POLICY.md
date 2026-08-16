@@ -6423,3 +6423,13 @@ report summaries, dashboard tiles) must be produced server-side as
 labels. Summing per-KPI or per-row employee counts on the client is forbidden:
 it multiplies each person by their number of mapped records. Per-node counts
 (one KPI, one KRA) may continue to show their own local count.
+
+## §CONSOLE-ACCESS-TIERS (ADR-284)
+
+The Performance Console is readable by admin, management, auditor and HR PMS
+(server SSOT: `bu_console_can_read`). Writing stays admin-only — every console
+write RPC enforces `has_role(uid, 'admin')`. The UI MUST hide write affordances for
+non-writers via `useBuConsoleCapability()`; a visible button that the server
+will reject is a defect. The Pipeline tab is read-only for every tier and must
+derive the pending stage from the resolved workflow chain (POLICY §105), never
+from a hardcoded stage ladder.

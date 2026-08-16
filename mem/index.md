@@ -186,3 +186,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Performance Console Group Edit](mem://features/admin/performance-console-group-edit) — Editable field whitelist, frequency+cycle anchor pairing, override/bulk-override rules (ADR-274/275)
 - [Scoring Model Group-Owned](mem://features/admin/scoring-model-group-owned) — Per-employee tuning is scope-only; scoring model edits are group-wide (ADR-282)
 - [Console Chrome Budget](mem://design/console-chrome-budget) — Performance Console density rules: merged header, stat strip, collapsing filters (ADR-283)
+- [Performance Console Access & Pipeline](mem://features/admin/performance-console-access-and-pipeline) — Read tiers (management/auditor/HR PMS), admin-only writes, read-only Review Pipeline tab
