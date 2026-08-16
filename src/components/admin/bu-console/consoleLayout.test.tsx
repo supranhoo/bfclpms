@@ -41,3 +41,26 @@ describe('ConsoleMetricRow (ADR-277)', () => {
     expect(screen.getByText('Name')).toBeTruthy();
   });
 });
+
+describe('KRA disclosure (ADR-278)', () => {
+  it('marks an expandable row with aria-expanded and rotates the chevron', () => {
+    const { rerender } = render(
+      <ConsoleMetricRow title="Customer Portfolio Expansion" onClick={() => {}} expandable ariaControls="p1" />,
+    );
+    expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('false');
+
+    rerender(
+      <ConsoleMetricRow
+        title="Customer Portfolio Expansion"
+        onClick={() => {}}
+        expandable
+        expanded
+        ariaControls="p1"
+      />,
+    );
+    const row = screen.getByRole('button');
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    expect(row.getAttribute('aria-controls')).toBe('p1');
+    expect(row.querySelector('svg')?.getAttribute('class')).toContain('rotate-90');
+  });
+});
