@@ -65,7 +65,7 @@ export function describeSpan(targets: RolloverTarget[]): string {
 /* ------------------------------------------------------------------ */
 
 export interface SpanEntry<R> {
-  target: RolloverTarget;
+  target: { month: string; year: number };
   result: R | null;
   error?: string | null;
 }
@@ -98,7 +98,7 @@ export function aggregateSpan<R extends CountableResult>(entries: SpanEntry<R>[]
 }
 
 /** Label shown per row of the preview table. */
-export function periodLabel(t: RolloverTarget): string {
+export function periodLabel(t: { month: string; year: number }): string {
   return `${t.month} ${t.year}`;
 }
 
