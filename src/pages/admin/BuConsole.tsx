@@ -1,18 +1,25 @@
 /**
  * ADR-259/260 — BU Performance Console (Beta).
+ * ADR-289 — one surface, no tabs.
  *
  * Group-first view of the KPI landscape: pick a scope (period + BUs +
  * departments), drill Category → KRA → KPI, and inspect every employee mapped
- * to that KPI. Read-only in this phase — no scores are written from here.
+ * to that KPI. The same surface runs the review: switch to Review mode and the
+ * expanded KRA becomes a KPI x employee worksheet with an audited batch move.
+ * Alignment (KRA tree) and the KPI library are dialogs off this page, not tabs.
  * Access is gated by the `feature_bu_console` admin flag.
  */
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { OrgFilterCombobox } from '@/components/admin/OrgFilterCombobox';
 import { useBusinessUnits, useDepartments, useDivisions } from '@/hooks/useOrganization';
 import { useManagers } from '@/hooks/useKpiFilters';
@@ -27,15 +34,17 @@ import { ScopeToolbar } from '@/components/admin/bu-console/ScopeToolbar';
 import { KpiDetailDrawer } from '@/components/admin/bu-console/KpiDetailDrawer';
 import { MergeProposalsTab } from '@/components/admin/bu-console/MergeProposalsTab';
 import { GoalsTab } from '@/components/admin/bu-console/GoalsTab';
-import { PipelineTab } from '@/components/admin/bu-console/PipelineTab';
-import { ReviewRunTab } from '@/components/admin/bu-console/ReviewRunTab';
+import { StageRail } from '@/components/admin/bu-console/StageRail';
+import { KraWorksheet } from '@/components/admin/bu-console/KraWorksheet';
 import { useBuConsoleCapability } from '@/hooks/useBuConsoleCapability';
 import {
   ConsoleStatBand,
   computeConsoleStats,
 } from '@/components/admin/bu-console/ConsoleStatBand';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ChevronRight, FlaskConical, Compass } from 'lucide-react';
+import { ChevronRight, FlaskConical, Compass, MoreHorizontal, Network, Library } from 'lucide-react';
+
+type ConsoleMode = 'configure' | 'review';
 
 export default function BuConsole() {
   const { data: flagEnabled, isLoading: flagLoading } = useBuConsoleFlag();
@@ -52,6 +61,12 @@ export default function BuConsole() {
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [kraKey, setKraKey] = useState<string | null>(null);
   const [detail, setDetail] = useState<KpiDetailArgs | null>(null);
+
+  // ADR-289 — one surface, two modes, no tabs.
+  const [mode, setMode] = useState<ConsoleMode>('configure');
+  const [stage, setStage] = useState('manager_check');
+  const [alignmentOpen, setAlignmentOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
   const { data: businessUnits } = useBusinessUnits();
   const { data: departments } = useDepartments();
@@ -226,9 +241,8 @@ export default function BuConsole() {
 
   return (
     <div className="space-y-2 p-3 sm:p-4">
-      <Tabs defaultValue="console">
-        {/* ADR-283 — title, tabs and the scope metrics share one compact block. */}
-        <header className="rounded-lg border bg-card px-3 py-2 sm:px-4">
+      {/* ADR-283/289 — title, mode switch and the scope metrics share one block. */}
+      <header className="rounded-lg border bg-card px-3 py-2 sm:px-4">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <h1 className="flex items-center gap-2 text-base font-semibold tracking-tight sm:text-lg">
               Performance Console
@@ -243,13 +257,48 @@ export default function BuConsole() {
                 </Tooltip>
               </TooltipProvider>
             </h1>
-            <TabsList className="ml-auto h-8">
-              <TabsTrigger value="console" className="text-xs">Console</TabsTrigger>
-              <TabsTrigger value="run" className="text-xs">Review Run</TabsTrigger>
-              <TabsTrigger value="pipeline" className="text-xs">Pipeline</TabsTrigger>
-              <TabsTrigger value="goals" className="text-xs">KRA Tree</TabsTrigger>
-              <TabsTrigger value="library" className="text-xs">KPI Library</TabsTrigger>
-            </TabsList>
+
+            {/* ADR-289 — one surface, two modes. Not tabs: the tree never changes. */}
+            <div
+              role="radiogroup"
+              aria-label="Console mode"
+              className="ml-auto flex items-center gap-1 rounded-md border bg-muted/40 p-0.5"
+            >
+              {(['configure', 'review'] as ConsoleMode[]).map(m => (
+                <button
+                  key={m}
+                  type="button"
+                  role="radio"
+                  aria-checked={mode === m}
+                  onClick={() => { setMode(m); setKraKey(null); }}
+                  className={`min-h-8 rounded px-3 text-xs font-medium capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                    mode === m
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="More console tools">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setAlignmentOpen(true)}>
+                  <Network className="mr-2 h-4 w-4" />
+                  KRA alignment tree
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setLibraryOpen(true)}>
+                  <Library className="mr-2 h-4 w-4" />
+                  KPI library &amp; duplicates
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           {isReadOnly && (
             <p className="mt-2 rounded-md border border-warning/40 bg-warning/10 px-2 py-1 text-[11px] text-muted-foreground">
@@ -268,9 +317,9 @@ export default function BuConsole() {
               <ConsoleStatBand stats={stats} scopeLabel={`${scope.period} ${scope.year} · ${scopeSummary}`} />
             </div>
           )}
-        </header>
+      </header>
 
-        <TabsContent value="console" className="mt-2 space-y-2">
+      <div className="mt-2 space-y-2">
           <ScopeToolbar
             period={period}
             year={year}
@@ -290,6 +339,12 @@ export default function BuConsole() {
             summary={scope ? `${scope.period} ${scope.year} · ${scopeSummary}` : undefined}
             hint={!scope ? 'Nothing loads until you apply a scope — this keeps large BUs responsive.' : undefined}
           />
+
+          {/* ADR-289 — the pipeline is a rail on this surface, not a tab. It also
+              picks the stage the inline worksheet works at. */}
+          {mode === 'review' && (
+            <StageRail scope={scope} stage={stage} onStageChange={setStage} />
+          )}
 
           {!scope && !isFetching && (
             <>
@@ -332,6 +387,18 @@ export default function BuConsole() {
               categories={tree.categories}
               selectedCategoryId={categoryId}
               selectedKraKey={kraKey}
+              renderKraPanel={
+                mode === 'review' && scope
+                  ? (kra, cId) => (
+                      <KraWorksheet
+                        scope={scope}
+                        categoryId={cId}
+                        kraName={kra.kra_name}
+                        stage={stage}
+                      />
+                    )
+                  : undefined
+              }
               breadcrumb={
                 <nav
                   aria-label="Console drilldown"
@@ -380,23 +447,16 @@ export default function BuConsole() {
             />
             </div>
           )}
-        </TabsContent>
+      </div>
 
-        <TabsContent value="library" className="mt-4">
-          <MergeProposalsTab />
-        </TabsContent>
-
-        <TabsContent value="pipeline" className="mt-2">
-          <PipelineTab scope={scope} />
-        </TabsContent>
-
-        <TabsContent value="run" className="mt-2">
-          <ReviewRunTab scope={scope} />
-        </TabsContent>
-
-        <TabsContent value="goals" className="mt-4">
+      {/* ADR-289 — alignment and library are tools off the console, not tabs. */}
+      <Dialog open={alignmentOpen} onOpenChange={setAlignmentOpen}>
+        <DialogContent className="max-w-[1180px] max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>KRA alignment tree</DialogTitle>
+          </DialogHeader>
           <GoalsTab
-            active={!!scope}
+            active={alignmentOpen}
             year={scope?.year ?? year}
             period={scope?.period ?? period}
             buIds={scope?.buIds ?? []}
@@ -404,8 +464,17 @@ export default function BuConsole() {
             buOptions={buOptions}
             deptOptions={deptOptions}
           />
-        </TabsContent>
-      </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={libraryOpen} onOpenChange={setLibraryOpen}>
+        <DialogContent className="max-w-[1180px] max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>KPI library &amp; duplicates</DialogTitle>
+          </DialogHeader>
+          <MergeProposalsTab />
+        </DialogContent>
+      </Dialog>
 
       <KpiDetailDrawer
         args={detail}

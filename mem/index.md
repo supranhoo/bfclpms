@@ -187,4 +187,5 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Scoring Model Group-Owned](mem://features/admin/scoring-model-group-owned) — Per-employee tuning is scope-only; scoring model edits are group-wide (ADR-282)
 - [Console Chrome Budget](mem://design/console-chrome-budget) — Performance Console density rules: merged header, stat strip, collapsing filters (ADR-283)
 - [Performance Console Access & Pipeline](mem://features/admin/performance-console-access-and-pipeline) — Read tiers (management/auditor/HR PMS), admin-only writes, read-only Review Pipeline tab
+- [Performance Console Single Surface](mem://features/admin/performance-console-single-surface) — No tabs: one tree, Configure/Review modes, stage rail, overflow dialogs (ADR-289)
 - [Performance Console Review Run](mem://features/admin/performance-console-review-run) — KPI x employee worksheet, scorecard drawer, tiered target rules (ADR-286/288)

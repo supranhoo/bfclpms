@@ -91,6 +91,11 @@ interface Props {
   onFixTextSplit?: (kpi: BuConsoleKpiNode) => void;
   /** ADR-283 — scope / drill path shown on the category strip row. */
   breadcrumb?: ReactNode;
+  /**
+   * ADR-289 — in Review mode the expanded KRA body is the worksheet instead of
+   * the KPI definition list. The page supplies it so the tree stays pure.
+   */
+  renderKraPanel?: (kra: BuConsoleKraNode, categoryId: string) => ReactNode;
 }
 
 const fmtScore = (v: number | null | undefined) =>
@@ -444,6 +449,7 @@ export function BuConsoleTree({
   onSelectKpi,
   onFixTextSplit,
   breadcrumb,
+  renderKraPanel,
 }: Props) {
   const category = categories.find(c => c.category_id === selectedCategoryId) ?? null;
   const openKra: BuConsoleKraNode | null =
@@ -538,6 +544,9 @@ export function BuConsoleTree({
                           aria-hidden
                           className="pointer-events-none absolute bottom-4 left-4 top-0 hidden w-px bg-border sm:block"
                         />
+                        {renderKraPanel ? (
+                          renderKraPanel(k, category.category_id)
+                        ) : (
                         <div className="overflow-hidden rounded-md border bg-background shadow-sm">
                           <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-1.5">
                             <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -576,6 +585,7 @@ export function BuConsoleTree({
                             </div>
                           )}
                         </div>
+                        )}
                       </div>
                     )}
                   </div>

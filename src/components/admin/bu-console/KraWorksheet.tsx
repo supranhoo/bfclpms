@@ -1,14 +1,15 @@
 /**
- * ADR-286 — Review Run: run the whole review from the console.
+ * ADR-289 — the review worksheet, inline under the KRA it belongs to.
  *
- * A KPI x employee worksheet for the loaded scope. KPIs are rows (one shared
- * org value usually lands on many people) and employees are columns; the
- * column header opens the person-first drawer so a reviewer can still close
- * out one scorecard at a time. Selection is by cell, row or column, and the
- * move forward goes through the audited `bu_console_kpi_advance` batch.
+ * This is the old Review Run grid (ADR-286) with one change of address: it is
+ * no longer a tab of its own. Expanding a KRA while the console is in Review
+ * mode renders this block underneath that KRA row, scoped to that KRA — which
+ * also means only one KRA's cells ever load at a time.
  *
- * Loads only on demand and refuses over-large scopes server side; columns are
- * virtualized so a 200-person page stays at 60 fps.
+ * KPIs are rows (one shared org value usually lands on many people) and
+ * employees are columns; the column header opens the person-first drawer.
+ * Selection is by cell, row or column, and the move forward goes through the
+ * audited `bu_console_kpi_advance` batch (POLICY §CONSOLE-WRITE-TIERS).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -17,9 +18,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { BuConsoleScope } from '@/hooks/useBuConsole';
@@ -29,39 +27,41 @@ import {
 } from '@/hooks/useBuConsoleRun';
 import { useBuConsoleCapability } from '@/hooks/useBuConsoleCapability';
 import {
-  RUN_STAGES, buildCellMap, cellId, isCellPending, isCellSelectable, runCounters,
+  buildCellMap, cellId, isCellPending, isCellSelectable, runCounters,
   selectableIdsForEmployee, selectableIdsForKpi, toggleAll,
 } from './reviewRunModel';
 import { EmployeeScorecardDrawer } from './EmployeeScorecardDrawer';
 import { TargetRulesDialog, type TargetRulesTarget } from './TargetRulesDialog';
-import { stageLabel } from './PipelineTab';
-import { ChevronLeft, ChevronRight, RefreshCw, SlidersHorizontal, Users } from 'lucide-react';
+import { stageLabel } from './pipelineStages';
+import { ChevronLeft, ChevronRight, RefreshCw, SlidersHorizontal } from 'lucide-react';
 
 const COL_W = 128;
 const ROW_H = 46;
 const PAGE_SIZE = 100;
 
 interface Props {
-  scope: BuConsoleScope | null;
+  scope: BuConsoleScope;
+  categoryId: string | null;
+  kraName: string;
+  /** Stage the run is working at — owned by the console header. */
+  stage: string;
 }
 
-export function ReviewRunTab({ scope }: Props) {
+export function KraWorksheet({ scope, categoryId, kraName, stage }: Props) {
   const { canWrite } = useBuConsoleCapability();
-  const [stage, setStage] = useState('manager_check');
   const [page, setPage] = useState(1);
-  const [loaded, setLoaded] = useState(false);
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [remarks, setRemarks] = useState('');
   const [result, setResult] = useState<RunAdvanceResult | null>(null);
   const [drawerEmployee, setDrawerEmployee] = useState<{ id: string; name: string | null } | null>(null);
   const [ruleTarget, setRuleTarget] = useState<TargetRulesTarget | null>(null);
 
-  // Scope or stage changes invalidate the loaded worksheet — never auto-fetch.
-  useEffect(() => { setLoaded(false); setSelection(new Set()); setResult(null); setPage(1); }, [scope, stage]);
+  // Scope or stage changes invalidate the current selection.
+  useEffect(() => { setSelection(new Set()); setResult(null); setPage(1); }, [scope, stage, kraName]);
 
   const args = useMemo(
-    () => (scope && loaded ? { ...scope, stage, page, pageSize: PAGE_SIZE } : null),
-    [scope, loaded, stage, page],
+    () => ({ ...scope, stage, categoryId, kraName, page, pageSize: PAGE_SIZE }),
+    [scope, stage, categoryId, kraName, page],
   );
   const { data, isFetching, refetch } = useRunSnapshot(args);
   const preview = useRunAdvancePreview();
@@ -103,35 +103,14 @@ export function ReviewRunTab({ scope }: Props) {
       { onSuccess: (r) => { setResult(r); setSelection(new Set()); setRemarks(''); } },
     );
 
-  if (!scope) {
-    return (
-      <div className="rounded-lg border border-dashed p-10 text-center">
-        <Users className="mx-auto h-7 w-7 text-muted-foreground/50" />
-        <p className="mt-3 text-sm font-medium">Apply a scope to start a review run</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          The worksheet loads only what you ask for, so large business units stay responsive.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-3">
-      {/* Controls */}
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2">
-        <Select value={stage} onValueChange={setStage}>
-          <SelectTrigger className="h-8 w-[190px] text-xs"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {RUN_STAGES.map((s) => (
-              <SelectItem key={s.value} value={s.value} className="text-xs">{s.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button size="sm" className="h-8" onClick={() => (loaded ? refetch() : setLoaded(true))} disabled={isFetching}>
-          <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', isFetching && 'animate-spin')} />
-          {loaded ? 'Refresh' : 'Load worksheet'}
-        </Button>
-        {loaded && data && (
+    <div className="space-y-2">
+      {/* Run bar for this KRA */}
+      <div className="flex flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-1.5">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Review · {stageLabel(stage)}
+        </p>
+        {data && (
           <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
             <Badge variant="outline">{data.kpi_total} KPIs</Badge>
             <Badge variant="outline">{data.employee_total} people</Badge>
@@ -140,19 +119,25 @@ export function ReviewRunTab({ scope }: Props) {
             {counters.locked > 0 && <Badge variant="outline">{counters.locked} approved</Badge>}
           </div>
         )}
-        {totalPages > 1 && loaded && (
-          <div className="ml-auto flex items-center gap-1 text-xs">
-            <Button variant="ghost" size="icon" className="h-7 w-7"
-              disabled={page <= 1} onClick={() => setPage((p) => p - 1)} aria-label="Previous page">
-              <ChevronLeft className="h-3.5 w-3.5" />
-            </Button>
-            <span className="tabular-nums text-muted-foreground">{page} / {totalPages}</span>
-            <Button variant="ghost" size="icon" className="h-7 w-7"
-              disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} aria-label="Next page">
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        )}
+        <div className="ml-auto flex items-center gap-1">
+          {totalPages > 1 && (
+            <>
+              <Button variant="ghost" size="icon" className="h-7 w-7"
+                disabled={page <= 1} onClick={() => setPage((p) => p - 1)} aria-label="Previous page">
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </Button>
+              <span className="text-xs tabular-nums text-muted-foreground">{page} / {totalPages}</span>
+              <Button variant="ghost" size="icon" className="h-7 w-7"
+                disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} aria-label="Next page">
+                <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          )}
+          <Button variant="outline" size="sm" className="h-7" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', isFetching && 'animate-spin')} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {data && !data.authorized && (
@@ -166,26 +151,25 @@ export function ReviewRunTab({ scope }: Props) {
 
       {data?.capped && (
         <Alert>
-          <AlertTitle className="text-sm">Scope too large to open as a worksheet</AlertTitle>
+          <AlertTitle className="text-sm">Too many cells to open at once</AlertTitle>
           <AlertDescription className="text-xs">
-            {data.employee_total} people x {data.kpi_total} KPIs exceeds the safe grid size. Narrow by
-            department, KRA or manager and load again.
+            {data.employee_total} people x {data.kpi_total} KPIs exceeds the safe grid size. Narrow
+            the scope by department or manager and open this KRA again.
           </AlertDescription>
         </Alert>
       )}
 
-      {loaded && isFetching && !data && (
+      {isFetching && !data && (
         <div className="space-y-2">
-          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
         </div>
       )}
 
-      {/* Worksheet */}
       {data && data.authorized && !data.capped && kpis.length > 0 && (
-        <div className="overflow-hidden rounded-lg border bg-card">
+        <div className="overflow-hidden rounded-md border bg-card">
           <div className="flex">
             {/* Sticky KPI column */}
-            <div className="w-[300px] shrink-0 border-r">
+            <div className="w-[260px] shrink-0 border-r sm:w-[300px]">
               <div className="flex h-[52px] items-end border-b bg-muted/40 px-3 pb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 KPI
               </div>
@@ -202,7 +186,7 @@ export function ReviewRunTab({ scope }: Props) {
                     >
                       <div className="truncate text-xs font-medium">{k.kpi_name}</div>
                       <div className="truncate text-[11px] text-muted-foreground">
-                        {k.kra_name} · {k.employee_count} people
+                        {k.employee_count} people
                         {k.target_variants > 1 && <> · {k.target_variants} targets</>}
                       </div>
                     </button>
@@ -301,14 +285,14 @@ export function ReviewRunTab({ scope }: Props) {
       )}
 
       {data && data.authorized && !data.capped && kpis.length === 0 && !isFetching && (
-        <div className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
-          Nothing waiting at {stageLabel(stage)} for this scope.
-        </div>
+        <p className="rounded-md border border-dashed p-6 text-center text-xs text-muted-foreground">
+          Nothing waiting at {stageLabel(stage)} under this KRA.
+        </p>
       )}
 
       {/* Action bar */}
       {canWrite && selected > 0 && (
-        <div className="sticky bottom-2 z-10 space-y-2 rounded-lg border bg-card/95 p-3 shadow-lg backdrop-blur">
+        <div className="sticky bottom-2 z-10 space-y-2 rounded-md border bg-card/95 p-3 shadow-lg backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-medium">
               {selected} cell{selected === 1 ? '' : 's'} selected · move to {stageLabel(stage)}

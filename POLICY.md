@@ -6456,3 +6456,19 @@ contract through `useBuConsoleCapability().canActOnStatus(status)`.
 - Tier rules are unchanged: admin acts at any stage, management/audit only once a KPI has left KRA Set, HR PMS is read-only (§CONSOLE-WRITE-TIERS).
 - Tiered targets for one shared KPI are expressed as rules (level / designation / department / manages-people / everyone-else), resolved first-match by priority with `default` last. Hand-tuned per-employee targets win unless the admin explicitly replaces them.
 - Target rules change the target only. The scoring model stays group-owned (§KPI-SCORING-MODEL-GROUP-OWNED).
+
+## §CONSOLE-SINGLE-SURFACE — one console, no duplicate surfaces (ADR-289)
+
+The Performance Console is a single drilldown surface. Reviewing, configuring and pipeline
+visibility are **modes and affordances of that one surface**, never parallel tabs that re-implement
+the same tree.
+
+- Exactly two modes: **Configure** and **Review**. Work opens inside the KRA row that was clicked.
+- Pipeline is a stage rail on the surface (it also selects the stage the worksheet acts at), not a
+  destination. It stays read-only for every tier.
+- Secondary tools (KRA alignment tree, KPI library / duplicate merge) open as dialogs from the
+  header overflow menu.
+- New console capability must extend the tree, the rail or a dialog. Adding a tab that repeats the
+  scope + tree is a policy violation.
+- Access tiers (§CONSOLE-ACCESS-TIERS), write tiers (§CONSOLE-WRITE-TIERS), §CONSOLE-REVIEW-RUN caps
+  and final-score immutability (§88) are unchanged by this consolidation.
