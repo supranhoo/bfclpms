@@ -8845,5 +8845,11 @@ at 200 rows per page with the true total returned, so the tree scales with the
 org rather than the dataset. Mapped-employee counts are computed per visible
 row only.
 
+**Paging correction (ADR-276, follow-up).** "Load more" now widens a single
+window (`pageSize = 100 × pages`) instead of fetching page N on its own — the
+earlier form skipped intermediate pages once a level exceeded two pages, which
+would have silently dropped rows. Regression guard:
+`src/components/admin/bu-console/kraTree.test.ts`.
+
 **Rollback.** Additive: the new columns are nullable, `kra_tree_list` can be
 dropped, and the previous list RPC (`bu_goal_list`) is still in place.
