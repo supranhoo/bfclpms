@@ -1,18 +1,25 @@
 /**
  * ADR-259/260 — BU Performance Console (Beta).
+ * ADR-289 — one surface, no tabs.
  *
  * Group-first view of the KPI landscape: pick a scope (period + BUs +
  * departments), drill Category → KRA → KPI, and inspect every employee mapped
- * to that KPI. Read-only in this phase — no scores are written from here.
+ * to that KPI. The same surface runs the review: switch to Review mode and the
+ * expanded KRA becomes a KPI x employee worksheet with an audited batch move.
+ * Alignment (KRA tree) and the KPI library are dialogs off this page, not tabs.
  * Access is gated by the `feature_bu_console` admin flag.
  */
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { OrgFilterCombobox } from '@/components/admin/OrgFilterCombobox';
 import { useBusinessUnits, useDepartments, useDivisions } from '@/hooks/useOrganization';
 import { useManagers } from '@/hooks/useKpiFilters';
@@ -27,15 +34,17 @@ import { ScopeToolbar } from '@/components/admin/bu-console/ScopeToolbar';
 import { KpiDetailDrawer } from '@/components/admin/bu-console/KpiDetailDrawer';
 import { MergeProposalsTab } from '@/components/admin/bu-console/MergeProposalsTab';
 import { GoalsTab } from '@/components/admin/bu-console/GoalsTab';
-import { PipelineTab } from '@/components/admin/bu-console/PipelineTab';
-import { ReviewRunTab } from '@/components/admin/bu-console/ReviewRunTab';
+import { StageRail } from '@/components/admin/bu-console/StageRail';
+import { KraWorksheet } from '@/components/admin/bu-console/KraWorksheet';
 import { useBuConsoleCapability } from '@/hooks/useBuConsoleCapability';
 import {
   ConsoleStatBand,
   computeConsoleStats,
 } from '@/components/admin/bu-console/ConsoleStatBand';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ChevronRight, FlaskConical, Compass } from 'lucide-react';
+import { ChevronRight, FlaskConical, Compass, MoreHorizontal, Network, Library } from 'lucide-react';
+
+type ConsoleMode = 'configure' | 'review';
 
 export default function BuConsole() {
   const { data: flagEnabled, isLoading: flagLoading } = useBuConsoleFlag();
@@ -52,6 +61,12 @@ export default function BuConsole() {
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [kraKey, setKraKey] = useState<string | null>(null);
   const [detail, setDetail] = useState<KpiDetailArgs | null>(null);
+
+  // ADR-289 — one surface, two modes, no tabs.
+  const [mode, setMode] = useState<ConsoleMode>('configure');
+  const [stage, setStage] = useState('manager_check');
+  const [alignmentOpen, setAlignmentOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
   const { data: businessUnits } = useBusinessUnits();
   const { data: departments } = useDepartments();
