@@ -236,7 +236,9 @@ export default function BuConsole() {
 
           {scope && (
             <nav aria-label="Console drilldown" className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-              <span>{scope.period} {scope.year}</span>
+              <span className="font-medium text-foreground">{scope.period} {scope.year}</span>
+              <span className="mx-1 text-muted-foreground/60">·</span>
+              <span>{scopeSummary}</span>
               {selectedCategoryName && (
                 <>
                   <ChevronRight className="h-3 w-3" />
