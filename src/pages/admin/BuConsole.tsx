@@ -28,6 +28,7 @@ import { KpiDetailDrawer } from '@/components/admin/bu-console/KpiDetailDrawer';
 import { MergeProposalsTab } from '@/components/admin/bu-console/MergeProposalsTab';
 import { GoalsTab } from '@/components/admin/bu-console/GoalsTab';
 import { PipelineTab } from '@/components/admin/bu-console/PipelineTab';
+import { ReviewRunTab } from '@/components/admin/bu-console/ReviewRunTab';
 import { useBuConsoleCapability } from '@/hooks/useBuConsoleCapability';
 import {
   ConsoleStatBand,
