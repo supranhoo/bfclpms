@@ -8993,3 +8993,13 @@ There is a single drilldown tree (Category → KRA → KPI) with a **Configure /
   labelling lives in `pipelineStages.ts`.
 - No RPC, scoring, access-tier or write-path change — presentation and composition only.
 - Tests: `consoleLayout.test.tsx` (panel swap), `pipelineStages.test.ts`.
+
+
+### Performance Console — stage supersede (ADR-290)
+
+`bu_console_kpi_advance(p_kpi_ids, p_target_stage, p_remarks, p_dry_run)` now accepts any
+target stage downstream of a row's current status within that employee's resolved workflow.
+Intermediate stages are closed in the same audited batch with the carried-forward score, and
+each one is logged as `BU_CONSOLE_STAGE_SUPERSEDED`. The dry run reports `will_supersede`;
+the commit reports `superseded`. New skip reasons: `self_not_submitted`,
+`auditor_takes_precedence`. UI logic lives in `src/lib/review/supersedeChain.ts`.

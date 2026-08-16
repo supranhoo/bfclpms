@@ -6472,3 +6472,22 @@ the same tree.
   scope + tree is a policy violation.
 - Access tiers (§CONSOLE-ACCESS-TIERS), write tiers (§CONSOLE-WRITE-TIERS), §CONSOLE-REVIEW-RUN caps
   and final-score immutability (§88) are unchanged by this consolidation.
+
+
+## §CONSOLE-STAGE-SUPERSEDE (ADR-290)
+
+A higher stage supersedes the lower ones in the Performance Console, exactly as in Bulk Review
+(§111.7.a).
+
+1. A row may be signed at any stage later than its current status in the employee's own
+   resolved workflow (`get_employee_workflow`; never a hardcoded ladder — §105).
+2. Backwards moves are refused. Reversal is a Rollback Request, not a console action.
+3. Superseded stages are closed in the same batch with the last available score carried
+   forward. An existing lower-stage score is preserved, never overwritten.
+4. A leap is refused when the employee has not submitted their self review
+   (`self_not_submitted`) and when an auditor decision would be overwritten by HR PMS
+   (`auditor_takes_precedence`).
+5. Every superseded stage writes its own `kpi_audit_logs` entry
+   (`BU_CONSOLE_STAGE_SUPERSEDED`).
+6. Unchanged: final-score immutability (§88), access/write tiers
+   (§CONSOLE-ACCESS-TIERS, §CONSOLE-WRITE-TIERS) and the KRA Set admin-only gate (ADR-285).
