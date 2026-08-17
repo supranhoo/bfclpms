@@ -5070,6 +5070,17 @@ detectable and repairable without a developer.
 
 ## §RPT-PENDING-WITH-SSOT — "Pending With (Name)" must be resolver-derived (ADR-178, 2026-07-27)
 
+> **§RPT-FIELD-REGISTRY-MERGE — the DB field registry is additive (2026-08-17).**
+> `report_field_registry` rows AUGMENT a report's in-code default field list; they
+> never replace it. `useResolvedReportFields` merges: a DB row wins for label /
+> sort / hidden where it exists, and any default `field_key` absent from the DB is
+> still emitted. Rationale: `pending_with` and `employee_status` were added to the
+> KPI Status Tracker in code but never seeded to `RPT-KST-001`, so the on-screen
+> table showed "Pending With" while the Excel export (registry-driven) silently
+> dropped it. Seeding a new field remains good practice — but a missing seed must
+> degrade to the coded default, never to a vanished column. Guard:
+> `src/test/reportFieldRegistryDrift.test.ts`.
+
 1. **Named accountability.** Any report that shows where a KPI is stuck MUST
    surface the responsible *person(s)*, not only the stage/role label.
 2. **Single source of truth.** The decision logic is
