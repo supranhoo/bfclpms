@@ -9028,3 +9028,13 @@ Last verified run: August 2026, all checks passed —
 ### Performance Console — multi-month group definition edit (ADR-291)
 
 `GroupDefinitionEditDialog` exposes an **Apply to** control (This month only / This and all future months / Next N months). `src/components/admin/bu-console/groupEditSpan.ts` resolves the span into an ordered target list using `src/lib/rolloverTargets.ts`; `useGroupEditSpanPreview` and `useGroupEditSpanCommit` in `src/hooks/useBuConsole.ts` call the unchanged `bu_console_group_edit_definition` RPC once per month. Cap: 12 periods. See POLICY §CONSOLE-GROUP-EDIT-SPAN and docs/adr/ADR-291.md.
+
+### Performance Console — one KPI list, and KPI creation (ADR-297)
+
+- Expanding a KRA shows a slim review counter line (`KraReviewBar`) and one list of KPI rows.
+  Expanding a KPI row reveals its employee cells (`KpiPeopleStrip`) in place; the old
+  `KraWorksheet` second list is gone.
+- Header action **New KPI** (admin only) defines a KPI once and issues it to everyone in the applied
+  scope via `bu_console_kpi_create`, with a mandatory recipient preview. Kinds: Individual, Shared
+  value (one number spreads to all), Department event (whole department).
+- See POLICY §CONSOLE-KPI-CREATE.

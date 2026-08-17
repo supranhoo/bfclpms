@@ -6550,3 +6550,16 @@ A higher stage supersedes the lower ones in the Performance Console, exactly as 
 ## §CONSOLE-GROUP-EDIT-SPAN — Group definition edits may span future months (ADR-291)
 
 A Performance Console group definition edit may be applied to the selected month only, to the selected month and every later month of the same fiscal year (July–June), or to the next N months (2–12, inclusive). Past months are never written: if the selected period is already past, only the single-month option is available. Every target month is dry-run before commit and shown in a per-month preview; the commit runs sequentially and stops at the first failure, reporting the months already written. Each month produces its own audited, individually undoable edit run.
+
+## §CONSOLE-KPI-CREATE — creating a KPI from the Performance Console (ADR-297)
+
+1. A KPI name is printed once per screen. The Performance Console shows one KPI list per KRA; the
+   per-employee cells open inside the KPI row. Stacking a second list under the same KRA is a defect.
+2. Creating a KPI from the console is **admin-only** (`bu_console_kpi_create`). Management and audit
+   keep their post-KRA-Set action rights and gain nothing here.
+3. Creation is always previewed. The dry run names every recipient and every skip before a row is
+   written.
+4. A person who already holds the same KRA + KPI name for that month is skipped
+   (`duplicate_kpi`) — creation never duplicates a KPI and never aborts the run.
+5. Kind is stored, not inferred: individual / shared value / department event map to
+   `kpi_group_type` + `is_org_level` + `org_level_scope`. New rows start in `kra_set`.

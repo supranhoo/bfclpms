@@ -4,7 +4,7 @@
  * and that the column header rail lists the same labels.
  */
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ConsoleMetricRow, ConsoleMetricHeader } from './ConsoleMetricRow';
 import { ConsoleStatBand, computeConsoleStats } from './ConsoleStatBand';
 import { scoreBand } from './ScorePill';
@@ -36,7 +36,7 @@ const tree = [
   },
 ] as any;
 
-describe('Console single surface (ADR-289)', () => {
+describe('Console single surface (ADR-289 / ADR-297)', () => {
   const noop = () => {};
 
   it('shows the KPI definition list inside the open KRA in configure mode', () => {
@@ -55,7 +55,7 @@ describe('Console single surface (ADR-289)', () => {
     expect(screen.getAllByText('Dust emission').length).toBeGreaterThan(0);
   });
 
-  it('swaps the same panel for the review worksheet when one is supplied', () => {
+  it('opens the people cells inside the KPI row, never as a second KPI list', () => {
     render(
       <BuConsoleTree
         categories={tree}
@@ -64,14 +64,20 @@ describe('Console single surface (ADR-289)', () => {
         onSelectCategory={noop}
         onSelectKra={noop}
         onSelectKpi={noop}
-        renderKraPanel={(kra, categoryId) => (
-          <div>worksheet for {kra.kra_name} in {categoryId}</div>
+        renderKpiPanel={(kpi, kra, categoryId) => (
+          <div>people for {kpi.kpi_name} · {kra.kra_name} · {categoryId}</div>
         )}
       />,
     );
-    expect(screen.getByText('worksheet for Power generation in c1')).toBeTruthy();
-    // The definition list is replaced, not stacked below it.
-    expect(screen.queryByText('KPIs · 1')).toBeNull();
+    // The KPI title is printed by exactly one row — no duplicate worksheet list.
+    const titles = () =>
+      screen.getAllByText('Dust emission').filter(el => el.tagName.toLowerCase() === 'p');
+    expect(titles()).toHaveLength(1);
+    expect(screen.queryByText(/^people for/)).toBeNull();
+
+    fireEvent.click(titles()[0]);
+    expect(screen.getByText('people for Dust emission · Power generation · c1')).toBeTruthy();
+    expect(titles()).toHaveLength(1);
   });
 });
 
