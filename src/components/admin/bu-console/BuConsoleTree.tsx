@@ -482,10 +482,26 @@ export function BuConsoleTree({
   breadcrumb,
   renderKraPanel,
   kraPanelPlacement = 'replace',
+  period,
+  year,
+  dueOnly = false,
 }: Props) {
   const category = categories.find(c => c.category_id === selectedCategoryId) ?? null;
   const openKra: BuConsoleKraNode | null =
     category?.kras.find(k => k.kra_key === selectedKraKey) ?? null;
+  // ADR-296 — due state is resolved once per open KRA; the console never hides
+  // a KPI unless the user asked for the "due this month" view.
+  const dueStates = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof resolveKpiDueState>>();
+    if (!period || !year) return map;
+    for (const kpi of openKra?.kpis ?? []) {
+      map.set(
+        kpi.kpi_key,
+        resolveKpiDueState(kpi.frequencies, kpi.frequency_cycle_starts, period, year),
+      );
+    }
+    return map;
+  }, [openKra, period, year]);
   // ADR-273 — computed for the expanded KRA only, so a mis-split title is
   // visible next to the row it duplicates instead of looking like a second KPI.
   const lookalikes = lookalikeCounts(
