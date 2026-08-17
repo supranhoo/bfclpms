@@ -22,6 +22,7 @@ import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
 import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
 import { applyEmployeeStatusFilter, employeeStatusLabel, type EmployeeStatusMode } from '@/lib/reportEmployeeFilter';
 import { buildPendingWithContext, resolvePendingWithForKpi, PENDING_WITH_NONE } from '@/services/reports/pendingWithResolver';
+import { buildStageEntryMap, resolveDaysInStage, type StageAuditLog } from '@/lib/review/daysInStage';
 
 const KST_DEFAULT_FIELDS = [
   { field_key: 'row_num',          default_label: '#',                default_sort: 10,  is_required: true, is_renamable: false },
@@ -40,11 +41,9 @@ const KST_DEFAULT_FIELDS = [
   { field_key: 'current_status',   default_label: 'Current Status',   default_sort: 130 },
   { field_key: 'pending_at_level', default_label: 'Pending At Level', default_sort: 140 },
   { field_key: 'pending_with',     default_label: 'Pending With (Name)', default_sort: 145 },
-  { field_key: 'days_in_stage',    default_label: 'Days in Stage',    default_sort: 150 },
+  { field_key: 'days_in_stage',    default_label: 'Days in Current Stage', default_sort: 150 },
   { field_key: 'org_level',        default_label: 'Org-Level',        default_sort: 160 },
 ] as const;
-import { differenceInDays } from 'date-fns';
-
 const FULL_MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
@@ -113,7 +112,8 @@ interface StatusTrackerRow {
   statusLabel: string;
   pendingAt: string;
   pendingWithName: string;
-  daysPending: number;
+  /** ADR-292 — days since the KPI entered its CURRENT stage. null = terminal / unknown. */
+  daysPending: number | null;
   isOrgLevel: boolean;
   reviewPeriod: string;
   isFrequencyLocked: boolean;
@@ -156,7 +156,7 @@ export default function KpiStatusTracker() {
         let q = supabase
           .from('kpis')
           .select(`
-            id, employee_id, kra_name, kpi_name, weightage, frequency, status, updated_at,
+            id, employee_id, kra_name, kpi_name, weightage, frequency, status, updated_at, created_at,
             review_period, review_year, is_org_level, category_id, frequency_cycle_start,
             kra_categories ( name )
           `)
@@ -199,6 +199,35 @@ export default function KpiStatusTracker() {
 
       const profileMap = new Map(profiles.map(p => [p.id, p]));
       const now = new Date();
+
+      // ADR-292 / POLICY §RPT-DAYS-IN-STAGE-AUDIT-SSOT — the ageing clock is
+      // anchored to the immutable audit trail, never to `kpis.updated_at`
+      // (which any bulk write resets). Batched by KPI id to respect the
+      // PostgREST 1000-row cap and keep the `in()` filter a sane length.
+      const kpiIdList = allKpis.map(k => k.id);
+      const auditLogs: StageAuditLog[] = [];
+      const idChunk = 300;
+      for (let i = 0; i < kpiIdList.length; i += idChunk) {
+        const chunk = kpiIdList.slice(i, i + idChunk);
+        let lOffset = 0;
+        let lHasMore = true;
+        while (lHasMore) {
+          const { data: logs, error: logErr } = await supabase
+            .from('kpi_audit_logs')
+            .select('kpi_id, action, created_at')
+            .in('kpi_id', chunk)
+            .range(lOffset, lOffset + batchSize - 1);
+          if (logErr) throw logErr;
+          if (logs && logs.length > 0) {
+            auditLogs.push(...(logs as StageAuditLog[]));
+            lOffset += batchSize;
+            lHasMore = logs.length === batchSize;
+          } else {
+            lHasMore = false;
+          }
+        }
+      }
+      const stageEntryMap = buildStageEntryMap(auditLogs);
 
       // ADR-178 / POLICY §RPT-PENDING-WITH-SSOT — resolve the named person(s)
       // each pending KPI is waiting on, via the shared resolver service.
@@ -249,7 +278,13 @@ export default function KpiStatusTracker() {
             kra_name: kpi.kra_name,
             kpi_name: kpi.kpi_name,
           }),
-          daysPending: kpi.updated_at ? differenceInDays(now, new Date(kpi.updated_at)) : 0,
+          daysPending: resolveDaysInStage({
+            kpiId: kpi.id,
+            status,
+            createdAt: kpi.created_at,
+            stageEntryMap,
+            now,
+          }),
           isOrgLevel: kpi.is_org_level ?? false,
           reviewPeriod: kpi.review_period ?? '—',
           isFrequencyLocked,
@@ -372,7 +407,7 @@ export default function KpiStatusTracker() {
         case 'current_status':   return r.statusLabel;
         case 'pending_at_level': return r.pendingAt;
         case 'pending_with':     return r.pendingWithName;
-        case 'days_in_stage':    return r.daysPending;
+        case 'days_in_stage':    return r.daysPending ?? '';
         case 'org_level':        return r.isOrgLevel ? 'Yes' : 'No';
         default: return '';
       }
@@ -583,7 +618,12 @@ export default function KpiStatusTracker() {
                       <TableHead className="min-w-[140px]">Status</TableHead>
                       <TableHead className="min-w-[160px]">Pending At</TableHead>
                       <TableHead className="min-w-[180px]">Pending With</TableHead>
-                      <TableHead className="w-20 text-center">Days</TableHead>
+                      <TableHead
+                        className="w-20 text-center"
+                        title="Days since this KPI entered its current stage (from the audit trail)"
+                      >
+                        Days in Stage
+                      </TableHead>
                       <TableHead className="w-16 text-center">Org</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -636,7 +676,7 @@ export default function KpiStatusTracker() {
                           ) : row.status === 'approved' ? (
                             <span className="text-green-600 dark:text-green-400">✓ Complete</span>
                           ) : (
-                            <span className={row.daysPending >= 7 ? 'text-destructive' : row.daysPending >= 4 ? 'text-amber-600' : ''}>
+                            <span className={(row.daysPending ?? 0) >= 7 ? 'text-destructive' : (row.daysPending ?? 0) >= 4 ? 'text-amber-600' : ''}>
                               {row.pendingAt}
                             </span>
                           )}
@@ -653,10 +693,13 @@ export default function KpiStatusTracker() {
                         <TableCell className="text-center">
                           {row.isOrphaned || row.isFrequencyLocked ? (
                             <span className="text-xs text-muted-foreground italic">N/A</span>
-                          ) : row.status !== 'approved' ? (
-                            <span className={`text-xs tabular-nums font-medium ${
-                              row.daysPending >= 7 ? 'text-destructive' : row.daysPending >= 4 ? 'text-amber-600' : 'text-muted-foreground'
-                            }`}>
+                          ) : row.daysPending !== null ? (
+                            <span
+                              className={`text-xs tabular-nums font-medium ${
+                                row.daysPending >= 7 ? 'text-destructive' : row.daysPending >= 4 ? 'text-amber-600' : 'text-muted-foreground'
+                              }`}
+                              title="Days since this KPI entered its current stage (from the audit trail)"
+                            >
                               {row.daysPending}d
                             </span>
                           ) : (
