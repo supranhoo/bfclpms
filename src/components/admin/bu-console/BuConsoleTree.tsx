@@ -550,9 +550,10 @@ export function BuConsoleTree({
                           aria-hidden
                           className="pointer-events-none absolute bottom-4 left-4 top-0 hidden w-px bg-border sm:block"
                         />
-                        {renderKraPanel ? (
+                        {renderKraPanel && kraPanelPlacement === 'replace' ? (
                           renderKraPanel(k, category.category_id)
                         ) : (
+                        <div className="space-y-2">
                         <div className="overflow-hidden rounded-md border bg-background shadow-sm">
                           <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-1.5">
                             <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -590,6 +591,8 @@ export function BuConsoleTree({
                               ))}
                             </div>
                           )}
+                        </div>
+                        {renderKraPanel ? renderKraPanel(k, category.category_id) : null}
                         </div>
                         )}
                       </div>
