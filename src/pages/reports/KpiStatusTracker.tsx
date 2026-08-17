@@ -409,7 +409,7 @@ export default function KpiStatusTracker() {
         case 'current_status':   return r.statusLabel;
         case 'pending_at_level': return r.pendingAt;
         case 'pending_with':     return r.pendingWithName;
-        case 'days_in_stage':    return r.daysPending;
+        case 'days_in_stage':    return r.daysPending ?? '';
         case 'org_level':        return r.isOrgLevel ? 'Yes' : 'No';
         default: return '';
       }
@@ -673,7 +673,7 @@ export default function KpiStatusTracker() {
                           ) : row.status === 'approved' ? (
                             <span className="text-green-600 dark:text-green-400">✓ Complete</span>
                           ) : (
-                            <span className={row.daysPending >= 7 ? 'text-destructive' : row.daysPending >= 4 ? 'text-amber-600' : ''}>
+                            <span className={(row.daysPending ?? 0) >= 7 ? 'text-destructive' : (row.daysPending ?? 0) >= 4 ? 'text-amber-600' : ''}>
                               {row.pendingAt}
                             </span>
                           )}
@@ -690,10 +690,13 @@ export default function KpiStatusTracker() {
                         <TableCell className="text-center">
                           {row.isOrphaned || row.isFrequencyLocked ? (
                             <span className="text-xs text-muted-foreground italic">N/A</span>
-                          ) : row.status !== 'approved' ? (
-                            <span className={`text-xs tabular-nums font-medium ${
-                              row.daysPending >= 7 ? 'text-destructive' : row.daysPending >= 4 ? 'text-amber-600' : 'text-muted-foreground'
-                            }`}>
+                          ) : row.daysPending !== null ? (
+                            <span
+                              className={`text-xs tabular-nums font-medium ${
+                                row.daysPending >= 7 ? 'text-destructive' : row.daysPending >= 4 ? 'text-amber-600' : 'text-muted-foreground'
+                              }`}
+                              title="Days since this KPI entered its current stage (from the audit trail)"
+                            >
                               {row.daysPending}d
                             </span>
                           ) : (
