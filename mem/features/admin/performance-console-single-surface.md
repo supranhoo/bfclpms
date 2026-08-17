@@ -1,16 +1,17 @@
 ---
 name: Performance Console single surface
-description: Console has no tabs — one drilldown tree with Configure/Review modes, stage rail, and dialogs for alignment/library (ADR-289)
+description: Console has no tabs — one KPI list per KRA with inline people cells, plus admin-only multi-person KPI creation (ADR-289/294/297)
 type: constraint
 ---
-The Performance Console is ONE surface. Do not add tabs.
+The Performance Console is ONE surface. Do not add tabs, and never print a KPI name twice.
 
-- Two modes only: Configure (KPI definition list in the KRA disclosure) and Review
-  (`KraWorksheet` — KPI x employee grid for that KRA — in the same disclosure).
-- `BuConsoleTree` `renderKraPanel` swaps the panel; never stack a second panel.
-- Pipeline = `StageRail` above the tree (counts from `bu_console_pipeline`), also the stage picker
-  for the worksheet. Read-only for every tier.
-- KRA alignment (`GoalsTab`) and KPI library/duplicates (`MergeProposalsTab`) are header overflow
-  dialogs. `PipelineTab.tsx` / `ReviewRunTab.tsx` are deleted; stage labels live in `pipelineStages.ts`.
-- Consolidation is presentation-only: RPCs, access/write tiers and §88 immutability unchanged.
-POLICY §CONSOLE-SINGLE-SURFACE.
+- KRA disclosure = `renderKraSummary` (slim review counters) + one KPI list. Expanding a KPI row
+  opens `KpiPeopleStrip` (its employee cells) inside that row via `renderKpiPanel`. One KPI panel
+  open at a time. `KraWorksheet.tsx` is deleted (ADR-297).
+- Stage rail above the tree (counts from `bu_console_pipeline`) is the stage picker; read-only.
+- KRA alignment (`GoalsTab`) and KPI library (`MergeProposalsTab`) are header overflow dialogs.
+- **New KPI** header action → `bu_console_kpi_create` (SECURITY DEFINER, admin-only, dry-run first).
+  Kinds map to existing columns: individual / shared (`org`) / department_event (`departmental`).
+  Duplicates for the month come back as `duplicate_kpi` skips.
+- Consolidation is presentation-only: RPC write tiers and §88 immutability unchanged.
+POLICY §CONSOLE-SINGLE-SURFACE, §CONSOLE-KPI-CREATE.
