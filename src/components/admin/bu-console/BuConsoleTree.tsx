@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { ConsoleMetricRow, ConsoleMetricHeader } from './ConsoleMetricRow';
 import { ScorePill } from './ScorePill';
 import { lookalikeCounts } from './lookalikeTitles';
+import { resolveKpiDueState } from '@/lib/review/kpiDueForPeriod';
 import type {
   BuConsoleCategoryNode,
   BuConsoleKraNode,
@@ -101,6 +102,11 @@ interface Props {
    * below the KPI definition list instead of replacing it.
    */
   kraPanelPlacement?: 'replace' | 'append';
+  /** ADR-296 — selected review month/year used to resolve frequency due state. */
+  period?: string;
+  year?: number;
+  /** ADR-296 — hide KPIs that are not open for submission this month. */
+  dueOnly?: boolean;
 }
 
 const fmtScore = (v: number | null | undefined) =>
@@ -117,12 +123,14 @@ function KpiRow({
   onOpen,
   lookalikeCount,
   onFixTextSplit,
+  dueState,
 }: {
   kpi: BuConsoleKpiNode;
   index: number;
   onOpen: (variantKey?: string | null) => void;
   lookalikeCount?: number;
   onFixTextSplit?: (kpi: BuConsoleKpiNode) => void;
+  dueState?: { due: boolean; frequency: string | null; cycleLabel: string | null };
 }) {
   const [open, setOpen] = useState(false);
   const weights = kpi.weightage_values ?? [];
@@ -150,6 +158,24 @@ function KpiRow({
             )}
             {!kpi.is_structured && (
               <Badge variant="outline" className="h-4 px-1 text-[10px]">Unsplit text</Badge>
+            )}
+            {dueState && !dueState.due && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-muted-foreground/30 bg-muted px-1.5 text-[10px] font-medium text-muted-foreground">
+                      Not due · {dueState.frequency}
+                      {dueState.cycleLabel ? ` (${dueState.cycleLabel})` : ''}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    This KPI is {String(dueState.frequency).toLowerCase()} and is not open for data
+                    submission in the selected month. It stays visible on the employee dashboard and
+                    becomes submittable in the closing month of its cycle
+                    {dueState.cycleLabel ? ` (${dueState.cycleLabel})` : ''}.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
             {isLookalike && (
               <TooltipProvider>
@@ -456,10 +482,26 @@ export function BuConsoleTree({
   breadcrumb,
   renderKraPanel,
   kraPanelPlacement = 'replace',
+  period,
+  year,
+  dueOnly = false,
 }: Props) {
   const category = categories.find(c => c.category_id === selectedCategoryId) ?? null;
   const openKra: BuConsoleKraNode | null =
     category?.kras.find(k => k.kra_key === selectedKraKey) ?? null;
+  // ADR-296 — due state is resolved once per open KRA; the console never hides
+  // a KPI unless the user asked for the "due this month" view.
+  const dueStates = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof resolveKpiDueState>>();
+    if (!period || !year) return map;
+    for (const kpi of openKra?.kpis ?? []) {
+      map.set(
+        kpi.kpi_key,
+        resolveKpiDueState(kpi.frequencies, kpi.frequency_cycle_starts, period, year),
+      );
+    }
+    return map;
+  }, [openKra, period, year]);
   // ADR-273 — computed for the expanded KRA only, so a mis-split title is
   // visible next to the row it duplicates instead of looking like a second KPI.
   const lookalikes = lookalikeCounts(
@@ -554,10 +596,21 @@ export function BuConsoleTree({
                           renderKraPanel(k, category.category_id)
                         ) : (
                         <div className="space-y-2">
+                        {(() => {
+                        const visibleKpis = dueOnly
+                          ? k.kpis.filter(kpi => dueStates.get(kpi.kpi_key)?.due !== false)
+                          : k.kpis;
+                        const hiddenCount = k.kpis.length - visibleKpis.length;
+                        return (
                         <div className="overflow-hidden rounded-md border bg-background shadow-sm">
                           <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-1.5">
                             <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              KPIs · {k.kpi_count}
+                              KPIs · {visibleKpis.length}
+                              {hiddenCount > 0 && (
+                                <span className="ml-1 normal-case tracking-normal">
+                                  ({hiddenCount} not due this month hidden)
+                                </span>
+                              )}
                             </p>
                             <span className="hidden shrink-0 gap-3 sm:flex">
                               {['Employees', 'Weightage', 'Avg score'].map(l => (
@@ -571,18 +624,21 @@ export function BuConsoleTree({
                               <span className="w-[120px]" aria-hidden />
                             </span>
                           </div>
-                          {k.kpis.length === 0 ? (
+                          {visibleKpis.length === 0 ? (
                             <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-                              No KPIs mapped under this KRA for the loaded scope.
+                              {k.kpis.length === 0
+                                ? 'No KPIs mapped under this KRA for the loaded scope.'
+                                : 'No KPIs under this KRA are due for data submission this month.'}
                             </p>
                           ) : (
                             <div className="max-h-[420px] divide-y overflow-y-auto">
-                              {k.kpis.map((kpi, ki) => (
+                              {visibleKpis.map((kpi, ki) => (
                                 <KpiRow
                                   key={kpi.kpi_key}
                                   kpi={kpi}
                                   index={ki + 1}
                                   lookalikeCount={lookalikes.get(kpi.kpi_key)}
+                                  dueState={dueStates.get(kpi.kpi_key)}
                                   onFixTextSplit={onFixTextSplit}
                                   onOpen={(variantKey) =>
                                     onSelectKpi(category.category_id, k.kra_name, kpi, variantKey)
@@ -592,6 +648,8 @@ export function BuConsoleTree({
                             </div>
                           )}
                         </div>
+                        );
+                        })()}
                         {renderKraPanel ? renderKraPanel(k, category.category_id) : null}
                         </div>
                         )}

@@ -42,6 +42,8 @@ import {
   computeConsoleStats,
 } from '@/components/admin/bu-console/ConsoleStatBand';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { ChevronRight, FlaskConical, Compass, MoreHorizontal, Network, Library } from 'lucide-react';
 
 export default function BuConsole() {
@@ -63,6 +65,8 @@ export default function BuConsole() {
   // ADR-294 — one console: configuration and review live on the same surface.
   // Write actions stay gated by capability, so non-admins simply see it read-only.
   const [stage, setStage] = useState('manager_check');
+  // ADR-296 — hide KPIs whose frequency cycle is not open for the selected month.
+  const [dueOnly, setDueOnly] = useState(false);
   const [alignmentOpen, setAlignmentOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
 
@@ -318,6 +322,20 @@ export default function BuConsole() {
               picks the stage the inline worksheet works at. */}
           {scope && <StageRail scope={scope} stage={stage} onStageChange={setStage} />}
 
+          {scope && (
+            <div className="flex items-center justify-end gap-2 rounded-lg border bg-card px-3 py-1.5">
+              <Label htmlFor="console-due-only" className="text-xs text-muted-foreground">
+                Due this month only
+              </Label>
+              <Switch
+                id="console-due-only"
+                checked={dueOnly}
+                onCheckedChange={setDueOnly}
+                aria-label="Show only KPIs open for data submission in the selected month"
+              />
+            </div>
+          )}
+
           {!scope && !isFetching && (
             <>
               <ConsoleStatBand placeholder variant="tiles" />
@@ -359,6 +377,9 @@ export default function BuConsole() {
               categories={tree.categories}
               selectedCategoryId={categoryId}
               selectedKraKey={kraKey}
+              period={scope?.period}
+              year={scope?.year}
+              dueOnly={dueOnly}
               renderKraPanel={
                 scope
                   ? (kra, cId) => (

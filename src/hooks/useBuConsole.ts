@@ -42,6 +42,10 @@ export interface BuConsoleKpiNode {
   employee_count: number;
   variant_count: number;
   weightage_values: number[] | null;
+  /** ADR-296 — distinct frequencies behind this grouped KPI row. */
+  frequencies?: string[] | null;
+  /** ADR-296 — per-KPI cycle anchors used to resolve the due window. */
+  frequency_cycle_starts?: string[] | null;
   avg_score: number | null;
   is_structured: boolean;
   is_org_level: boolean;
