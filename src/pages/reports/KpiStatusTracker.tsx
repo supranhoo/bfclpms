@@ -23,6 +23,7 @@ import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter'
 import { applyEmployeeStatusFilter, employeeStatusLabel, type EmployeeStatusMode } from '@/lib/reportEmployeeFilter';
 import { buildPendingWithContext, resolvePendingWithForKpi, PENDING_WITH_NONE } from '@/services/reports/pendingWithResolver';
 import { buildStageEntryMap, resolveDaysInStage, type StageAuditLog } from '@/lib/review/daysInStage';
+import { resolvePendingAtLevel } from '@/lib/reports/pendingAtLevel';
 
 const KST_DEFAULT_FIELDS = [
   { field_key: 'row_num',          default_label: '#',                default_sort: 10,  is_required: true, is_renamable: false },
@@ -58,17 +59,6 @@ const STATUS_LABELS: Record<string, string> = {
   audit: 'Audit',
   management_review: 'Management Review',
   approved: 'Approved',
-};
-
-const PENDING_AT_MAP: Record<string, string> = {
-  kra_set: 'Employee (KRA Not Issued)',
-  self_review: 'Employee (Self Review)',
-  manager_check: 'Manager',
-  skip_level_check: 'Skip-Level Manager',
-  hr_pms_review: 'HR PMS',
-  audit: 'Auditor',
-  management_review: 'Management',
-  approved: '—',
 };
 
 function statusBadgeVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
@@ -268,7 +258,13 @@ export default function KpiStatusTracker() {
           frequency: kpi.frequency ?? '—',
           status,
           statusLabel: STATUS_LABELS[status] ?? status,
-          pendingAt: PENDING_AT_MAP[status] ?? '—',
+          // ADR-293 — pending level = NEXT stage in the resolved chain, not the
+          // status label (status = last COMPLETED stage).
+          pendingAt: resolvePendingAtLevel({
+            status,
+            isOrgKpi: kpi.is_org_level === true,
+            stageChain: pendingCtx.stageChainMap.get(kpi.employee_id ?? '') ?? [],
+          }),
           pendingWithName: resolvePendingWithForKpi(pendingCtx, {
             id: kpi.id,
             employee_id: kpi.employee_id,
