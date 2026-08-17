@@ -337,19 +337,6 @@ export default function BuConsole() {
               picks the stage the inline worksheet works at. */}
           {scope && <StageRail scope={scope} stage={stage} onStageChange={setStage} />}
 
-          {scope && (
-            <div className="flex items-center justify-end gap-2 rounded-lg border bg-card px-3 py-1.5">
-              <Label htmlFor="console-due-only" className="text-xs text-muted-foreground">
-                Due this month only
-              </Label>
-              <Switch
-                id="console-due-only"
-                checked={dueOnly}
-                onCheckedChange={setDueOnly}
-                aria-label="Show only KPIs open for data submission in the selected month"
-              />
-            </div>
-          )}
 
           {!scope && !isFetching && (
             <>
