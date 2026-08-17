@@ -1,6 +1,6 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-08-17 · **Version:** v2.66.262
+> **Last Updated:** 2026-08-17 · **Version:** v2.66.263
 >
 > **Version:** 2.66.262 — **"Pending With" restored to the KPI Status Tracker Excel (2026-08-17).** RCA: the export writes only fields resolved from `report_field_registry` for `RPT-KST-001`, which held 16 rows and was never seeded with `pending_with` or `employee_status` — both added to the page's in-code defaults later. `useResolvedReportFields` treated DB rows as an outright replacement, so the on-screen table (hardcoded JSX) showed the column while the download dropped it — a drift class affecting every registry-driven export. CAPA: (1) the two missing rows seeded additively into `report_field_registry`; (2) the resolver now MERGES — DB rows win for label/sort/hidden, unseeded in-code defaults are still emitted; (3) guard `src/test/reportFieldRegistryDrift.test.ts` (4 tests). **No schema, RLS, RPC, scoring, workflow or backup change.** Rollback = revert the resolver and delete the two registry rows. See POLICY §RPT-FIELD-REGISTRY-MERGE.
 >
