@@ -96,6 +96,11 @@ interface Props {
    * the KPI definition list. The page supplies it so the tree stays pure.
    */
   renderKraPanel?: (kra: BuConsoleKraNode, categoryId: string) => ReactNode;
+  /**
+   * ADR-294 — one console: for users who can act, the worksheet is appended
+   * below the KPI definition list instead of replacing it.
+   */
+  kraPanelPlacement?: 'replace' | 'append';
 }
 
 const fmtScore = (v: number | null | undefined) =>
@@ -450,6 +455,7 @@ export function BuConsoleTree({
   onFixTextSplit,
   breadcrumb,
   renderKraPanel,
+  kraPanelPlacement = 'replace',
 }: Props) {
   const category = categories.find(c => c.category_id === selectedCategoryId) ?? null;
   const openKra: BuConsoleKraNode | null =
@@ -544,9 +550,10 @@ export function BuConsoleTree({
                           aria-hidden
                           className="pointer-events-none absolute bottom-4 left-4 top-0 hidden w-px bg-border sm:block"
                         />
-                        {renderKraPanel ? (
+                        {renderKraPanel && kraPanelPlacement === 'replace' ? (
                           renderKraPanel(k, category.category_id)
                         ) : (
+                        <div className="space-y-2">
                         <div className="overflow-hidden rounded-md border bg-background shadow-sm">
                           <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-1.5">
                             <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -584,6 +591,8 @@ export function BuConsoleTree({
                               ))}
                             </div>
                           )}
+                        </div>
+                        {renderKraPanel ? renderKraPanel(k, category.category_id) : null}
                         </div>
                         )}
                       </div>

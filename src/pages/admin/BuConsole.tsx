@@ -44,8 +44,6 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ChevronRight, FlaskConical, Compass, MoreHorizontal, Network, Library } from 'lucide-react';
 
-type ConsoleMode = 'configure' | 'review';
-
 export default function BuConsole() {
   const { data: flagEnabled, isLoading: flagLoading } = useBuConsoleFlag();
   const { isReadOnly, isAdmin, canWrite } = useBuConsoleCapability();
@@ -62,8 +60,8 @@ export default function BuConsole() {
   const [kraKey, setKraKey] = useState<string | null>(null);
   const [detail, setDetail] = useState<KpiDetailArgs | null>(null);
 
-  // ADR-289 — one surface, two modes, no tabs.
-  const [mode, setMode] = useState<ConsoleMode>('configure');
+  // ADR-294 — one console: configuration and review live on the same surface.
+  // Write actions stay gated by capability, so non-admins simply see it read-only.
   const [stage, setStage] = useState('manager_check');
   const [alignmentOpen, setAlignmentOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -258,33 +256,9 @@ export default function BuConsole() {
               </TooltipProvider>
             </h1>
 
-            {/* ADR-289 — one surface, two modes. Not tabs: the tree never changes. */}
-            <div
-              role="radiogroup"
-              aria-label="Console mode"
-              className="ml-auto flex items-center gap-1 rounded-md border bg-muted/40 p-0.5"
-            >
-              {(['configure', 'review'] as ConsoleMode[]).map(m => (
-                <button
-                  key={m}
-                  type="button"
-                  role="radio"
-                  aria-checked={mode === m}
-                  onClick={() => { setMode(m); setKraKey(null); }}
-                  className={`min-h-8 rounded px-3 text-xs font-medium capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                    mode === m
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="More console tools">
+              <Button variant="ghost" size="icon" className="ml-auto h-8 w-8" aria-label="More console tools">
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -342,9 +316,7 @@ export default function BuConsole() {
 
           {/* ADR-289 — the pipeline is a rail on this surface, not a tab. It also
               picks the stage the inline worksheet works at. */}
-          {mode === 'review' && (
-            <StageRail scope={scope} stage={stage} onStageChange={setStage} />
-          )}
+          {scope && <StageRail scope={scope} stage={stage} onStageChange={setStage} />}
 
           {!scope && !isFetching && (
             <>
@@ -388,7 +360,7 @@ export default function BuConsole() {
               selectedCategoryId={categoryId}
               selectedKraKey={kraKey}
               renderKraPanel={
-                mode === 'review' && scope
+                scope
                   ? (kra, cId) => (
                       <KraWorksheet
                         scope={scope}
@@ -399,6 +371,7 @@ export default function BuConsole() {
                     )
                   : undefined
               }
+              kraPanelPlacement="append"
               breadcrumb={
                 <nav
                   aria-label="Console drilldown"
