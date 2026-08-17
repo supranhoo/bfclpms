@@ -44,8 +44,6 @@ const KST_DEFAULT_FIELDS = [
   { field_key: 'days_in_stage',    default_label: 'Days in Current Stage', default_sort: 150 },
   { field_key: 'org_level',        default_label: 'Org-Level',        default_sort: 160 },
 ] as const;
-import { differenceInDays } from 'date-fns';
-
 const FULL_MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
