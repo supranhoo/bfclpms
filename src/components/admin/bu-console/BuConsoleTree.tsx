@@ -96,6 +96,11 @@ interface Props {
    * the KPI definition list. The page supplies it so the tree stays pure.
    */
   renderKraPanel?: (kra: BuConsoleKraNode, categoryId: string) => ReactNode;
+  /**
+   * ADR-294 — one console: for users who can act, the worksheet is appended
+   * below the KPI definition list instead of replacing it.
+   */
+  kraPanelPlacement?: 'replace' | 'append';
 }
 
 const fmtScore = (v: number | null | undefined) =>
@@ -450,6 +455,7 @@ export function BuConsoleTree({
   onFixTextSplit,
   breadcrumb,
   renderKraPanel,
+  kraPanelPlacement = 'replace',
 }: Props) {
   const category = categories.find(c => c.category_id === selectedCategoryId) ?? null;
   const openKra: BuConsoleKraNode | null =
