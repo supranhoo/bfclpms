@@ -28,3 +28,27 @@ A second sheet, **Added by Rollover**, lists the 3 rows the 1 Jul auto-rollover 
 
 - Weightage and definitions are read from the KPIs' **current** state. Their definition fields have not been re-authored since creation (only status/score updates on 15 Aug), so this equals the 29 Jun content. If you want a strict field-level historical diff, that needs a separate pass over `kpi_audit_logs`.
 - No data is modified. Nothing in the app changes; this is an export only.
+
+## Scores and post-finalisation changes (verified)
+
+Two different things happened to this July 2026 set, and the export will show both.
+
+**1. Your 29 Jun editing session (18:32–18:44 IST)**
+- 22 KPIs created at 13:02 UTC, then **11 of them edited** via the admin edit dialog (`ADMIN_OVERRIDE` rows, 13:08–13:44 UTC). Those edits changed KPI text, target, UOM, weightage, criteria and the R5–R0 ladder — the audit trail holds the exact before/after for each.
+- 7 org-linked KPIs auto-inherited org values the same evening.
+
+**2. After 1 July**
+- The auto-rollover **added 3 new KPIs** on 1 Jul 00:00 (DM Water Quality Compliance, Reduce Remelt % (SMS), Quality Deduction Accuracy (SMS)) — it did not alter the 22.
+- Scoring happened in August: 24 of 25 KPIs now carry self + manager scores (identical values, manager forwarded), 1 KPI — *Audit Non-Compliance Closure within 7 days* — is still at `kra_set` with **no score at all**.
+- 2 KPIs were sent back to the employee and 1 rollback was requested and approved (5 Aug).
+- Score values today range 0 to 5; several sit at 0 (MIS accuracy, By-Product levels, common-Policy adherence, Reduce Remelt).
+- No definition (weightage/target/ladder) edits are recorded after 29 Jun — the current definitions equal what you finalised.
+
+## Updated deliverable — 4 sheets
+
+1. **KRA Sheet (as finalised 29 Jun)** — the 22 KPIs in standard KRA Export layout (Sr, Category, KRA, KPI, UOM, Target, Weightage, Criteria, R5–R0, Frequency, Source).
+2. **Scores** — per KPI: achieved value, self score, manager score, final score, current status, date submitted.
+3. **Changes since finalisation** — every audit event on these KPIs after 29 Jun 13:02: what changed, old → new, who, when (admin overrides, send-backs, rollback, org propagation, status moves).
+4. **Added by Rollover** — the 3 KPIs the 1 Jul auto-rollover inserted, so you can keep or drop them.
+
+Delivered as `/mnt/documents/KRA_Dilip_Kumar_Ojha_July_2026_finalised_29Jun.xlsx`. Read-only; no app or data changes.
