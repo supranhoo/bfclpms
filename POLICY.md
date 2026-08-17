@@ -5070,6 +5070,19 @@ detectable and repairable without a developer.
 
 ## §RPT-PENDING-WITH-SSOT — "Pending With (Name)" must be resolver-derived (ADR-178, 2026-07-27)
 
+> **§RPT-DAYS-IN-STAGE-AUDIT-SSOT — ageing clocks read the audit trail, never
+> `updated_at` (ADR-292, 2026-08-17).**
+> Any "Days pending / Days in stage" figure MUST be anchored to the latest
+> stage-moving row in `kpi_audit_logs` via `src/lib/review/daysInStage.ts`.
+> `kpis.updated_at` is NOT a stage-entry timestamp — it moves on every write,
+> so one bulk maintenance pass silently reset the whole report to "1d". Rules:
+> (a) score/value, org-KPI propagation, query and weightage rows never reset the
+> clock; (b) send-backs and step-backs DO restart it for the receiving stage;
+> (c) fallback chain is stage event → first audit event → `created_at`, never a
+> silent `0`; (d) terminal (`approved`) records stop ageing and render `—` /
+> export blank; (e) screen and Excel read the same resolved value.
+> Guard: `src/test/daysInStage.test.ts`.
+
 > **§RPT-FIELD-REGISTRY-MERGE — the DB field registry is additive (2026-08-17).**
 > `report_field_registry` rows AUGMENT a report's in-code default field list; they
 > never replace it. `useResolvedReportFields` merges: a DB row wins for label /
