@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight, Pencil, PlayCircle, Undo2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pencil, PlayCircle, RefreshCw, Undo2 } from 'lucide-react';
 import {
   useApplyKpiSplit,
   useKpiSplitGroups,
@@ -44,11 +44,20 @@ function ConfidenceBadge({ value }: { value: string }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number | string }) {
+function Stat({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: number | string;
+  hint?: string;
+}) {
   return (
     <div className="rounded-lg border p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="text-xl font-semibold tabular-nums">{value}</div>
+      {hint ? <div className="text-[11px] text-muted-foreground tabular-nums">{hint}</div> : null}
     </div>
   );
 }
@@ -79,6 +88,8 @@ export function TextSplitTab({ initialSearch = '' }: { initialSearch?: string } 
   const needsManualGroups = summary.data?.needs_manual_groups ?? 0;
   const suspectTitles = summary.data?.suspect_titles ?? 0;
   const suspectGroups = summary.data?.suspect_title_groups ?? 0;
+  const pendingUnparsed = summary.data?.pending_unparsed ?? 0;
+  const pendingLabel = (n: number) => (n > 0 ? `${n} pending` : 'all applied');
 
   const runApply = (conf: 'high' | 'review') => {
     setProgress(0);
@@ -125,14 +136,32 @@ export function TextSplitTab({ initialSearch = '' }: { initialSearch?: string } 
           {summary.isLoading ? (
             <Skeleton className="h-20 w-full" />
           ) : summary.data ? (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-              <Stat label="In scope (FY 2026-27+)" value={summary.data.in_scope} />
-              <Stat label="Distinct names" value={summary.data.distinct_names} />
-              <Stat label="Clean split" value={summary.data.high} />
-              <Stat label="Needs review" value={summary.data.review} />
-              <Stat label="No markers" value={summary.data.unparsed} />
-              <Stat label="Suspect title" value={suspectTitles} />
-              <Stat label="Legacy untouched" value={summary.data.legacy_untouched} />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Classification counts below cover every in-scope row, so they stay the same after a
+                  run — the second line shows what is still pending.
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => summary.refetch()}
+                  disabled={summary.isFetching}
+                  className="shrink-0 gap-1.5"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${summary.isFetching ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                <Stat label="In scope (FY 2026-27+)" value={summary.data.in_scope} hint={`${summary.data.pending} pending`} />
+                <Stat label="Distinct names" value={summary.data.distinct_names} />
+                <Stat label="Clean split" value={summary.data.high} hint={pendingLabel(pendingHigh)} />
+                <Stat label="Needs review" value={summary.data.review} hint={pendingLabel(pendingReview)} />
+                <Stat label="No markers" value={summary.data.unparsed} hint={pendingLabel(pendingUnparsed)} />
+                <Stat label="Suspect title" value={suspectTitles} hint={`${suspectGroups} distinct`} />
+                <Stat label="Legacy untouched" value={summary.data.legacy_untouched} hint="excluded by design" />
+              </div>
             </div>
           ) : null}
 
