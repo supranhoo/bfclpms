@@ -158,7 +158,7 @@ export default function KpiStatusTracker() {
         let q = supabase
           .from('kpis')
           .select(`
-            id, employee_id, kra_name, kpi_name, weightage, frequency, status, updated_at,
+            id, employee_id, kra_name, kpi_name, weightage, frequency, status, updated_at, created_at,
             review_period, review_year, is_org_level, category_id, frequency_cycle_start,
             kra_categories ( name )
           `)
@@ -201,6 +201,35 @@ export default function KpiStatusTracker() {
 
       const profileMap = new Map(profiles.map(p => [p.id, p]));
       const now = new Date();
+
+      // ADR-292 / POLICY §RPT-DAYS-IN-STAGE-AUDIT-SSOT — the ageing clock is
+      // anchored to the immutable audit trail, never to `kpis.updated_at`
+      // (which any bulk write resets). Batched by KPI id to respect the
+      // PostgREST 1000-row cap and keep the `in()` filter a sane length.
+      const kpiIdList = allKpis.map(k => k.id);
+      const auditLogs: StageAuditLog[] = [];
+      const idChunk = 300;
+      for (let i = 0; i < kpiIdList.length; i += idChunk) {
+        const chunk = kpiIdList.slice(i, i + idChunk);
+        let lOffset = 0;
+        let lHasMore = true;
+        while (lHasMore) {
+          const { data: logs, error: logErr } = await supabase
+            .from('kpi_audit_logs')
+            .select('kpi_id, action, created_at')
+            .in('kpi_id', chunk)
+            .range(lOffset, lOffset + batchSize - 1);
+          if (logErr) throw logErr;
+          if (logs && logs.length > 0) {
+            auditLogs.push(...(logs as StageAuditLog[]));
+            lOffset += batchSize;
+            lHasMore = logs.length === batchSize;
+          } else {
+            lHasMore = false;
+          }
+        }
+      }
+      const stageEntryMap = buildStageEntryMap(auditLogs);
 
       // ADR-178 / POLICY §RPT-PENDING-WITH-SSOT — resolve the named person(s)
       // each pending KPI is waiting on, via the shared resolver service.
@@ -251,7 +280,13 @@ export default function KpiStatusTracker() {
             kra_name: kpi.kra_name,
             kpi_name: kpi.kpi_name,
           }),
-          daysPending: kpi.updated_at ? differenceInDays(now, new Date(kpi.updated_at)) : 0,
+          daysPending: resolveDaysInStage({
+            kpiId: kpi.id,
+            status,
+            createdAt: kpi.created_at,
+            stageEntryMap,
+            now,
+          }),
           isOrgLevel: kpi.is_org_level ?? false,
           reviewPeriod: kpi.review_period ?? '—',
           isFrequencyLocked,
