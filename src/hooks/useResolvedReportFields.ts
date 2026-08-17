@@ -110,19 +110,25 @@ export function useResolvedReportFields(
   });
 
   return useMemo<ResolvedReportField[]>(() => {
-    // Build the registry rows for THIS report — prefer DB rows, fall back to defaults.
+    // POLICY §RPT-FIELD-REGISTRY-MERGE — the DB registry is ADDITIVE over the
+    // in-code defaults, never a replacement. DB rows win where they exist
+    // (admin renames / sort / hide), and any default field key the DB has not
+    // been seeded with is still emitted, so newly coded columns always reach
+    // exports instead of silently disappearing.
     const dbRows = (registryRows ?? []).filter((r) => r.report_id === reportId);
-    const seed: ReportFieldRegistryRow[] = dbRows.length > 0
-      ? dbRows
-      : defaults.map((d) => ({
-          report_id: reportId,
-          field_key: d.field_key,
-          default_label: d.default_label,
-          default_sort: d.default_sort,
-          is_required: d.is_required ?? false,
-          is_renamable: d.is_renamable ?? true,
-          data_type: null,
-        }));
+    const dbKeys = new Set(dbRows.map((r) => r.field_key));
+    const missing: ReportFieldRegistryRow[] = defaults
+      .filter((d) => !dbKeys.has(d.field_key))
+      .map((d) => ({
+        report_id: reportId,
+        field_key: d.field_key,
+        default_label: d.default_label,
+        default_sort: d.default_sort,
+        is_required: d.is_required ?? false,
+        is_renamable: d.is_renamable ?? true,
+        data_type: null,
+      }));
+    const seed: ReportFieldRegistryRow[] = [...dbRows, ...missing];
 
     if (!enabled) {
       // Bypass overrides entirely.
