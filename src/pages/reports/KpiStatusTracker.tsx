@@ -22,6 +22,7 @@ import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
 import { EmployeeStatusFilter } from '@/components/reports/EmployeeStatusFilter';
 import { applyEmployeeStatusFilter, employeeStatusLabel, type EmployeeStatusMode } from '@/lib/reportEmployeeFilter';
 import { buildPendingWithContext, resolvePendingWithForKpi, PENDING_WITH_NONE } from '@/services/reports/pendingWithResolver';
+import { buildStageEntryMap, resolveDaysInStage, type StageAuditLog } from '@/lib/review/daysInStage';
 
 const KST_DEFAULT_FIELDS = [
   { field_key: 'row_num',          default_label: '#',                default_sort: 10,  is_required: true, is_renamable: false },
@@ -40,7 +41,7 @@ const KST_DEFAULT_FIELDS = [
   { field_key: 'current_status',   default_label: 'Current Status',   default_sort: 130 },
   { field_key: 'pending_at_level', default_label: 'Pending At Level', default_sort: 140 },
   { field_key: 'pending_with',     default_label: 'Pending With (Name)', default_sort: 145 },
-  { field_key: 'days_in_stage',    default_label: 'Days in Stage',    default_sort: 150 },
+  { field_key: 'days_in_stage',    default_label: 'Days in Current Stage', default_sort: 150 },
   { field_key: 'org_level',        default_label: 'Org-Level',        default_sort: 160 },
 ] as const;
 import { differenceInDays } from 'date-fns';
@@ -113,7 +114,8 @@ interface StatusTrackerRow {
   statusLabel: string;
   pendingAt: string;
   pendingWithName: string;
-  daysPending: number;
+  /** ADR-292 — days since the KPI entered its CURRENT stage. null = terminal / unknown. */
+  daysPending: number | null;
   isOrgLevel: boolean;
   reviewPeriod: string;
   isFrequencyLocked: boolean;
