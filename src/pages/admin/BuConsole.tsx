@@ -35,7 +35,9 @@ import { KpiDetailDrawer } from '@/components/admin/bu-console/KpiDetailDrawer';
 import { MergeProposalsTab } from '@/components/admin/bu-console/MergeProposalsTab';
 import { GoalsTab } from '@/components/admin/bu-console/GoalsTab';
 import { StageRail } from '@/components/admin/bu-console/StageRail';
-import { KraWorksheet } from '@/components/admin/bu-console/KraWorksheet';
+import { KpiPeopleStrip } from '@/components/admin/bu-console/KpiPeopleStrip';
+import { KraReviewBar } from '@/components/admin/bu-console/KraReviewBar';
+import { ConsoleKpiCreateDialog } from '@/components/admin/bu-console/ConsoleKpiCreateDialog';
 import { useBuConsoleCapability } from '@/hooks/useBuConsoleCapability';
 import {
   ConsoleStatBand,
@@ -44,7 +46,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ChevronRight, FlaskConical, Compass, MoreHorizontal, Network, Library } from 'lucide-react';
+import { ChevronRight, FlaskConical, Compass, MoreHorizontal, Network, Library, Plus } from 'lucide-react';
 
 export default function BuConsole() {
   const { data: flagEnabled, isLoading: flagLoading } = useBuConsoleFlag();
@@ -69,6 +71,7 @@ export default function BuConsole() {
   const [dueOnly, setDueOnly] = useState(false);
   const [alignmentOpen, setAlignmentOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const { data: businessUnits } = useBusinessUnits();
   const { data: departments } = useDepartments();
@@ -261,6 +264,12 @@ export default function BuConsole() {
             </h1>
 
             <div className="ml-auto flex items-center gap-x-3 gap-y-2">
+              {isAdmin && (
+                <Button size="sm" className="h-8" onClick={() => setCreateOpen(true)}>
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  New KPI
+                </Button>
+              )}
               {scope && (
                 <div className="flex items-center gap-2">
                   <Label htmlFor="console-due-only" className="text-xs text-muted-foreground">
@@ -382,10 +391,10 @@ export default function BuConsole() {
               period={scope?.period}
               year={scope?.year}
               dueOnly={dueOnly}
-              renderKraPanel={
+              renderKraSummary={
                 scope
                   ? (kra, cId) => (
-                      <KraWorksheet
+                      <KraReviewBar
                         scope={scope}
                         categoryId={cId}
                         kraName={kra.kra_name}
@@ -394,7 +403,20 @@ export default function BuConsole() {
                     )
                   : undefined
               }
-              kraPanelPlacement="append"
+              renderKpiPanel={
+                scope
+                  ? (kpi, kra, cId) => (
+                      <KpiPeopleStrip
+                        scope={scope}
+                        categoryId={cId}
+                        kraName={kra.kra_name}
+                        kpiKey={kpi.kpi_key}
+                        kpiName={kpi.kpi_title || kpi.kpi_name}
+                        stage={stage}
+                      />
+                    )
+                  : undefined
+              }
               breadcrumb={
                 <nav
                   aria-label="Console drilldown"
@@ -446,6 +468,17 @@ export default function BuConsole() {
       </div>
 
       {/* ADR-289 — alignment and library are tools off the console, not tabs. */}
+      <ConsoleKpiCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        scope={scope}
+        scopeLabel={scope ? `${scope.period} ${scope.year} · ${scopeSummary}` : ''}
+        categories={(tree?.categories ?? []).map(c => ({ id: c.category_id, name: c.category_name }))}
+        kraNames={Array.from(
+          new Set((tree?.categories ?? []).flatMap(c => c.kras.map(k => k.kra_name))),
+        )}
+      />
+
       <Dialog open={alignmentOpen} onOpenChange={setAlignmentOpen}>
         <DialogContent className="max-w-[1180px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>

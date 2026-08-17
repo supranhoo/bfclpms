@@ -93,15 +93,19 @@ interface Props {
   /** ADR-283 — scope / drill path shown on the category strip row. */
   breadcrumb?: ReactNode;
   /**
-   * ADR-289 — in Review mode the expanded KRA body is the worksheet instead of
-   * the KPI definition list. The page supplies it so the tree stays pure.
+   * ADR-297 — a slim review counter line rendered above the KPI list of the
+   * open KRA. Supplied by the page so the tree stays pure.
    */
-  renderKraPanel?: (kra: BuConsoleKraNode, categoryId: string) => ReactNode;
+  renderKraSummary?: (kra: BuConsoleKraNode, categoryId: string) => ReactNode;
   /**
-   * ADR-294 — one console: for users who can act, the worksheet is appended
-   * below the KPI definition list instead of replacing it.
+   * ADR-297 — one row per KPI: the employee cells for a KPI open *inside* that
+   * KPI's row instead of as a second list under the KRA.
    */
-  kraPanelPlacement?: 'replace' | 'append';
+  renderKpiPanel?: (
+    kpi: BuConsoleKpiNode,
+    kra: BuConsoleKraNode,
+    categoryId: string,
+  ) => ReactNode;
   /** ADR-296 — selected review month/year used to resolve frequency due state. */
   period?: string;
   year?: number;
@@ -124,6 +128,10 @@ function KpiRow({
   lookalikeCount,
   onFixTextSplit,
   dueState,
+  panel,
+  expanded,
+  onToggle,
+  expandable,
 }: {
   kpi: BuConsoleKpiNode;
   index: number;
@@ -131,12 +139,19 @@ function KpiRow({
   lookalikeCount?: number;
   onFixTextSplit?: (kpi: BuConsoleKpiNode) => void;
   dueState?: { due: boolean; frequency: string | null; cycleLabel: string | null };
+  /** ADR-297 — the people cells for this KPI, rendered inline when expanded. */
+  panel?: ReactNode;
+  expanded?: boolean;
+  onToggle?: () => void;
+  /** True when this row can open a people panel, even while collapsed. */
+  expandable?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const weights = kpi.weightage_values ?? [];
   const variantCount = kpi.variant_count ?? 1;
   const hasVariance = variantCount > 1 || weights.length > 1;
   const isLookalike = (lookalikeCount ?? 0) > 1;
+  const panelId = `kpi-people-${kpi.kpi_key.replace(/[^\w-]/g, '_')}`;
 
   return (
     <div>
@@ -196,7 +211,10 @@ function KpiRow({
             )}
           </span>
         }
-        onClick={() => onOpen(null)}
+        onClick={() => (expandable ? onToggle?.() : onOpen(null))}
+        expandable={!!expandable}
+        expanded={!!expandable && !!expanded}
+        ariaControls={expandable ? panelId : undefined}
         hideMetricLabels
         metrics={[
           { label: 'Employees', value: kpi.employee_count },
@@ -244,11 +262,32 @@ function KpiRow({
               </span>
             )}
             <span className="flex items-center gap-1 text-xs font-medium text-primary opacity-60 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-              Open <ChevronRight className="h-4 w-4" />
+              {expandable ? (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Open details for ${kpi.kpi_title || kpi.kpi_name}`}
+                  onClick={(e) => { e.stopPropagation(); onOpen(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onOpen(null); }
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5"
+                >
+                  Open <ChevronRight className="h-4 w-4" />
+                </span>
+              ) : (
+                <>Open <ChevronRight className="h-4 w-4" /></>
+              )}
             </span>
           </span>
         }
       />
+
+      {expandable && expanded && panel && (
+        <div id={panelId} className="border-t bg-muted/30">
+          {panel}
+        </div>
+      )}
 
       {open && (
         <ul className="space-y-1 bg-muted/40 px-4 py-2">
@@ -480,15 +519,18 @@ export function BuConsoleTree({
   onSelectKpi,
   onFixTextSplit,
   breadcrumb,
-  renderKraPanel,
-  kraPanelPlacement = 'replace',
+  renderKraSummary,
+  renderKpiPanel,
   period,
   year,
   dueOnly = false,
 }: Props) {
   const category = categories.find(c => c.category_id === selectedCategoryId) ?? null;
+  // ADR-297 — only one KPI's people cells are open at a time.
+  const [openKpiKey, setOpenKpiKey] = useState<string | null>(null);
   const openKra: BuConsoleKraNode | null =
     category?.kras.find(k => k.kra_key === selectedKraKey) ?? null;
+  useEffect(() => { setOpenKpiKey(null); }, [selectedKraKey, selectedCategoryId]);
   // ADR-296 — due state is resolved once per open KRA; the console never hides
   // a KPI unless the user asked for the "due this month" view.
   const dueStates = useMemo(() => {
@@ -592,10 +634,8 @@ export function BuConsoleTree({
                           aria-hidden
                           className="pointer-events-none absolute bottom-4 left-4 top-0 hidden w-px bg-border sm:block"
                         />
-                        {renderKraPanel && kraPanelPlacement === 'replace' ? (
-                          renderKraPanel(k, category.category_id)
-                        ) : (
                         <div className="space-y-2">
+                        {isOpen && renderKraSummary ? renderKraSummary(k, category.category_id) : null}
                         {(() => {
                         const visibleKpis = dueOnly
                           ? k.kpis.filter(kpi => dueStates.get(kpi.kpi_key)?.due !== false)
@@ -640,6 +680,16 @@ export function BuConsoleTree({
                                   lookalikeCount={lookalikes.get(kpi.kpi_key)}
                                   dueState={dueStates.get(kpi.kpi_key)}
                                   onFixTextSplit={onFixTextSplit}
+                                  expandable={!!renderKpiPanel}
+                                  expanded={openKpiKey === kpi.kpi_key}
+                                  onToggle={() =>
+                                    setOpenKpiKey(prev => (prev === kpi.kpi_key ? null : kpi.kpi_key))
+                                  }
+                                  panel={
+                                    renderKpiPanel && openKpiKey === kpi.kpi_key
+                                      ? renderKpiPanel(kpi, k, category.category_id)
+                                      : undefined
+                                  }
                                   onOpen={(variantKey) =>
                                     onSelectKpi(category.category_id, k.kra_name, kpi, variantKey)
                                   }
@@ -650,9 +700,7 @@ export function BuConsoleTree({
                         </div>
                         );
                         })()}
-                        {renderKraPanel ? renderKraPanel(k, category.category_id) : null}
                         </div>
-                        )}
                       </div>
                     )}
                   </div>

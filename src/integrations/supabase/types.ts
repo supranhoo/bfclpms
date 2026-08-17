@@ -17301,6 +17301,19 @@ export type Database = {
         }
         Returns: Json
       }
+      bu_console_kpi_create: {
+        Args: {
+          p_bu_ids?: string[]
+          p_dept_ids?: string[]
+          p_division_ids?: string[]
+          p_dry_run?: boolean
+          p_kpi: Json
+          p_manager_ids?: string[]
+          p_period: string
+          p_year: number
+        }
+        Returns: Json
+      }
       bu_console_kpi_detail: {
         Args: {
           p_bu_ids?: string[]

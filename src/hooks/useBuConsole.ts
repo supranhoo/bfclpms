@@ -1518,3 +1518,75 @@ export function useBuConsolePipeline(args: BuConsolePipelineArgs | null) {
     },
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* ADR-297 — create one KPI for many people from the console           */
+/* ------------------------------------------------------------------ */
+
+/** Individual = one per person; shared = one value spread to all; department_event = whole dept. */
+export type ConsoleKpiKind = 'individual' | 'shared' | 'department_event';
+
+export interface ConsoleKpiCreateArgs {
+  kpi: Record<string, unknown> & { kind: ConsoleKpiKind; kpi_name: string; kra_name: string; category_id: string };
+  period: string;
+  year: number;
+  buIds?: string[];
+  deptIds?: string[];
+  divisionIds?: string[];
+  managerIds?: string[];
+  dryRun: boolean;
+}
+
+export interface ConsoleKpiCreateResult {
+  authorized: boolean;
+  reason?: string;
+  dry_run?: boolean;
+  kind?: ConsoleKpiKind;
+  will_create?: number;
+  will_skip?: number;
+  preview?: Array<{ employee_id: string; full_name: string; employee_code?: string | null; department_name?: string | null; business_unit_name?: string | null }>;
+  skipped?: Array<{ employee_id: string; full_name: string; employee_code?: string | null; reason: string }>;
+}
+
+async function callKpiCreate(a: ConsoleKpiCreateArgs): Promise<ConsoleKpiCreateResult> {
+  const { data, error } = await supabase.rpc('bu_console_kpi_create' as any, {
+    p_kpi: a.kpi,
+    p_period: a.period,
+    p_year: a.year,
+    p_bu_ids: a.buIds?.length ? a.buIds : null,
+    p_dept_ids: a.deptIds?.length ? a.deptIds : null,
+    p_division_ids: a.divisionIds?.length ? a.divisionIds : null,
+    p_manager_ids: a.managerIds?.length ? a.managerIds : null,
+    p_dry_run: a.dryRun,
+  });
+  if (error) throw error;
+  return (data ?? { authorized: false }) as unknown as ConsoleKpiCreateResult;
+}
+
+/** Preview only — writes nothing. */
+export function useConsoleKpiCreatePreview() {
+  return useMutation<ConsoleKpiCreateResult, Error, Omit<ConsoleKpiCreateArgs, 'dryRun'>>({
+    mutationFn: (a) => callKpiCreate({ ...a, dryRun: true }),
+    onError: (e: any) => toast.error(e?.message ?? 'Could not build the creation preview.'),
+  });
+}
+
+/** Issues the KPI to everyone in scope after the admin confirms the preview. */
+export function useConsoleKpiCreate() {
+  const qc = useQueryClient();
+  return useMutation<ConsoleKpiCreateResult, Error, Omit<ConsoleKpiCreateArgs, 'dryRun'>>({
+    mutationFn: (a) => callKpiCreate({ ...a, dryRun: false }),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['bu-console-tree'] });
+      qc.invalidateQueries({ queryKey: ['bu-console-run-snapshot'] });
+      if (!res.authorized) {
+        toast.error('Creating KPIs from the console is admin-only.');
+        return;
+      }
+      const n = res.will_create ?? 0;
+      toast.success(`KPI issued to ${n} employee${n === 1 ? '' : 's'}` +
+        (res.will_skip ? ` · ${res.will_skip} skipped` : ''));
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not create the KPI.'),
+  });
+}
