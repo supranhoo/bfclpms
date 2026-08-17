@@ -596,10 +596,21 @@ export function BuConsoleTree({
                           renderKraPanel(k, category.category_id)
                         ) : (
                         <div className="space-y-2">
+                        {(() => {
+                        const visibleKpis = dueOnly
+                          ? k.kpis.filter(kpi => dueStates.get(kpi.kpi_key)?.due !== false)
+                          : k.kpis;
+                        const hiddenCount = k.kpis.length - visibleKpis.length;
+                        return (
                         <div className="overflow-hidden rounded-md border bg-background shadow-sm">
                           <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-1.5">
                             <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              KPIs · {k.kpi_count}
+                              KPIs · {visibleKpis.length}
+                              {hiddenCount > 0 && (
+                                <span className="ml-1 normal-case tracking-normal">
+                                  ({hiddenCount} not due this month hidden)
+                                </span>
+                              )}
                             </p>
                             <span className="hidden shrink-0 gap-3 sm:flex">
                               {['Employees', 'Weightage', 'Avg score'].map(l => (
@@ -613,18 +624,21 @@ export function BuConsoleTree({
                               <span className="w-[120px]" aria-hidden />
                             </span>
                           </div>
-                          {k.kpis.length === 0 ? (
+                          {visibleKpis.length === 0 ? (
                             <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-                              No KPIs mapped under this KRA for the loaded scope.
+                              {k.kpis.length === 0
+                                ? 'No KPIs mapped under this KRA for the loaded scope.'
+                                : 'No KPIs under this KRA are due for data submission this month.'}
                             </p>
                           ) : (
                             <div className="max-h-[420px] divide-y overflow-y-auto">
-                              {k.kpis.map((kpi, ki) => (
+                              {visibleKpis.map((kpi, ki) => (
                                 <KpiRow
                                   key={kpi.kpi_key}
                                   kpi={kpi}
                                   index={ki + 1}
                                   lookalikeCount={lookalikes.get(kpi.kpi_key)}
+                                  dueState={dueStates.get(kpi.kpi_key)}
                                   onFixTextSplit={onFixTextSplit}
                                   onOpen={(variantKey) =>
                                     onSelectKpi(category.category_id, k.kra_name, kpi, variantKey)
@@ -634,6 +648,8 @@ export function BuConsoleTree({
                             </div>
                           )}
                         </div>
+                        );
+                        })()}
                         {renderKraPanel ? renderKraPanel(k, category.category_id) : null}
                         </div>
                         )}
