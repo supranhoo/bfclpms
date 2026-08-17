@@ -260,23 +260,38 @@ export default function BuConsole() {
               </TooltipProvider>
             </h1>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="ml-auto h-8 w-8" aria-label="More console tools">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setAlignmentOpen(true)}>
-                  <Network className="mr-2 h-4 w-4" />
-                  KRA alignment tree
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setLibraryOpen(true)}>
-                  <Library className="mr-2 h-4 w-4" />
-                  KPI library &amp; duplicates
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="ml-auto flex items-center gap-x-3 gap-y-2">
+              {scope && (
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="console-due-only" className="text-xs text-muted-foreground">
+                    Due this month only
+                  </Label>
+                  <Switch
+                    id="console-due-only"
+                    checked={dueOnly}
+                    onCheckedChange={setDueOnly}
+                    aria-label="Show only KPIs open for data submission in the selected month"
+                  />
+                </div>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="More console tools">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setAlignmentOpen(true)}>
+                    <Network className="mr-2 h-4 w-4" />
+                    KRA alignment tree
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setLibraryOpen(true)}>
+                    <Library className="mr-2 h-4 w-4" />
+                    KPI library &amp; duplicates
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
           {isReadOnly && (
             <p className="mt-2 rounded-md border border-warning/40 bg-warning/10 px-2 py-1 text-[11px] text-muted-foreground">
@@ -322,19 +337,6 @@ export default function BuConsole() {
               picks the stage the inline worksheet works at. */}
           {scope && <StageRail scope={scope} stage={stage} onStageChange={setStage} />}
 
-          {scope && (
-            <div className="flex items-center justify-end gap-2 rounded-lg border bg-card px-3 py-1.5">
-              <Label htmlFor="console-due-only" className="text-xs text-muted-foreground">
-                Due this month only
-              </Label>
-              <Switch
-                id="console-due-only"
-                checked={dueOnly}
-                onCheckedChange={setDueOnly}
-                aria-label="Show only KPIs open for data submission in the selected month"
-              />
-            </div>
-          )}
 
           {!scope && !isFetching && (
             <>
