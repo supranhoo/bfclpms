@@ -618,7 +618,12 @@ export default function KpiStatusTracker() {
                       <TableHead className="min-w-[140px]">Status</TableHead>
                       <TableHead className="min-w-[160px]">Pending At</TableHead>
                       <TableHead className="min-w-[180px]">Pending With</TableHead>
-                      <TableHead className="w-20 text-center">Days</TableHead>
+                      <TableHead
+                        className="w-20 text-center"
+                        title="Days since this KPI entered its current stage (from the audit trail)"
+                      >
+                        Days in Stage
+                      </TableHead>
                       <TableHead className="w-16 text-center">Org</TableHead>
                     </TableRow>
                   </TableHeader>
