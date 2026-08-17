@@ -5070,6 +5070,20 @@ detectable and repairable without a developer.
 
 ## §RPT-PENDING-WITH-SSOT — "Pending With (Name)" must be resolver-derived (ADR-178, 2026-07-27)
 
+> **§RPT-PENDING-AT-LEVEL-CHAIN-SSOT — the pending LEVEL is the next stage in the
+> resolved chain (ADR-293, 2026-08-17).**
+> `kpis.status` holds the LAST COMPLETED stage, so a report MUST NOT render a
+> `status → label` map as "Pending At Level" — that names the stage already
+> finished. Use `src/lib/reports/pendingAtLevel.ts`
+> (`resolvePendingAtLevel({ status, isOrgKpi, stageChain })`), where `stageChain`
+> comes from `get_bulk_employee_workflows` (POLICY §105) — never a hardcoded
+> ladder. Rules: (a) `kra_set` → "Org KPI Data Owner" (org KPI) or
+> "Employee (Self Review)" (individual); (b) every other non-terminal status →
+> the next stage in that employee's chain; (c) `approved` or no next stage → `—`;
+> (d) the level MUST be resolved from the same chain map as
+> §RPT-PENDING-WITH-SSOT so level and name can never disagree; (e) screen and
+> Excel read one value. Guard: `src/test/pendingAtLevel.test.ts`.
+
 > **§RPT-DAYS-IN-STAGE-AUDIT-SSOT — ageing clocks read the audit trail, never
 > `updated_at` (ADR-292, 2026-08-17).**
 > Any "Days pending / Days in stage" figure MUST be anchored to the latest

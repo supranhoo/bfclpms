@@ -191,3 +191,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Performance Console Review Run](mem://features/admin/performance-console-review-run) — KPI x employee worksheet, scorecard drawer, tiered target rules (ADR-286/288)
 - [Console Stage Supersede](mem://features/admin/console-stage-supersede) — Console worksheet leapfrog: higher stage closes lower stages with carried score + per-stage audit (ADR-290)
 - [Days in Stage audit SSOT](mem://features/reports/days-in-stage-audit-ssot) — Ageing/day columns derive from kpi_audit_logs, never kpis.updated_at (ADR-292)
+- [Pending At Level chain SSOT](mem://features/reports/pending-at-level-chain-ssot) — pending_at_level = next stage in resolved chain, never a status→label map (ADR-293)
