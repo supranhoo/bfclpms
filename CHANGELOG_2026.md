@@ -4,6 +4,14 @@
 > **Status:** Living document. Append new ships under the **current week's row**, in the same step that you update `DOCUMENTATION.md` Version History.
 > **Sources:** `DOCUMENTATION.md` Version History, `supabase/migrations/`, `mem/*`.
 
+## 2026-08-18 — Evidence preview says what actually failed (ADR-298)
+
+**What:** An evidence preview that fails now distinguishes "we couldn't reach the file server" (browser extension / ad-blocker / office network) from "the file server is busy" (5xx, timeout) and from a real access denial. The signing call retries automatically with backoff, and the error state carries a copyable diagnostics line (status, error name, elapsed ms, attempts, bucket, KPI id, failure class).
+
+**Why:** Ashish Kataria (200226) could not open a self-evidence image; the dialog said the server was busy and Retry never worked. The file exists and the message was a catch-all — a blocked local fetch and genuine server pressure were rendered identically, so users retried a failure retry could never fix.
+
+**How:** Reproduce, read the Diagnostics line under the error and send it to support: `class=network-blocked` means a local block (use Download or another browser); `class=server-busy` with multi-second elapsed means backend pressure.
+
 ## 2026-08-14 — Read-only rows and disabled Submit now explain themselves (ADR-258)
 
 **What:** The Submit Self Review sheet states why a KPI cannot be edited (period locked by admin, KPI already at a later stage, or org-level KPI owned by a named data owner) and why Submit is greyed out (missing achieved value, missing day/week selection, unfinished multi-month cycle, N/A justification under 50 characters, mandatory remarks).

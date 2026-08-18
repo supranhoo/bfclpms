@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { normalizeEvidenceError } from '@/lib/review/evidenceError';
 import {
   Dialog,
   DialogContent,
@@ -126,7 +127,9 @@ export function EvidencePreviewDialog({
         if (!cancelled) setSignedUrl(u);
       })
       .catch((e: Error) => {
-        if (!cancelled) setUrlError(e.message);
+        // ADR-298: same classification as the review-side preview — a blocked
+        // fetch must not be presented as "server busy" or as a denial.
+        if (!cancelled) setUrlError(normalizeEvidenceError(e, e.message));
       })
       .finally(() => {
         if (!cancelled) setLoadingUrl(false);

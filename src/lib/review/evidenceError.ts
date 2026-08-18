@@ -16,6 +16,42 @@ const ACCESS_DENIED =
 const SERVER_BUSY =
   'The file server is busy right now — please retry in a moment.';
 
+/**
+ * ADR-298 / POLICY §EVIDENCE-PREVIEW-FAILURE-CLARITY. A fetch that never
+ * reaches the server (browser extension, ad-blocker, corporate proxy, offline)
+ * is NOT retryable — telling the user the server is "busy" sends them into an
+ * endless retry loop for a problem retry cannot solve.
+ */
+const NETWORK_BLOCKED =
+  "We couldn't reach the file server. This is usually a browser extension, ad-blocker or office network blocking the download — try another browser, or use Download instead.";
+
+function errorText(err: unknown): string {
+  const anyErr = err as { name?: unknown; message?: unknown; error?: unknown };
+  return (
+    typeof err === 'string'
+      ? err
+      : [anyErr?.name, anyErr?.message, anyErr?.error].filter((v) => typeof v === 'string').join(' ')
+  ).toLowerCase();
+}
+
+/** True when the request never reached the server (no HTTP status at all). */
+export function isNetworkBlockedEvidenceError(err: unknown): boolean {
+  if (err == null) return false;
+  const code = String((err as { statusCode?: unknown })?.statusCode ?? '');
+  if (code) return false; // a status means the server answered
+  const text = errorText(err);
+  if (!text) return false;
+  return (
+    text.includes('failed to fetch') ||
+    text.includes('networkerror') ||
+    text.includes('network error') ||
+    text.includes('load failed') ||
+    text.includes('err_blocked') ||
+    text.includes('err_connection') ||
+    text.includes('err_internet_disconnected')
+  );
+}
+
 export function isTransientEvidenceError(err: unknown): boolean {
   if (err == null) return false;
 
@@ -49,6 +85,9 @@ export function isTransientEvidenceError(err: unknown): boolean {
 }
 
 export function normalizeEvidenceError(err: unknown, fallback = ACCESS_DENIED): string {
+  // A blocked/unreachable fetch must be named as such, never as "busy".
+  if (isNetworkBlockedEvidenceError(err)) return NETWORK_BLOCKED;
+
   // Transient backend pressure must never be reported as a permission problem.
   if (isTransientEvidenceError(err)) return SERVER_BUSY;
 
@@ -80,3 +119,29 @@ export function normalizeEvidenceError(err: unknown, fallback = ACCESS_DENIED): 
 
 export const EVIDENCE_ACCESS_DENIED_MESSAGE = ACCESS_DENIED;
 export const EVIDENCE_SERVER_BUSY_MESSAGE = SERVER_BUSY;
+export const EVIDENCE_NETWORK_BLOCKED_MESSAGE = NETWORK_BLOCKED;
+
+/** Structured, copyable diagnostics for support — never contains file bytes. */
+export function describeEvidenceFailure(
+  err: unknown,
+  ctx: { bucket?: string | null; kpiId?: string | null; elapsedMs?: number; attempts?: number },
+): string {
+  const anyErr = err as { name?: unknown; message?: unknown; statusCode?: unknown };
+  const parts = [
+    `status=${String(anyErr?.statusCode ?? 'none')}`,
+    `name=${String(anyErr?.name ?? (typeof err === 'string' ? 'string' : 'unknown'))}`,
+    `msg=${String(anyErr?.message ?? (typeof err === 'string' ? err : '')).slice(0, 160) || 'none'}`,
+    `elapsed=${ctx.elapsedMs ?? '?'}ms`,
+    `attempts=${ctx.attempts ?? 1}`,
+    `bucket=${ctx.bucket ?? 'n/a'}`,
+    `kpi=${ctx.kpiId ?? 'n/a'}`,
+    `class=${
+      isNetworkBlockedEvidenceError(err)
+        ? 'network-blocked'
+        : isTransientEvidenceError(err)
+          ? 'server-busy'
+          : 'other'
+    }`,
+  ];
+  return parts.join(' ');
+}
