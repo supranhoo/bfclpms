@@ -6050,6 +6050,27 @@ overwrite fields absent from the upload.
 
 ---
 
+## §EVIDENCE-PREVIEW-FAILURE-CLARITY (ADR-298, 2026-08-18)
+
+1. **Name the class of failure.** An evidence preview failure MUST render one
+   of exactly three meanings: no access (403/404/RLS), not reachable
+   (status-less fetch failure — extension, ad-blocker, proxy, offline), or
+   server busy (5xx / 408 / 429 / 57014 / preview timeout).
+2. **Never present an unretryable failure as retryable.** A status-less fetch
+   failure must not use the "busy, please retry" wording; it must tell the user
+   the request never reached the server and offer Download / another browser.
+3. **Bounded automatic retry.** The signing call retries with backoff
+   (400 ms, 1200 ms) inside the 20 s guard, and short-circuits on a
+   network-blocked failure. Manual Retry and Download-instead remain.
+4. **Diagnostics are mandatory on failure.** The error state exposes a copyable
+   line with status, error name/message, elapsed ms, attempts, bucket, KPI id
+   and failure class. It must never contain file bytes or tokens.
+5. Both preview surfaces (`components/review/EvidencePreviewDialog.tsx` and
+   `components/safety/EvidencePreviewDialog.tsx`) classify through
+   `normalizeEvidenceError()`.
+
+---
+
 ## §PMS-CONTINUITY-AT-OR-BELOW (ADR-252)
 
 1. **At or below, never strictly below.** A KPI (TNI) or an overall score (PIP)
