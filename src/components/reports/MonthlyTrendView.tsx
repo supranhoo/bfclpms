@@ -91,7 +91,7 @@ export function MonthlyTrendView({ canExport }: Props) {
     queryFn: getPipPolicySettings,
     staleTime: 5 * 60 * 1000,
   });
-  const minScoredMonths = pipPolicy?.consecutiveMonths ?? DEFAULT_PIP_POLICY.consecutiveMonths;
+  const configMinScoredMonths = pipPolicy?.consecutiveMonths ?? DEFAULT_PIP_POLICY.consecutiveMonths;
 
   const yearOptions = useMemo(() => {
     const y = currentYear;
