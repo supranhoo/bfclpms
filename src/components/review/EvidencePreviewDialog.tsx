@@ -6,7 +6,12 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, Maximize2, Minimize2, RotateCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { isPreviewableEvidence } from '@/lib/storageDownload';
-import { normalizeEvidenceError, EVIDENCE_SERVER_BUSY_MESSAGE } from '@/lib/review/evidenceError';
+import {
+  normalizeEvidenceError,
+  EVIDENCE_SERVER_BUSY_MESSAGE,
+  describeEvidenceFailure,
+  isNetworkBlockedEvidenceError,
+} from '@/lib/review/evidenceError';
 import { toast } from 'sonner';
 
 /**
@@ -17,6 +22,12 @@ import { toast } from 'sonner';
 const PREVIEW_TIMEOUT_MS = 20_000;
 /** Signed-URL lifetime for streamed previews (seconds). */
 const SIGNED_URL_TTL = 600;
+/**
+ * ADR-298: a single transient blip should resolve itself. Backoff delays (ms)
+ * between signing attempts; a network-blocked failure short-circuits instead.
+ */
+const SIGN_RETRY_DELAYS_MS = [400, 1200];
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type EvidenceGroupItem = { url: string; fileName?: string | null };
 type EvidencePreviewDetail = {
@@ -67,6 +78,7 @@ export function EvidencePreviewProvider() {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [group, setGroup] = useState<EvidenceGroupItem[] | null>(null);
   const [groupIndex, setGroupIndex] = useState(0);
@@ -99,9 +111,14 @@ export function EvidencePreviewProvider() {
     let timer: ReturnType<typeof setTimeout> | null = null;
     setLoading(true);
     setError(null);
+    setDiagnostics(null);
     setBlobUrl(null);
 
     (async () => {
+      const startedAt = Date.now();
+      let attempts = 0;
+      let bucketForDiag: string | null = null;
+      let kpiForDiag: string | null = null;
       try {
         const match = detail.url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
         const kindNow = isPreviewableEvidence(detail.fileName ?? detail.url);
@@ -111,27 +128,51 @@ export function EvidencePreviewProvider() {
           // path buffered the WHOLE file into a Blob before painting a single
           // pixel, so a queued Storage request looked like a frozen dialog.
           const [, bucket, path] = match;
-          const signPromise = supabase.storage
-            .from(bucket)
-            .createSignedUrl(decodeURIComponent(path), SIGNED_URL_TTL);
+          const decodedPath = decodeURIComponent(path);
+          bucketForDiag = bucket;
+          kpiForDiag = decodedPath.split('/')[1] ?? null;
           const timeout = new Promise<never>((_, reject) => {
             timer = setTimeout(
               () => reject(new Error(EVIDENCE_SERVER_BUSY_MESSAGE)),
               PREVIEW_TIMEOUT_MS,
             );
           });
-          const { data, error: sErr } = await Promise.race([signPromise, timeout]);
+
+          // ADR-298: bounded retry with backoff around the signing call.
+          let data: { signedUrl: string } | null = null;
+          let sErr: unknown = null;
+          for (let i = 0; i <= SIGN_RETRY_DELAYS_MS.length; i++) {
+            if (cancelled) return;
+            attempts = i + 1;
+            const signPromise = supabase.storage
+              .from(bucket)
+              .createSignedUrl(decodedPath, SIGNED_URL_TTL)
+              .then((r) => r)
+              .catch((e) => ({ data: null, error: e }));
+            const res = await Promise.race([signPromise, timeout]);
+            data = (res as { data: { signedUrl: string } | null }).data;
+            sErr = (res as { error: unknown }).error;
+            if (data?.signedUrl) {
+              sErr = null;
+              break;
+            }
+            // A blocked/unreachable fetch will never succeed on retry.
+            if (isNetworkBlockedEvidenceError(sErr)) break;
+            if (i < SIGN_RETRY_DELAYS_MS.length) await sleep(SIGN_RETRY_DELAYS_MS[i]);
+          }
+
           if (sErr || !data?.signedUrl) {
             // ADR-256: keep the real storage status/message in the console so a
             // denial can be traced to a KPI id, while the user still sees the
             // normalised message.
-            console.warn('[evidence-preview] sign failed', {
+            const diag = describeEvidenceFailure(sErr, {
               bucket,
-              path: decodeURIComponent(path),
-              kpiId: decodeURIComponent(path).split('/')[1] ?? null,
-              status: (sErr as { statusCode?: unknown } | null)?.statusCode ?? null,
-              message: (sErr as { message?: unknown } | null)?.message ?? null,
+              kpiId: kpiForDiag,
+              elapsedMs: Date.now() - startedAt,
+              attempts,
             });
+            console.warn('[evidence-preview] sign failed', diag, { path: decodedPath });
+            if (!cancelled) setDiagnostics(diag);
             throw new Error(normalizeEvidenceError(sErr));
           }
           createdUrl = data.signedUrl;
@@ -141,7 +182,19 @@ export function EvidencePreviewProvider() {
         }
         if (!cancelled) setBlobUrl(createdUrl);
       } catch (err) {
-        if (!cancelled) setError(normalizeEvidenceError(err));
+        if (!cancelled) {
+          setError(normalizeEvidenceError(err));
+          setDiagnostics(
+            (prev) =>
+              prev ??
+              describeEvidenceFailure(err, {
+                bucket: bucketForDiag,
+                kpiId: kpiForDiag,
+                elapsedMs: Date.now() - startedAt,
+                attempts: attempts || 1,
+              }),
+          );
+        }
       } finally {
         if (timer) clearTimeout(timer);
         if (!cancelled) setLoading(false);
