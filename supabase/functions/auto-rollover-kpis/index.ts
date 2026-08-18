@@ -731,7 +731,7 @@ Deno.serve(async (req) => {
 
     // ── Send ONE consolidated notification + email per affected employee ──
     // (supabaseUrl is already declared at the top of the handler)
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const internalKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!; // anon key is rejected by send-email-notification
 
     for (const result of rolledOver) {
       const empId = result.employee_id;
@@ -793,8 +793,8 @@ Deno.serve(async (req) => {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'apikey': anonKey,
-                'Authorization': `Bearer ${anonKey}`,
+                'apikey': internalKey,
+                'Authorization': `Bearer ${internalKey}`,
               },
               body: JSON.stringify({
                 event_type: 'kra_rollover',

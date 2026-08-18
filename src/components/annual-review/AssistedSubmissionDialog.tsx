@@ -67,6 +67,13 @@ export function AssistedSubmissionDialog({
 
   const declarationText = selfieRequired ? DECLARATION : DECLARATION_NO_PHOTO;
 
+  // Evidence gate: each admin-enabled requirement must be satisfied on its own.
+  // With both toggles off, any single piece of visual evidence is enough.
+  const mediaMissing =
+    (selfieRequired && !snapshot) ||
+    (photoUploadRequired && !uploadFile) ||
+    (!selfieRequired && !photoUploadRequired && !snapshot && !uploadFile);
+
   // ADR-115 (supersedes ADR-114): assisted submit MUST NOT advance the
   // workflow when the self form is empty. The correct signal is "any numeric
   // criterion score saved" — NOT `weighted_score IS NOT NULL`, because draft
@@ -155,8 +162,11 @@ export function AssistedSubmissionDialog({
   };
 
   const submit = async () => {
-    // At least one form of visual evidence must be provided (selfie OR uploaded photo).
-    if (!snapshot && !uploadFile) return;
+    // Admin-configured evidence requirements are enforced individually; when both
+    // toggles are off at least one form of visual evidence is still required.
+    if (selfieRequired && !snapshot) return;
+    if (photoUploadRequired && !uploadFile) return;
+    if (!selfieRequired && !photoUploadRequired && !snapshot && !uploadFile) return;
     if (!hasScoredSelf) {
       toast.error(
         t(
@@ -344,18 +354,21 @@ export function AssistedSubmissionDialog({
               )}
             </p>
           )}
-          {hasScoredSelf && !snapshot && !uploadFile && (
+          {hasScoredSelf && mediaMissing && (
             <p className="text-xs text-amber-600 sm:mr-auto">
-              {t(
-                'assisted.hint.anyMedia',
-                'To enable Verify & Submit, capture a live selfie or upload a photograph.',
-              )}
+              {selfieRequired && photoUploadRequired
+                ? t('assisted.hint.bothMedia', 'To enable Verify & Submit, capture a live selfie AND upload a photograph.')
+                : selfieRequired
+                  ? t('assisted.hint.selfieMedia', 'To enable Verify & Submit, capture a live selfie.')
+                  : photoUploadRequired
+                    ? t('assisted.hint.uploadMedia', 'To enable Verify & Submit, upload a photograph.')
+                    : t('assisted.hint.anyMedia', 'To enable Verify & Submit, capture a live selfie or upload a photograph.')}
             </p>
           )}
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>{t('assisted.btn.cancel', 'Cancel')}</Button>
           <Button
             onClick={submit}
-            disabled={(!snapshot && !uploadFile) || submitting || !hasScoredSelf || selfScoreLoading}
+            disabled={mediaMissing || submitting || !hasScoredSelf || selfScoreLoading}
           >
             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {t('assisted.btn.submit', 'Verify & Submit')}

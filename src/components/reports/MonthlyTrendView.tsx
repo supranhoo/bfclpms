@@ -91,7 +91,7 @@ export function MonthlyTrendView({ canExport }: Props) {
     queryFn: getPipPolicySettings,
     staleTime: 5 * 60 * 1000,
   });
-  const minScoredMonths = pipPolicy?.consecutiveMonths ?? DEFAULT_PIP_POLICY.consecutiveMonths;
+  const configMinScoredMonths = pipPolicy?.consecutiveMonths ?? DEFAULT_PIP_POLICY.consecutiveMonths;
 
   const yearOptions = useMemo(() => {
     const y = currentYear;
@@ -149,6 +149,9 @@ export function MonthlyTrendView({ canExport }: Props) {
   // PIP rule lives in `@/lib/pip/pipCandidateRule` (ADR-205 SSOT) so the
   // report, the PIP module and the unit tests cannot drift apart.
   const monthKeys = useMemo(() => months.map(m => m.key), [months]);
+  // Clamp the policy minimum to the visible window — a 3-month range can never
+  // satisfy a 4-month continuity rule, which silently zeroed the PIP filter.
+  const minScoredMonths = Math.max(1, Math.min(configMinScoredMonths, monthKeys.length || 1));
   // ADR-252 — at-or-below in every scored month, with a configurable minimum
   // number of scored months (unscored months are skipped, not failures).
   const isPipCandidate = (emp: typeof allEmployees[number]): boolean =>

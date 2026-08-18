@@ -63,7 +63,14 @@ export function ReviewFormViewerDialog({
   const calRow = instance
     ? {
       total_score: instance.total_score,
-      calibrated_rating: (instance as unknown as { calibrated_rating?: number | null }).calibrated_rating ?? null,
+      // ADR-220 — the calibration lives in `annual_review_calibrations`, not on
+      // the instance row; fall back to any denormalised column if present.
+      calibrated_rating:
+        data?.calibration?.calibrated_rating
+        ?? (instance as unknown as { calibrated_rating?: number | null }).calibrated_rating
+        ?? null,
+      calibration_reason: data?.calibration?.reason ?? null,
+      calibrated_at: data?.calibration?.calibrated_at ?? null,
     }
     : null;
 

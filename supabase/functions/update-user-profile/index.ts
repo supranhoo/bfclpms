@@ -198,7 +198,9 @@ Deno.serve(async (req) => {
       // (hrms@bfclalloys.com via Microsoft Graph) to the NEW email address.
       try {
         const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-        const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+        // Internal service-to-service call: the publishable/anon key is no
+        // longer accepted by send-email-notification's caller gate.
+        const internalKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
         // Get recipient name from profiles
         const { data: profileData } = await supabaseAdmin
@@ -213,8 +215,8 @@ Deno.serve(async (req) => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${anonKey}`,
-            'apikey': anonKey,
+            'Authorization': `Bearer ${internalKey}`,
+            'apikey': internalKey,
           },
           body: JSON.stringify({
             event_type: 'email_changed',

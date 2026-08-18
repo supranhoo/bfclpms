@@ -17,6 +17,12 @@ export interface InstanceReviewForm {
   employeeCode: string | null;
   template: AnnualReviewTemplate | null;
   responses: ReviewFormResponseRow[];
+  /** ADR-220 — admin calibration in force for this instance, if any. */
+  calibration: {
+    calibrated_rating: number | null;
+    reason: string | null;
+    calibrated_at: string | null;
+  } | null;
 }
 
 export function useInstanceReviewForm(instanceId: string | null | undefined) {
@@ -38,7 +44,7 @@ export function useInstanceReviewForm(instanceId: string | null | undefined) {
       };
       const templateId = row.template_override_id ?? row.template_id;
 
-      const [tplRes, respRes] = await Promise.all([
+      const [tplRes, respRes, calRes] = await Promise.all([
         templateId
           ? supabase.from('annual_review_templates').select('*').eq('id', templateId).maybeSingle()
           : Promise.resolve({ data: null, error: null } as const),
@@ -46,9 +52,21 @@ export function useInstanceReviewForm(instanceId: string | null | undefined) {
           .from('annual_review_responses')
           .select('reviewer_role, criteria_scores, qualitative_responses, weighted_score, submitted_at, notes, reviewer:reviewer_id(full_name)')
           .eq('instance_id', instanceId as string),
+        supabase
+          .from('annual_review_calibrations')
+          .select('calibrated_rating, reason, updated_at, created_at')
+          .eq('instance_id', instanceId as string)
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ]);
       if (tplRes.error) throw tplRes.error;
       if (respRes.error) throw respRes.error;
+      // A missing / unreadable calibration must never break the viewer.
+      const calRow = calRes.error ? null : (calRes.data as {
+        calibrated_rating: number | null; reason: string | null;
+        updated_at: string | null; created_at: string | null;
+      } | null);
 
       const responses: ReviewFormResponseRow[] = (respRes.data ?? []).map((r: any) => ({
         reviewer_role: r.reviewer_role,
@@ -66,6 +84,13 @@ export function useInstanceReviewForm(instanceId: string | null | undefined) {
         employeeCode: row.employee?.employee_code ?? null,
         template: (tplRes.data as AnnualReviewTemplate | null) ?? null,
         responses,
+        calibration: calRow
+          ? {
+            calibrated_rating: calRow.calibrated_rating ?? null,
+            reason: calRow.reason ?? null,
+            calibrated_at: calRow.updated_at ?? calRow.created_at ?? null,
+          }
+          : null,
       };
     },
   });
