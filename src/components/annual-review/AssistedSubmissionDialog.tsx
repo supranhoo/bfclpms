@@ -67,6 +67,13 @@ export function AssistedSubmissionDialog({
 
   const declarationText = selfieRequired ? DECLARATION : DECLARATION_NO_PHOTO;
 
+  // Evidence gate: each admin-enabled requirement must be satisfied on its own.
+  // With both toggles off, any single piece of visual evidence is enough.
+  const mediaMissing =
+    (selfieRequired && !snapshot) ||
+    (photoUploadRequired && !uploadFile) ||
+    (!selfieRequired && !photoUploadRequired && !snapshot && !uploadFile);
+
   // ADR-115 (supersedes ADR-114): assisted submit MUST NOT advance the
   // workflow when the self form is empty. The correct signal is "any numeric
   // criterion score saved" — NOT `weighted_score IS NOT NULL`, because draft
