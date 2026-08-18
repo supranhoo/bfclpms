@@ -11,3 +11,12 @@ POLICY §PERF-EVIDENCE-PREVIEW (ADR-250, 2026-08-04):
 4. `review-evidence` storage SELECT policies call `public.can_read_kpi_evidence(uuid)` which uses `(select auth.uid())` for per-statement caching.
 
 Guards: `src/test/allKpisRpcContract.test.ts`, `src/test/evidenceErrorTransient.test.ts`.
+
+## Failure clarity (ADR-298, POLICY §EVIDENCE-PREVIEW-FAILURE-CLARITY)
+
+`normalizeEvidenceError` has THREE outcomes, not two:
+- `isNetworkBlockedEvidenceError` (status-less `Failed to fetch` / NetworkError / Load failed / net::ERR_*) → `EVIDENCE_NETWORK_BLOCKED_MESSAGE` — not retryable, blame the extension/ad-blocker/proxy.
+- `isTransientEvidenceError` (5xx/408/429/57014/timeout, server answered) → `EVIDENCE_SERVER_BUSY_MESSAGE` — retryable.
+- 403/404/RLS → `EVIDENCE_ACCESS_DENIED_MESSAGE`.
+
+Signing retries with backoff `[400, 1200]ms` inside the 20s guard and short-circuits on network-blocked. Error state must show the copyable `describeEvidenceFailure()` diagnostics line.
