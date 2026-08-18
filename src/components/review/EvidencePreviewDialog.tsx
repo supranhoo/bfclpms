@@ -331,6 +331,24 @@ export function EvidencePreviewProvider() {
                 <Download className="h-4 w-4 mr-1" /> Download instead
               </Button>
             </div>
+            {diagnostics && (
+              <div className="mt-4 text-[11px] text-muted-foreground break-all max-w-md mx-auto">
+                <span className="font-medium">Diagnostics:</span> {diagnostics}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-2 h-6 px-2 text-[11px]"
+                  onClick={() => {
+                    navigator.clipboard
+                      ?.writeText(diagnostics)
+                      .then(() => toast.success('Diagnostics copied'))
+                      .catch(() => toast.error('Could not copy diagnostics'));
+                  }}
+                >
+                  Copy
+                </Button>
+              </div>
+            )}
           </div>
         )}
         {!loading && !error && blobUrl && kind === 'pdf' && (
