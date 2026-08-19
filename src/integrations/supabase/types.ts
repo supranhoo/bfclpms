@@ -10357,6 +10357,218 @@ export type Database = {
           },
         ]
       }
+      org_kpi_approval_chains: {
+        Row: {
+          approver_id: string | null
+          approver_role: Database["public"]["Enums"]["app_role"] | null
+          category_id: string
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          id: string
+          is_active: boolean
+          kpi_name: string
+          kra_name: string
+          label: string
+          step_kind: string
+          step_no: number
+          updated_at: string
+        }
+        Insert: {
+          approver_id?: string | null
+          approver_role?: Database["public"]["Enums"]["app_role"] | null
+          category_id: string
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          id?: string
+          is_active?: boolean
+          kpi_name: string
+          kra_name: string
+          label: string
+          step_kind?: string
+          step_no: number
+          updated_at?: string
+        }
+        Update: {
+          approver_id?: string | null
+          approver_role?: Database["public"]["Enums"]["app_role"] | null
+          category_id?: string
+          created_at?: string
+          created_by?: string | null
+          effective_from?: string
+          id?: string
+          is_active?: boolean
+          kpi_name?: string
+          kra_name?: string
+          label?: string
+          step_kind?: string
+          step_no?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_kpi_approval_chains_approver_id_fkey"
+            columns: ["approver_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_approval_chains_approver_id_fkey"
+            columns: ["approver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_approval_chains_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_approval_chains_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_approval_chains_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_kpi_approvals: {
+        Row: {
+          achieved_value_at_decision: number | null
+          actor_id: string | null
+          actor_role: string | null
+          comment: string | null
+          decided_at: string
+          decision: string
+          id: string
+          okv_id: string
+          step_label: string | null
+          step_no: number
+        }
+        Insert: {
+          achieved_value_at_decision?: number | null
+          actor_id?: string | null
+          actor_role?: string | null
+          comment?: string | null
+          decided_at?: string
+          decision: string
+          id?: string
+          okv_id: string
+          step_label?: string | null
+          step_no: number
+        }
+        Update: {
+          achieved_value_at_decision?: number | null
+          actor_id?: string | null
+          actor_role?: string | null
+          comment?: string | null
+          decided_at?: string
+          decision?: string
+          id?: string
+          okv_id?: string
+          step_label?: string | null
+          step_no?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_kpi_approvals_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_approvals_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_approvals_okv_id_fkey"
+            columns: ["okv_id"]
+            isOneToOne: false
+            referencedRelation: "org_kpi_values"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_kpi_central_registry: {
+        Row: {
+          category_id: string
+          created_at: string
+          created_by: string | null
+          cutoff_day: number | null
+          id: string
+          is_active: boolean
+          kpi_name: string
+          kra_name: string
+          notes: string | null
+          propagation_mode: string
+          updated_at: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          created_by?: string | null
+          cutoff_day?: number | null
+          id?: string
+          is_active?: boolean
+          kpi_name: string
+          kra_name: string
+          notes?: string | null
+          propagation_mode?: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          created_by?: string | null
+          cutoff_day?: number | null
+          id?: string
+          is_active?: boolean
+          kpi_name?: string
+          kra_name?: string
+          notes?: string | null
+          propagation_mode?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_kpi_central_registry_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_central_registry_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "eligible_login_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_central_registry_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_kpi_data_entry_logs: {
         Row: {
           action: string
@@ -10761,6 +10973,7 @@ export type Database = {
           category_id: string
           created_at: string
           criteria: string | null
+          current_step: number | null
           data_source: string | null
           department_id: string | null
           division_id: string | null
@@ -10779,6 +10992,7 @@ export type Database = {
           level_id: string | null
           location_id: string | null
           pms_grade_id: string | null
+          propagation_mode: string | null
           qualitative_options: Json | null
           r0: string | null
           r1: string | null
@@ -10796,9 +11010,11 @@ export type Database = {
           status: string | null
           sub_factors: Json | null
           submission_count: number | null
+          submitted_at: string | null
           target_value: number | null
           uom_type: string | null
           updated_at: string
+          workflow_stage: string | null
         }
         Insert: {
           achieved_value?: number | null
@@ -10806,6 +11022,7 @@ export type Database = {
           category_id: string
           created_at?: string
           criteria?: string | null
+          current_step?: number | null
           data_source?: string | null
           department_id?: string | null
           division_id?: string | null
@@ -10824,6 +11041,7 @@ export type Database = {
           level_id?: string | null
           location_id?: string | null
           pms_grade_id?: string | null
+          propagation_mode?: string | null
           qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
@@ -10841,9 +11059,11 @@ export type Database = {
           status?: string | null
           sub_factors?: Json | null
           submission_count?: number | null
+          submitted_at?: string | null
           target_value?: number | null
           uom_type?: string | null
           updated_at?: string
+          workflow_stage?: string | null
         }
         Update: {
           achieved_value?: number | null
@@ -10851,6 +11071,7 @@ export type Database = {
           category_id?: string
           created_at?: string
           criteria?: string | null
+          current_step?: number | null
           data_source?: string | null
           department_id?: string | null
           division_id?: string | null
@@ -10869,6 +11090,7 @@ export type Database = {
           level_id?: string | null
           location_id?: string | null
           pms_grade_id?: string | null
+          propagation_mode?: string | null
           qualitative_options?: Json | null
           r0?: string | null
           r1?: string | null
@@ -10886,9 +11108,11 @@ export type Database = {
           status?: string | null
           sub_factors?: Json | null
           submission_count?: number | null
+          submitted_at?: string | null
           target_value?: number | null
           uom_type?: string | null
           updated_at?: string
+          workflow_stage?: string | null
         }
         Relationships: [
           {
@@ -19353,6 +19577,92 @@ export type Database = {
         Args: { _cycle_id: string }
         Returns: number
       }
+      org_kpi_can_read_central: {
+        Args: {
+          p_category_id: string
+          p_kpi_name: string
+          p_kra_name: string
+          p_user: string
+        }
+        Returns: boolean
+      }
+      org_kpi_central_config: {
+        Args: { p_category_id: string; p_kpi_name: string; p_kra_name: string }
+        Returns: {
+          category_id: string
+          created_at: string
+          created_by: string | null
+          cutoff_day: number | null
+          id: string
+          is_active: boolean
+          kpi_name: string
+          kra_name: string
+          notes: string | null
+          propagation_mode: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "org_kpi_central_registry"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      org_kpi_chain_list: {
+        Args: { p_category_id: string; p_kpi_name: string; p_kra_name: string }
+        Returns: Json
+      }
+      org_kpi_chain_upsert: {
+        Args: {
+          p_category_id: string
+          p_cutoff_day?: number
+          p_effective_from?: string
+          p_kpi_name: string
+          p_kra_name: string
+          p_propagation_mode?: string
+          p_steps: Json
+        }
+        Returns: Json
+      }
+      org_kpi_decide: {
+        Args: {
+          p_comment?: string
+          p_decision: string
+          p_dry_run?: boolean
+          p_okv_id: string
+        }
+        Returns: Json
+      }
+      org_kpi_effective_chain: {
+        Args: {
+          p_as_of?: string
+          p_category_id: string
+          p_kpi_name: string
+          p_kra_name: string
+        }
+        Returns: {
+          approver_id: string | null
+          approver_role: Database["public"]["Enums"]["app_role"] | null
+          category_id: string
+          created_at: string
+          created_by: string | null
+          effective_from: string
+          id: string
+          is_active: boolean
+          kpi_name: string
+          kra_name: string
+          label: string
+          step_kind: string
+          step_no: number
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "org_kpi_approval_chains"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       org_kpi_evidence_parity: {
         Args: { p_review_period: string; p_review_year: number }
         Returns: {
@@ -19381,6 +19691,10 @@ export type Database = {
           kpi_status: string
         }[]
       }
+      org_kpi_finalise: {
+        Args: { p_dry_run?: boolean; p_okv_id: string }
+        Returns: Json
+      }
       org_kpi_master_child_drift: {
         Args: { p_review_period: string; p_review_year: number }
         Returns: {
@@ -19391,6 +19705,23 @@ export type Database = {
           master_propagated: number
           master_rows: number
         }[]
+      }
+      org_kpi_step_actor_matches: {
+        Args: {
+          p_step: Database["public"]["Tables"]["org_kpi_approval_chains"]["Row"]
+          p_user: string
+        }
+        Returns: boolean
+      }
+      org_kpi_submit_value: {
+        Args: {
+          p_achieved_value?: number
+          p_dry_run?: boolean
+          p_evidence_urls?: Json
+          p_okv_id: string
+          p_remarks?: string
+        }
+        Returns: Json
       }
       override_annual_review_rating: {
         Args: { p_instance_id: string; p_new_rating: string; p_reason: string }
