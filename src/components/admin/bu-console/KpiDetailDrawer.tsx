@@ -34,6 +34,7 @@ import { GroupValueEntryDialog } from './GroupValueEntryDialog';
 import { GroupApprovalDialog } from './GroupApprovalDialog';
 import { GroupDefinitionEditDialog } from './GroupDefinitionEditDialog';
 import { RowOverrideDialog } from './RowOverrideDialog';
+import { CentralValuePanel } from './CentralValuePanel';
 
 interface Props {
   args: KpiDetailArgs | null;
@@ -158,6 +159,20 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
               review.
             </p>
           </div>
+        )}
+
+        {/* ADR-302 — central data panel: visible only for KPIs registered in the
+            central approval registry, additive to the existing group actions. */}
+        {data?.authorized && args && (
+          <CentralValuePanel
+            categoryId={args.categoryId}
+            kraName={args.kraName}
+            kpiName={args.kpiName}
+            kpiTitle={args.kpiTitle ?? def.kpi_title ?? null}
+            period={args.period}
+            year={args.year}
+            scoringModel={mixedTypes ? null : scoringModel}
+          />
         )}
 
         {showGroupActions && (
