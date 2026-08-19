@@ -8,26 +8,22 @@ import { supabase } from '@/integrations/supabase/client';
 import { isPreviewableEvidence } from '@/lib/storageDownload';
 import {
   normalizeEvidenceError,
-  EVIDENCE_SERVER_BUSY_MESSAGE,
   describeEvidenceFailure,
-  isNetworkBlockedEvidenceError,
 } from '@/lib/review/evidenceError';
+import {
+  loadEvidencePreviewUrl,
+  EvidenceLoadError,
+  SIGNED_URL_TTL as LOADER_SIGNED_URL_TTL,
+} from '@/lib/review/evidencePreviewLoader';
 import { toast } from 'sonner';
 
 /**
- * ADR-250. A preview must never hang indefinitely: when Storage is queued
- * behind a saturated database the request can sit open far longer than a
- * reviewer will wait. Fail fast at 20s and offer an explicit retry.
+ * ADR-250 / ADR-300. A preview must never hang indefinitely, and it must never
+ * fail while a working transport for the same object exists. The timeout,
+ * retry and download-fallback policy lives in `evidencePreviewLoader` so this
+ * component stays rendering-only.
  */
-const PREVIEW_TIMEOUT_MS = 20_000;
-/** Signed-URL lifetime for streamed previews (seconds). */
-const SIGNED_URL_TTL = 600;
-/**
- * ADR-298: a single transient blip should resolve itself. Backoff delays (ms)
- * between signing attempts; a network-blocked failure short-circuits instead.
- */
-const SIGN_RETRY_DELAYS_MS = [400, 1200];
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const SIGNED_URL_TTL = LOADER_SIGNED_URL_TTL;
 
 type EvidenceGroupItem = { url: string; fileName?: string | null };
 type EvidencePreviewDetail = {
