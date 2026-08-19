@@ -39,6 +39,8 @@ export interface EvidenceLoaderDeps {
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
   isCancelled?: () => boolean;
+  /** Override the per-attempt budget (tests only). */
+  attemptTimeoutMs?: number;
 }
 
 export interface EvidenceLoadOutcome {
@@ -100,7 +102,10 @@ export async function loadEvidencePreviewUrl(
 
   for (let i = 0; i <= SIGN_RETRY_DELAYS_MS.length; i++) {
     if (cancelled()) throw new EvidenceLoadError('cancelled', 'cancelled', null);
-    const budget = Math.min(SIGN_ATTEMPT_TIMEOUT_MS, Math.max(0, remaining()));
+    const budget = Math.min(
+      deps.attemptTimeoutMs ?? SIGN_ATTEMPT_TIMEOUT_MS,
+      Math.max(0, remaining()),
+    );
     if (budget <= 0) break;
     attempts = i + 1;
     try {
