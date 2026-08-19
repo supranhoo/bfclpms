@@ -9038,3 +9038,12 @@ Last verified run: August 2026, all checks passed —
   scope via `bu_console_kpi_create`, with a mandatory recipient preview. Kinds: Individual, Shared
   value (one number spreads to all), Department event (whole department).
 - See POLICY §CONSOLE-KPI-CREATE.
+
+### Reviewer deactivation no longer fails (ADR-299)
+
+Deactivating an employee who still owns pending annual-review stages or heads a BU/department
+previously failed with a check-constraint error, because `trg_alert_on_reviewer_deactivation`
+wrote an audit action (`reviewer_deactivated_orphan_risk`) that the
+`annual_review_access_audit` CHECK constraint did not allow. The allowlist has been widened and
+a guard test (`src/tests/annualReviewAuditActionAllowlist.test.ts`) now binds producer action
+literals to the constraint. See POLICY §AUDIT-ACTION-VOCABULARY and docs/adr/ADR-299.md.
