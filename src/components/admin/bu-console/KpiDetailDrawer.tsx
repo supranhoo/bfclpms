@@ -161,10 +161,6 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
           </div>
         )}
 
-        {showGroupActions && (
-          <></>
-        )}
-
         {/* ADR-302 — central data panel: visible only for KPIs registered in the
             central approval registry, additive to the existing group actions. */}
         {data?.authorized && args && (
