@@ -58,7 +58,7 @@ describe('loadEvidencePreviewUrl (ADR-300)', () => {
     const out = await loadEvidencePreviewUrl(
       'review-evidence',
       'kpi/331c01ff/photo.jpg',
-      deps({ sign, now: () => (t += 1_000) }),
+      deps({ sign, attemptTimeoutMs: 20, now: () => (t += 1_000) }),
     );
     expect(out.transport).toBe('download');
     expect(out.url).toBe('blob:fallback');
