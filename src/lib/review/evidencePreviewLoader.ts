@@ -16,7 +16,6 @@
  */
 import {
   EvidenceTimeoutError,
-  isHungEvidenceError,
   isNetworkBlockedEvidenceError,
   normalizeEvidenceError,
   describeEvidenceFailure,
