@@ -158,8 +158,8 @@ export async function loadEvidencePreviewUrl(
     transport: 'signed',
     fallback: fallbackNote,
   });
-  const message = normalizeEvidenceError(
-    isHungEvidenceError(lastError) ? lastError : lastError,
-  );
+  const message = isHungEvidenceError(lastError)
+    ? normalizeEvidenceError(lastError)
+    : normalizeEvidenceError(lastError);
   throw new EvidenceLoadError(message, diagnostics, lastError);
 }
