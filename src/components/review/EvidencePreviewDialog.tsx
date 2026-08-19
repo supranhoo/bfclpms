@@ -104,74 +104,46 @@ export function EvidencePreviewProvider() {
     if (!open || !detail) return;
     let cancelled = false;
     let createdUrl: string | null = null;
-    let timer: ReturnType<typeof setTimeout> | null = null;
     setLoading(true);
     setError(null);
     setDiagnostics(null);
     setBlobUrl(null);
 
     (async () => {
-      const startedAt = Date.now();
-      let attempts = 0;
-      let bucketForDiag: string | null = null;
-      let kpiForDiag: string | null = null;
       try {
         const match = detail.url.match(/\/storage\/v1\/object\/public\/([^/]+)\/(.+)$/);
-        const kindNow = isPreviewableEvidence(detail.fileName ?? detail.url);
         if (match) {
-          // ADR-250: mint a signed URL and let the browser stream the object
-          // progressively (<img>/<iframe> render as bytes arrive). The old
-          // path buffered the WHOLE file into a Blob before painting a single
-          // pixel, so a queued Storage request looked like a frozen dialog.
+          // ADR-250: prefer a signed URL so the browser streams the object
+          // progressively. ADR-300: per-attempt timeout + bounded retries, and
+          // fall back to the authenticated download when signing hangs.
           const [, bucket, path] = match;
           const decodedPath = decodeURIComponent(path);
-          bucketForDiag = bucket;
-          kpiForDiag = decodedPath.split('/')[1] ?? null;
-          const timeout = new Promise<never>((_, reject) => {
-            timer = setTimeout(
-              () => reject(new Error(EVIDENCE_SERVER_BUSY_MESSAGE)),
-              PREVIEW_TIMEOUT_MS,
-            );
-          });
-
-          // ADR-298: bounded retry with backoff around the signing call.
-          let data: { signedUrl: string } | null = null;
-          let sErr: unknown = null;
-          for (let i = 0; i <= SIGN_RETRY_DELAYS_MS.length; i++) {
-            if (cancelled) return;
-            attempts = i + 1;
-            const signPromise = supabase.storage
-              .from(bucket)
-              .createSignedUrl(decodedPath, SIGNED_URL_TTL)
-              .then((r) => r)
-              .catch((e) => ({ data: null, error: e }));
-            const res = await Promise.race([signPromise, timeout]);
-            data = (res as { data: { signedUrl: string } | null }).data;
-            sErr = (res as { error: unknown }).error;
-            if (data?.signedUrl) {
-              sErr = null;
-              break;
-            }
-            // A blocked/unreachable fetch will never succeed on retry.
-            if (isNetworkBlockedEvidenceError(sErr)) break;
-            if (i < SIGN_RETRY_DELAYS_MS.length) await sleep(SIGN_RETRY_DELAYS_MS[i]);
-          }
-
-          if (sErr || !data?.signedUrl) {
-            // ADR-256: keep the real storage status/message in the console so a
-            // denial can be traced to a KPI id, while the user still sees the
-            // normalised message.
-            const diag = describeEvidenceFailure(sErr, {
-              bucket,
-              kpiId: kpiForDiag,
-              elapsedMs: Date.now() - startedAt,
-              attempts,
+          const outcome = await loadEvidencePreviewUrl(
+            bucket,
+            decodedPath,
+            {
+              sign: (p, ttl) =>
+                supabase.storage
+                  .from(bucket)
+                  .createSignedUrl(p, ttl)
+                  .catch((e) => ({ data: null, error: e })),
+              download: (p) =>
+                supabase.storage
+                  .from(bucket)
+                  .download(p)
+                  .catch((e) => ({ data: null, error: e })),
+              isCancelled: () => cancelled,
+            },
+            { kpiId: decodedPath.split('/')[1] ?? null },
+          );
+          if (outcome.transport === 'download') {
+            console.warn('[evidence-preview] signing failed, served via download fallback', {
+              path: decodedPath,
+              attempts: outcome.attempts,
+              elapsedMs: outcome.elapsedMs,
             });
-            console.warn('[evidence-preview] sign failed', diag, { path: decodedPath });
-            if (!cancelled) setDiagnostics(diag);
-            throw new Error(normalizeEvidenceError(sErr));
           }
-          createdUrl = data.signedUrl;
+          createdUrl = outcome.url;
         } else {
           // Non-storage URL — use directly
           createdUrl = detail.url;
@@ -179,27 +151,23 @@ export function EvidencePreviewProvider() {
         if (!cancelled) setBlobUrl(createdUrl);
       } catch (err) {
         if (!cancelled) {
-          setError(normalizeEvidenceError(err));
-          setDiagnostics(
-            (prev) =>
-              prev ??
-              describeEvidenceFailure(err, {
-                bucket: bucketForDiag,
-                kpiId: kpiForDiag,
-                elapsedMs: Date.now() - startedAt,
-                attempts: attempts || 1,
-              }),
+          const diag =
+            err instanceof EvidenceLoadError
+              ? err.diagnostics
+              : describeEvidenceFailure(err, { attempts: 1 });
+          console.warn('[evidence-preview] preview failed', diag);
+          setError(
+            err instanceof EvidenceLoadError ? err.message : normalizeEvidenceError(err),
           );
+          setDiagnostics(diag);
         }
       } finally {
-        if (timer) clearTimeout(timer);
         if (!cancelled) setLoading(false);
       }
     })();
 
     return () => {
       cancelled = true;
-      if (timer) clearTimeout(timer);
       if (createdUrl && createdUrl.startsWith('blob:')) {
         setTimeout(() => URL.revokeObjectURL(createdUrl!), 60_000);
       }
