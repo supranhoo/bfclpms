@@ -20,3 +20,12 @@ Guards: `src/test/allKpisRpcContract.test.ts`, `src/test/evidenceErrorTransient.
 - 403/404/RLS → `EVIDENCE_ACCESS_DENIED_MESSAGE`.
 
 Signing retries with backoff `[400, 1200]ms` inside the 20s guard and short-circuits on network-blocked. Error state must show the copyable `describeEvidenceFailure()` diagnostics line.
+
+## Transport fallback (ADR-300, POLICY §EVIDENCE-PREVIEW-TRANSPORT-FALLBACK)
+
+Transport policy lives in `src/lib/review/evidencePreviewLoader.ts`, never in the dialog.
+- Per-attempt sign timeout 6s inside the 20s overall budget (a single global race that kills the retry loop is forbidden — it caused `attempts=1 elapsed=20009ms`).
+- On sign failure/hang, fall back to `storage.download()` + object URL, capped at 8MB (`FALLBACK_MAX_BYTES`); network-blocked short-circuits with no retry and no fallback.
+- FOURTH class `hang`: `EvidenceTimeoutError` / `isHungEvidenceError` / `EVIDENCE_HUNG_MESSAGE`. A status-less timeout is never "server busy".
+- Diagnostics carry `transport=` and `fallback=not-tried|failed|too-large`.
+Guard: `src/test/evidencePreviewLoader.test.ts`.

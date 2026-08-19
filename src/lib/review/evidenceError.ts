@@ -25,6 +25,25 @@ const SERVER_BUSY =
 const NETWORK_BLOCKED =
   "We couldn't reach the file server. This is usually a browser extension, ad-blocker or office network blocking the download — try another browser, or use Download instead.";
 
+/**
+ * ADR-300 / POLICY §EVIDENCE-PREVIEW-TRANSPORT-FALLBACK. A request that is
+ * accepted but never answered (no HTTP status, killed by our own timeout) is a
+ * HANG, not "server busy": the server never told us it was busy. Reporting it
+ * as busy sent users into a retry loop on a transport that was already stuck.
+ */
+const HUNG =
+  "The file didn't respond in time. We tried an alternative route — if it still fails, use Download, or try another browser or network.";
+
+/** Marker for our own per-attempt / overall preview timeouts. */
+export const EVIDENCE_TIMEOUT_ERROR_NAME = 'EvidenceTimeoutError';
+
+export class EvidenceTimeoutError extends Error {
+  constructor(message = HUNG) {
+    super(message);
+    this.name = EVIDENCE_TIMEOUT_ERROR_NAME;
+  }
+}
+
 function errorText(err: unknown): string {
   const anyErr = err as { name?: unknown; message?: unknown; error?: unknown };
   return (
@@ -34,9 +53,17 @@ function errorText(err: unknown): string {
   ).toLowerCase();
 }
 
+/** True when WE gave up waiting and the server never answered at all. */
+export function isHungEvidenceError(err: unknown): boolean {
+  if (err == null) return false;
+  if (String((err as { statusCode?: unknown })?.statusCode ?? '')) return false;
+  return errorText(err).includes(EVIDENCE_TIMEOUT_ERROR_NAME.toLowerCase());
+}
+
 /** True when the request never reached the server (no HTTP status at all). */
 export function isNetworkBlockedEvidenceError(err: unknown): boolean {
   if (err == null) return false;
+  if (isHungEvidenceError(err)) return false;
   const code = String((err as { statusCode?: unknown })?.statusCode ?? '');
   if (code) return false; // a status means the server answered
   const text = errorText(err);
@@ -54,6 +81,7 @@ export function isNetworkBlockedEvidenceError(err: unknown): boolean {
 
 export function isTransientEvidenceError(err: unknown): boolean {
   if (err == null) return false;
+  if (isHungEvidenceError(err)) return false;
 
   const anyErr = err as { name?: unknown; message?: unknown; error?: unknown; statusCode?: unknown };
   const code = String(anyErr?.statusCode ?? '');
@@ -85,6 +113,9 @@ export function isTransientEvidenceError(err: unknown): boolean {
 }
 
 export function normalizeEvidenceError(err: unknown, fallback = ACCESS_DENIED): string {
+  // A hang is neither a denial nor an answered "busy" response.
+  if (isHungEvidenceError(err)) return HUNG;
+
   // A blocked/unreachable fetch must be named as such, never as "busy".
   if (isNetworkBlockedEvidenceError(err)) return NETWORK_BLOCKED;
 
@@ -120,11 +151,19 @@ export function normalizeEvidenceError(err: unknown, fallback = ACCESS_DENIED): 
 export const EVIDENCE_ACCESS_DENIED_MESSAGE = ACCESS_DENIED;
 export const EVIDENCE_SERVER_BUSY_MESSAGE = SERVER_BUSY;
 export const EVIDENCE_NETWORK_BLOCKED_MESSAGE = NETWORK_BLOCKED;
+export const EVIDENCE_HUNG_MESSAGE = HUNG;
 
 /** Structured, copyable diagnostics for support — never contains file bytes. */
 export function describeEvidenceFailure(
   err: unknown,
-  ctx: { bucket?: string | null; kpiId?: string | null; elapsedMs?: number; attempts?: number },
+  ctx: {
+    bucket?: string | null;
+    kpiId?: string | null;
+    elapsedMs?: number;
+    attempts?: number;
+    transport?: string | null;
+    fallback?: string | null;
+  },
 ): string {
   const anyErr = err as { name?: unknown; message?: unknown; statusCode?: unknown };
   const parts = [
@@ -135,12 +174,16 @@ export function describeEvidenceFailure(
     `attempts=${ctx.attempts ?? 1}`,
     `bucket=${ctx.bucket ?? 'n/a'}`,
     `kpi=${ctx.kpiId ?? 'n/a'}`,
+    `transport=${ctx.transport ?? 'signed'}`,
+    `fallback=${ctx.fallback ?? 'not-tried'}`,
     `class=${
-      isNetworkBlockedEvidenceError(err)
-        ? 'network-blocked'
-        : isTransientEvidenceError(err)
-          ? 'server-busy'
-          : 'other'
+      isHungEvidenceError(err)
+        ? 'hang'
+        : isNetworkBlockedEvidenceError(err)
+          ? 'network-blocked'
+          : isTransientEvidenceError(err)
+            ? 'server-busy'
+            : 'other'
     }`,
   ];
   return parts.join(' ');
