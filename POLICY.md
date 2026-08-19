@@ -6636,3 +6636,10 @@ transactions — an unlisted action aborts the parent operation (root cause of t
    and only for stages present in `get_employee_workflow` for that employee and period.
    Hardcoded stage ladders are forbidden (see §105).
 8. `org_kpi_approvals` is append-only. No UPDATE/DELETE policy may be added to it.
+
+9. **Console surface (ADR-302).** The "Central data" panel renders only for registered
+   KPIs. Client-side gates (`canProvide`, `canDecide`) are mirrors of the RPC checks and
+   are never the authority; every mutation runs `p_dry_run` first and surfaces the
+   server's rejection reason verbatim. Propagation stays an explicit admin action —
+   never automatic on final approval — so skipped locked submissions are visible.
+
