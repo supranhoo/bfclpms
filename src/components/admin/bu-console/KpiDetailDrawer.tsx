@@ -162,6 +162,24 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
         )}
 
         {showGroupActions && (
+          <></>
+        )}
+
+        {/* ADR-302 — central data panel: visible only for KPIs registered in the
+            central approval registry, additive to the existing group actions. */}
+        {data?.authorized && args && (
+          <CentralValuePanel
+            categoryId={args.categoryId}
+            kraName={args.kraName}
+            kpiName={args.kpiName}
+            kpiTitle={args.kpiTitle ?? def.kpi_title ?? null}
+            period={args.period}
+            year={args.year}
+            scoringModel={mixedTypes ? null : scoringModel}
+          />
+        )}
+
+        {showGroupActions && (
           <div className="sticky top-0 z-10 -mx-6 mb-4 flex flex-wrap items-center gap-2 border-b bg-background/95 px-6 pb-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
             <Button
               className="h-10"
