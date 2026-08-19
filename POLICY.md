@@ -6584,3 +6584,12 @@ A Performance Console group definition edit may be applied to the selected month
    (`duplicate_kpi`) — creation never duplicates a KPI and never aborts the run.
 5. Kind is stored, not inferred: individual / shared value / department event map to
    `kpi_group_type` + `is_org_level` + `org_level_scope`. New rows start in `kra_set`.
+
+### §AUDIT-ACTION-VOCABULARY — annual_review_access_audit actions (ADR-299)
+
+Every `action` literal written into `public.annual_review_access_audit` by any trigger, RPC or
+client MUST be a member of `annual_review_access_audit_action_check`. Adding a new audit action
+requires, in the same change: (a) widening the CHECK constraint, and (b) adding the literal to
+`src/tests/annualReviewAuditActionAllowlist.test.ts`. Audit writes sit inside business
+transactions — an unlisted action aborts the parent operation (root cause of the
+2026-08-18 "Failed to update user" deactivation outage).
