@@ -6613,3 +6613,26 @@ requires, in the same change: (a) widening the CHECK constraint, and (b) adding 
 `src/tests/annualReviewAuditActionAllowlist.test.ts`. Audit writes sit inside business
 transactions — an unlisted action aborts the parent operation (root cause of the
 2026-08-18 "Failed to update user" deactivation outage).
+
+### §CONSOLE-CENTRAL-APPROVAL-SSOT — central org KPI data approval (ADR-301)
+
+1. A KPI is centrally sourced only when a row exists in `public.org_kpi_central_registry`.
+   Absent registration, nothing about that KPI changes.
+2. The approval ladder is **configured per KPI** in `org_kpi_approval_chains`
+   (`effective_from`-dated), never resolved from an employee's reporting chain. Step 1 is
+   the data provider; every later step is an approver named by person or by role.
+3. Writes go through `org_kpi_submit_value` / `org_kpi_decide` / `org_kpi_finalise` only.
+   No client may write `org_kpi_values.workflow_stage`, `current_step` or
+   `org_kpi_approvals`. Every write supports `p_dry_run` and must be previewed first.
+4. Only the actor holding `current_step` (or an admin) may decide. Send-back requires a
+   reason and returns the record to the data provider.
+5. **Same value, per-employee bands.** Finalisation copies the approved achieved value and
+   recomputes each employee's score from their own target/R5–R0 row. Straight copying of a
+   score across employees is forbidden.
+6. POLICY §88 is a hard stop: submissions with `final_score IS NOT NULL` are skipped
+   (`final_score_locked`) and reported, never overwritten. The value is a frozen snapshot,
+   never a live link.
+7. `central_approved` mode may fill an employee's later stages **only when they are empty**,
+   and only for stages present in `get_employee_workflow` for that employee and period.
+   Hardcoded stage ladders are forbidden (see §105).
+8. `org_kpi_approvals` is append-only. No UPDATE/DELETE policy may be added to it.

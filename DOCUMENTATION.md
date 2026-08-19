@@ -9048,3 +9048,7 @@ wrote an audit action (`reviewer_deactivated_orphan_risk`) that the
 `annual_review_access_audit` CHECK constraint did not allow. The allowlist has been widened and
 a guard test (`src/tests/annualReviewAuditActionAllowlist.test.ts`) now binds producer action
 literals to the constraint. See POLICY §AUDIT-ACTION-VOCABULARY and docs/adr/ADR-299.md.
+
+### v2.66.8 — ADR-301 Central Data Approval → Score Propagation (server layer)
+
+Org-level KPIs can be registered as centrally sourced (`org_kpi_central_registry`) with a per-KPI, effective-dated approval ladder (`org_kpi_approval_chains`) and an append-only decision trail (`org_kpi_approvals`). `org_kpi_values` carries `workflow_stage`, `current_step`, `submitted_at`, `propagation_mode`. RPCs: `org_kpi_chain_upsert`, `org_kpi_chain_list`, `org_kpi_submit_value`, `org_kpi_decide`, `org_kpi_finalise` — all SECURITY DEFINER, dry-run first. Final approval copies the approved value and recomputes each mapped employee's score from their own bands; `central_approved` mode also fills their empty resolved stages. Final-score-locked rows are skipped. See POLICY §CONSOLE-CENTRAL-APPROVAL-SSOT and docs/adr/ADR-301.md. No UI yet (Step 2).
