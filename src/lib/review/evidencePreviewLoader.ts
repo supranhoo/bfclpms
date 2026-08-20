@@ -23,8 +23,10 @@ import {
 
 export const PREVIEW_TIMEOUT_MS = 20_000;
 /** Per-attempt budget so retries and the fallback fit inside the overall one. */
-export const SIGN_ATTEMPT_TIMEOUT_MS = 6_000;
-export const SIGN_RETRY_DELAYS_MS = [400, 1200];
+export const SIGN_ATTEMPT_TIMEOUT_MS = 5_000;
+export const SIGN_RETRY_DELAYS_MS = [400];
+/** ADR-303: signing may never consume the time reserved for authenticated GET. */
+export const FALLBACK_RESERVED_MS = 8_000;
 export const SIGNED_URL_TTL = 600;
 /** ADR-250: only small files may be buffered; larger ones keep streaming. */
 export const FALLBACK_MAX_BYTES = 8 * 1024 * 1024;
@@ -45,6 +47,7 @@ export interface EvidenceLoaderDeps {
 
 export interface EvidenceLoadOutcome {
   url: string;
+  blob: Blob | null;
   transport: 'signed' | 'download';
   attempts: number;
   elapsedMs: number;
@@ -104,7 +107,7 @@ export async function loadEvidencePreviewUrl(
     if (cancelled()) throw new EvidenceLoadError('cancelled', 'cancelled', null);
     const budget = Math.min(
       deps.attemptTimeoutMs ?? SIGN_ATTEMPT_TIMEOUT_MS,
-      Math.max(0, remaining()),
+      Math.max(0, remaining() - FALLBACK_RESERVED_MS),
     );
     if (budget <= 0) break;
     attempts = i + 1;
@@ -113,6 +116,7 @@ export async function loadEvidencePreviewUrl(
       if (res?.data?.signedUrl) {
         return {
           url: res.data.signedUrl,
+          blob: null,
           transport: 'signed',
           attempts,
           elapsedMs: now() - startedAt,
@@ -125,7 +129,10 @@ export async function loadEvidencePreviewUrl(
     }
     // A blocked/unreachable fetch will never succeed on retry.
     if (isNetworkBlockedEvidenceError(lastError)) break;
-    if (i < SIGN_RETRY_DELAYS_MS.length && remaining() > SIGN_RETRY_DELAYS_MS[i]) {
+    if (
+      i < SIGN_RETRY_DELAYS_MS.length &&
+      remaining() - FALLBACK_RESERVED_MS > SIGN_RETRY_DELAYS_MS[i]
+    ) {
       await sleep(SIGN_RETRY_DELAYS_MS[i]);
     }
   }
@@ -142,6 +149,7 @@ export async function loadEvidencePreviewUrl(
       if (blob && blob.size <= FALLBACK_MAX_BYTES) {
         return {
           url: makeUrl(blob),
+          blob,
           transport: 'download',
           attempts,
           elapsedMs: now() - startedAt,

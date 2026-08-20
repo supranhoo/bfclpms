@@ -12,6 +12,7 @@ import {
   EvidenceLoadError,
   SIGN_RETRY_DELAYS_MS,
   FALLBACK_MAX_BYTES,
+  FALLBACK_RESERVED_MS,
 } from '@/lib/review/evidencePreviewLoader';
 import {
   EVIDENCE_HUNG_MESSAGE,
@@ -37,6 +38,7 @@ describe('loadEvidencePreviewUrl (ADR-300)', () => {
     const d = deps({});
     const out = await loadEvidencePreviewUrl('review-evidence', 'a/b.jpg', d);
     expect(out).toMatchObject({ url: 'https://signed/ok', transport: 'signed', attempts: 1 });
+    expect(out.blob).toBeNull();
     expect(d.download).not.toHaveBeenCalled();
   });
 
@@ -62,6 +64,7 @@ describe('loadEvidencePreviewUrl (ADR-300)', () => {
     );
     expect(out.transport).toBe('download');
     expect(out.url).toBe('blob:fallback');
+    expect(out.blob).not.toBeNull();
     expect(sign.mock.calls.length).toBeGreaterThan(1);
   });
 
@@ -101,6 +104,20 @@ describe('loadEvidencePreviewUrl (ADR-300)', () => {
     ).catch((e) => e)) as EvidenceLoadError;
     expect(err.diagnostics).toContain(`attempts=${SIGN_RETRY_DELAYS_MS.length + 1}`);
     expect(err.diagnostics).toContain('fallback=failed');
+  });
+
+  it('reserves a guaranteed fallback budget instead of letting signing consume 20 seconds', async () => {
+    const sign = vi.fn(() => new Promise<never>(() => {}));
+    const download = vi.fn(async () => ({ data: blob(1_063_787), error: null }));
+    let t = 0;
+    const out = await loadEvidencePreviewUrl(
+      'review-evidence',
+      'employee/kpi/evidence.xlsx',
+      deps({ sign, download, attemptTimeoutMs: 5, now: () => (t += 1_000) }),
+    );
+    expect(FALLBACK_RESERVED_MS).toBe(8_000);
+    expect(out.transport).toBe('download');
+    expect(download).toHaveBeenCalledOnce();
   });
 });
 
