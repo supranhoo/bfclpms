@@ -16,6 +16,7 @@ import {
   SIGNED_URL_TTL as LOADER_SIGNED_URL_TTL,
 } from '@/lib/review/evidencePreviewLoader';
 import { toast } from 'sonner';
+import { SpreadsheetEvidencePreview } from './SpreadsheetEvidencePreview';
 
 /**
  * ADR-250 / ADR-300. A preview must never hang indefinitely, and it must never
@@ -72,6 +73,7 @@ export function EvidencePreviewProvider() {
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<EvidencePreviewDetail | null>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [downloadedBlob, setDownloadedBlob] = useState<Blob | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<string | null>(null);
@@ -108,6 +110,7 @@ export function EvidencePreviewProvider() {
     setError(null);
     setDiagnostics(null);
     setBlobUrl(null);
+    setDownloadedBlob(null);
 
     (async () => {
       try {
@@ -144,6 +147,7 @@ export function EvidencePreviewProvider() {
             });
           }
           createdUrl = outcome.url;
+          if (!cancelled) setDownloadedBlob(outcome.blob);
         } else {
           // Non-storage URL — use directly
           createdUrl = detail.url;
@@ -176,6 +180,8 @@ export function EvidencePreviewProvider() {
 
   const kind = detail ? isPreviewableEvidence(detail.fileName ?? detail.url) : null;
   const displayName = detail?.fileName || detail?.url.split('/').pop()?.split('?')[0] || 'Evidence';
+  const extension = displayName.split('.').pop()?.toLowerCase() ?? '';
+  const isSpreadsheet = ['xlsx', 'xls', 'xlsm', 'csv'].includes(extension);
 
   const hasGroup = !!group && group.length > 1;
   const canPrev = hasGroup && groupIndex > 0;
@@ -329,7 +335,20 @@ export function EvidencePreviewProvider() {
             className="max-w-full max-h-[80vh] object-contain"
           />
         )}
-        {!loading && !error && blobUrl && kind === 'office' && (
+        {!loading && !error && downloadedBlob && kind === 'office' && isSpreadsheet && (
+          <SpreadsheetEvidencePreview blob={downloadedBlob} fileName={displayName} />
+        )}
+        {!loading && !error && downloadedBlob && kind === 'office' && !isSpreadsheet && (
+          <div className="max-w-md p-8 text-center text-sm text-muted-foreground">
+            This Office file cannot be previewed through the fallback connection. Download it to open the full file.
+            <div className="mt-4">
+              <Button variant="default" size="sm" onClick={handleDownload}>
+                <Download className="mr-1 h-4 w-4" /> Download
+              </Button>
+            </div>
+          </div>
+        )}
+        {!loading && !error && blobUrl && kind === 'office' && !downloadedBlob && (
           <iframe
             src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(blobUrl)}`}
             title={displayName}

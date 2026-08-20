@@ -6054,13 +6054,13 @@ overwrite fields absent from the upload.
 
 1. **Never fail while a working transport exists.** If the signed-URL path does
    not produce a URL, the preview MUST attempt the authenticated
-   `storage.download()` path (same RLS check, different request) before showing
-   an error. Fallback buffering is capped at 8 MB so ADR-250's no-buffering rule
-   still holds for large files; over the cap the user is offered Download.
-2. **Per-attempt timeout, not a global race.** Each signing attempt gets its own
-   6 s budget inside the 20 s overall guard, so the ADR-298 backoff retries and
-   the fallback always get a chance to run. A single global timeout that kills
-   the whole loop is forbidden.
+   `storage.download()` path before showing an error. Signing MUST reserve 8 s
+   of the 20 s overall budget for fallback; a retry schedule that consumes the
+   fallback budget is forbidden. Fallback buffering is capped at 8 MB so
+   ADR-250's no-buffering rule still holds for large files.
+2. **Per-attempt timeout, not a global race.** Each signing attempt gets at most
+   5 s inside the signing allocation. The fallback reservation is excluded from
+   every attempt and backoff calculation.
 3. **A hang is its own failure class.** A status-less failure produced by OUR
    timeout is `hang` (`EvidenceTimeoutError` / `EVIDENCE_HUNG_MESSAGE`) and MUST
    NOT be worded as "server busy" — the server never answered. The four classes
@@ -6069,6 +6069,14 @@ overwrite fields absent from the upload.
    `fallback=not-tried|failed|too-large`.
 5. Transport policy lives in `src/lib/review/evidencePreviewLoader.ts`; preview
    components stay rendering-only.
+6. **One canonical authorization policy per path family (ADR-303).** Private
+   review evidence uses the canonical KPI-participant read policy. Superseded
+   broad or observation-only policies MUST NOT overlap it: permissive policies
+   are OR-combined and can force every object lookup through all RLS subplans.
+7. **Office fallback must be locally valid (ADR-303).** A browser-local `blob:`
+   URL MUST NOT be sent to a remote Office viewer. Downloaded XLSX/XLS/XLSM/CSV
+   files render locally with bounded rows/columns. Other Office formats show an
+   explicit Download state rather than an unbounded iframe spinner.
 
 ## §EVIDENCE-PREVIEW-FAILURE-CLARITY (ADR-298, 2026-08-18)
 
