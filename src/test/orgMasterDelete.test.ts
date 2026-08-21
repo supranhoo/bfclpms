@@ -97,6 +97,14 @@ describe('ADR-308 server guard contract', () => {
     expect(all).toMatch(/CREATE OR REPLACE FUNCTION public\.org_master_delete\(/);
   });
 
+  it('impact report walks cascade descendants (ADR-308a)', () => {
+    const all = sql();
+    expect(all).toContain('org_master_delete_impact_at');
+    expect(all).toMatch(/via_path/);
+    expect(all).toMatch(/p_depth \+ 1/);
+  });
+
+
   it('cleanable dependencies are configured in a table, not hardcoded in the UI', () => {
     expect(sql()).toContain('org_master_cleanable_dependencies');
   });
