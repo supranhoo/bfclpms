@@ -441,14 +441,15 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-w-4xl max-h-[92vh]">
-        <DialogHeader>
+      <DialogContent className="max-w-none w-screen h-screen sm:max-w-none sm:rounded-none p-0 gap-0 flex flex-col">
+        <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>Assign New KRA</DialogTitle>
           <DialogDescription>Create and assign a new KRA/KPI to an employee</DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="h-[72vh] pr-4">
-          <div className="py-2 space-y-4">
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="mx-auto w-full max-w-7xl space-y-5">
+
             {/* KRA Library Quick Search */}
             <KraLibrarySearchPanel
               templates={templates}
