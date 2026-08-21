@@ -1003,23 +1003,80 @@ export default function Organization() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
+      {/* Delete Confirmation Dialog — ADR-308 dependency-aware */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={(o) => { setDeleteDialogOpen(o); if (!o) { setDeleteTarget(null); setCleanupConfirmed(false); } }}>
+        <AlertDialogContent className="max-w-lg">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {deleteTarget?.type === 'bu' ? 'Business Unit' : deleteTarget?.type}?</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{deleteTarget?.name}"? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          <div className="space-y-3 text-sm">
+            {impactQuery.isLoading && (
+              <p className="text-muted-foreground">Checking what depends on this record…</p>
+            )}
+            {impactQuery.isError && (
+              <p className="text-destructive">Could not check dependencies. Try again in a moment.</p>
+            )}
+
+            {!impactQuery.isLoading && deleteBlocked && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-1">
+                <p className="font-medium text-destructive">Still in use — reassign these first:</p>
+                <ul className="list-disc pl-5 text-destructive">
+                  {impact.blocking.map((r) => (
+                    <li key={`${r.child_table}.${r.child_column}`}>
+                      {describeTable(r.child_table)} — {r.row_count} record{r.row_count === 1 ? '' : 's'}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {!impactQuery.isLoading && !deleteBlocked && cleanableTotal > 0 && (
+              <label className="flex items-start gap-2 rounded-md border p-3">
+                <Checkbox
+                  checked={cleanupConfirmed}
+                  onCheckedChange={(v) => setCleanupConfirmed(v === true)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Also remove this {deleteTarget?.type === 'bu' ? 'business unit' : deleteTarget?.type} from{' '}
+                  {cleanableTotal} configuration reference{cleanableTotal === 1 ? '' : 's'}
+                  {impact.cleanable.some((r) => (r.labels ?? []).length > 0) && (
+                    <>
+                      {' '}
+                      (
+                      {impact.cleanable
+                        .flatMap((r) => r.labels ?? [])
+                        .join(', ')}
+                      )
+                    </>
+                  )}
+                  .
+                </span>
+              </label>
+            )}
+
+            {!impactQuery.isLoading && !deleteBlocked && cleanableTotal === 0 && (
+              <p className="text-muted-foreground">Nothing else references this record.</p>
+            )}
+          </div>
+
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleDelete(); }}
+              disabled={impactQuery.isLoading || deleteBlocked || deleteEntity.isPending || (cleanableTotal > 0 && !cleanupConfirmed)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               {deleteEntity.isPending ? 'Deleting...' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
 
       {/* Manage Companies Dialog */}
       <Dialog open={manageCompaniesOpen} onOpenChange={setManageCompaniesOpen}>
