@@ -19,7 +19,31 @@ export interface OrgDeleteImpactRow {
   row_count: number;
   classification: OrgDependencyClass;
   labels: string[] | null;
+  /**
+   * ADR-308a — cascade path this dependency was found through.
+   * Empty for direct references, e.g. `departments "Executive"` when the
+   * dependency belongs to a child record that would be deleted with this one.
+   */
+  via_path?: string | null;
+  target_table?: string | null;
+  target_id?: string | null;
 }
+
+/** Human sentence for a cascade path, e.g. `departments "Executive"`. */
+export function describeViaPath(via: string | null | undefined): string | null {
+  const raw = (via ?? '').trim();
+  if (!raw) return null;
+  return raw
+    .split('>')
+    .map((seg) => {
+      const s = seg.trim();
+      const m = s.match(/^([a-z_ ]+?)\s*"(.*)"$/i);
+      if (m) return `${describeTable(m[1].trim().replace(/ /g, '_'))}: ${m[2]}`;
+      return describeTable(s.replace(/ /g, '_'));
+    })
+    .join(' → ');
+}
+
 
 /** Human labels for referencing tables, so users never see raw table names. */
 const TABLE_LABELS: Record<string, string> = {
