@@ -1163,9 +1163,10 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
               </div>
             </div>
           </div>
-        </ScrollArea>
+        </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="shrink-0 gap-2 border-t bg-background px-6 py-4">
+
           <Button variant="outline" onClick={handleClose}>
             Cancel
           </Button>
