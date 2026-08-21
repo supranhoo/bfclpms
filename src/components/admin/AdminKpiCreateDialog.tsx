@@ -441,17 +441,17 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-w-none w-screen h-screen sm:max-w-none sm:rounded-none p-0 gap-0 flex flex-col">
+      <DialogContent className="w-[96vw] max-w-[1200px] max-h-[92vh] p-0 gap-0 flex flex-col overflow-hidden">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>Assign New KRA</DialogTitle>
           <DialogDescription>Create and assign a new KRA/KPI to an employee</DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          <div className="mx-auto w-full max-w-7xl space-y-5">
+        <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden px-6 py-5">
+          <div className="w-full min-w-0 space-y-5">
 
             {/* ─── ASSIGNMENT: library search + employee ─── */}
-            <div className="space-y-4 rounded-lg border bg-card p-4">
+            <div className="min-w-0 space-y-4 rounded-lg border bg-card p-4">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Assignment</span>
                 <div className="flex-1 h-px bg-border" />
@@ -512,10 +512,10 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
 
 
             {/* Main layout — two structured panels, side by side on wide screens */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
               {/* ─── LEFT COLUMN: KRA Identity ─── */}
-              <div className="space-y-4 rounded-lg border bg-card p-4">
+              <div className="min-w-0 space-y-4 rounded-lg border bg-card p-4">
 
                 {/* Section header */}
                 <div className="flex items-center gap-2">
@@ -545,7 +545,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                         onChange={(e) => setCustomCategoryName(e.target.value)}
                         placeholder="Category name"
                       />
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-2 gap-2 min-w-0">
                         <Input
                           type="number"
                           value={customCategoryWeightage}
@@ -839,7 +839,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                     <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Effective Period</span>
                     <div className="flex-1 h-px bg-border" />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3 min-w-0">
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">Effective Month</Label>
                       <Select value={reviewPeriod} onValueChange={setReviewPeriod}>
@@ -905,7 +905,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
               </div>
 
               {/* ─── RIGHT COLUMN: Metrics & Configuration ─── */}
-              <div className="space-y-4 rounded-lg border bg-card p-4">
+              <div className="min-w-0 space-y-4 rounded-lg border bg-card p-4">
 
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Metrics & Configuration</span>
@@ -918,7 +918,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                 {/* Numeric fields */}
                 {uomType === 'numeric' && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-3 min-w-0">
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Unit of Measure (UOM)</Label>
                         <Select value={uom} onValueChange={setUom}>
@@ -1040,7 +1040,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                 {/* Binary fields */}
                 {uomType === 'binary' && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-3 min-w-0">
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Weightage (%)</Label>
                         <Input
@@ -1090,7 +1090,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                 {/* Tiered fields */}
                 {uomType === 'tiered' && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-3 min-w-0">
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">Weightage (%)</Label>
                         <Input
