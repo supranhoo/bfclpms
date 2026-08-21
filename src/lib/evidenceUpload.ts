@@ -70,13 +70,25 @@ export function isRlsDenialError(error: any): boolean {
 }
 
 /** Human message for the upload failure, keeping the raw reason available. */
-export function describeUploadFailure(error: any, fallbackName: string): {
+export function describeUploadFailure(
+  error: any,
+  fallbackName: string,
+  hasValidSession = true,
+): {
   title: string;
   message: string;
   detail: string;
 } {
   const raw = error?.message || `Failed to upload "${fallbackName}"`;
   if (isRlsDenialError(error)) {
+    if (hasValidSession) {
+      return {
+        title: 'You do not have access to attach this file',
+        message:
+          'Your session is active, but this evidence location is not authorized. Contact support if this should be allowed.',
+        detail: raw,
+      };
+    }
     return {
       title: 'Sign in again to attach files',
       message:

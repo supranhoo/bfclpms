@@ -55,13 +55,22 @@ describe('isRlsDenialError', () => {
 });
 
 describe('describeUploadFailure', () => {
-  it('maps RLS denials to a session-expiry message and keeps the raw detail', () => {
+  it('maps a signed-in RLS denial to an authorization message and keeps the raw detail', () => {
     const d = describeUploadFailure(
       { message: 'new row violates row-level security policy' },
       'a.png',
     );
-    expect(d.title).toBe('Sign in again to attach files');
+    expect(d.title).toBe('You do not have access to attach this file');
     expect(d.detail).toContain('row-level security');
+  });
+
+  it('uses the sign-in message only when the live session is absent', () => {
+    const d = describeUploadFailure(
+      { message: 'new row violates row-level security policy' },
+      'a.png',
+      false,
+    );
+    expect(d.title).toBe('Sign in again to attach files');
   });
 
   it('passes other errors through unchanged', () => {

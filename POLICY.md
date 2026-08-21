@@ -6050,7 +6050,7 @@ overwrite fields absent from the upload.
 
 ---
 
-## §EVIDENCE-UPLOAD-SESSION-BOUND-IDENTITY (ADR-305, 2026-08-21)
+## §EVIDENCE-UPLOAD-SESSION-BOUND-IDENTITY (ADR-305, amended by ADR-307, 2026-08-21)
 
 1. **Owner-scoped storage paths come from the live session.** Any upload into
    an owner-scoped bucket path MUST derive its folder prefix from
@@ -6059,16 +6059,31 @@ overwrite fields absent from the upload.
    `auth.uid() = NULL` and the write is rejected by RLS.
 2. **No session, no upload.** When no live session is present the upload aborts
    with an explicit sign-in message; it MUST NOT be attempted "hopefully".
-3. **Recover once, then fail honestly.** An RLS denial triggers exactly one
-   session refresh + retry. Repeated retries are forbidden.
-4. **Never surface raw Postgres RLS text as the primary message.** RLS denials
-   read as an expired-session instruction; the raw reason stays visible as a
-   secondary detail for support.
+3. **Recover once, then fail honestly.** An RLS denial may trigger exactly one
+   session refresh + retry. Repeated retries are forbidden. If a live session
+   remains, classify the denial as authorization/configuration — not expiry.
+4. **Never surface raw Postgres RLS text as the primary message.** “Sign in
+   again” is reserved for a missing live session; a signed-in denial gets an
+   access message, with the raw reason retained as secondary support detail.
 5. **No zombie sessions.** A failed token refresh MUST clear auth state
    (user, profile, roles) rather than leaving a signed-in-looking UI.
 6. Logic lives in `src/lib/evidenceUpload.ts`; `MultiFileUpload` stays a
    rendering + orchestration component. No storage policy is loosened to make
    an upload succeed.
+
+## §EVIDENCE-CONTEXT-RESOLUTION (ADR-307, 2026-08-21)
+
+1. Private evidence authorization MUST resolve a storage context to its
+   canonical KPI before applying KPI-participant access.
+2. `observation-evidence` and `observation-replies` paths may carry an
+   observation id in segment two. Resolve it through
+   `kpi_observations.kpi_id`; direct KPI ids remain supported for legacy paths.
+3. Unknown contexts and unrelated users remain denied. Resolution delegates to
+   the canonical KPI-participant check; permissive policies are forbidden.
+4. Timestamp-unique uploads are create-only. Upsert semantics are forbidden
+   because they add unnecessary read/update authorization checks.
+5. Resolution uses indexed id lookups, fixed `search_path`, signed-in-only
+   grants, and no elevated execution identity.
 
 ---
 
