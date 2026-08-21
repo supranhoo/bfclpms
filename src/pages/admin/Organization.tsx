@@ -21,7 +21,7 @@ import { useResolvedTabs } from '@/hooks/useResolvedMenu';
 import { useQuery } from '@tanstack/react-query';
 import { BuHeadColumn, OrgHeadColumn } from '@/components/admin/BuHeadColumn';
 import { listBuHeads, listDepartmentHeads } from '@/services/orgHeads/orgHeadsService';
-import { deleteOrgMaster, fetchOrgDeleteImpact, splitImpact, describeTable, describeOrgDeleteError } from '@/services/organization/orgMasterDelete';
+import { deleteOrgMaster, fetchOrgDeleteImpact, splitImpact, describeTable, describeOrgDeleteError, describeViaPath, cascadeSummaries } from '@/services/organization/orgMasterDelete';
 
 
 type OrgTabKey =
