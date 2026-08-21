@@ -13,7 +13,7 @@ export function AdminKpiEditDialog({ isOpen, onClose, kpi }: AdminKpiEditDialogP
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[96vw] max-w-[1200px] max-h-[92vh] grid-cols-[minmax(0,1fr)] [&>*]:min-w-0 overflow-x-hidden overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Admin KPI Editor</DialogTitle>
           <DialogDescription>

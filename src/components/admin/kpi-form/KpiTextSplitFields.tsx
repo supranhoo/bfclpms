@@ -37,7 +37,8 @@ export function KpiTextSplitFields({ value, onChange, hideName, nameSlot }: Prop
           <CollapsibleTrigger asChild>
             <button
               type="button"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 rounded-md"
+              className="flex min-w-0 w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 rounded-md"
+
               aria-expanded={legacyOpen}
             >
               <ChevronRight
@@ -45,7 +46,7 @@ export function KpiTextSplitFields({ value, onChange, hideName, nameSlot }: Prop
               />
               <span className="text-xs font-medium shrink-0">KPI Name (legacy free text)</span>
               {!legacyOpen && (
-                <span className="truncate text-[11px] text-muted-foreground">
+                <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
                   {legacyPreview || 'empty'}
                 </span>
               )}

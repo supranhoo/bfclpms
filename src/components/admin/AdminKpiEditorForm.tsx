@@ -680,8 +680,8 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
       />
 
       {/* ═══ IDENTITY ═══ */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs">Employee</Label>
           <Select
             value={formData.employee_id}
@@ -699,7 +699,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <div className="flex items-center justify-between gap-2">
             <Label className="text-xs">Category</Label>
             <Button
@@ -765,8 +765,8 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs">KRA Name</Label>
           <Input
             className="h-9"
@@ -774,7 +774,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
             onChange={(e) => setFormData(prev => ({ ...prev, kra_name: e.target.value }))}
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs">Source of Data</Label>
           <Input
             className="h-9"
@@ -784,7 +784,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
         </div>
       </div>
 
-      <div className="space-y-1.5">
+      <div className="min-w-0 space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <Label className="text-xs">KPI Name</Label>
           <RegistryBadge
@@ -808,8 +808,8 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
 
       {/* Numeric: Target / UOM / Weightage */}
       {formData.uom_type === 'numeric' && (
-        <div className="grid grid-cols-3 gap-3">
-          <div className="space-y-1.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="min-w-0 space-y-1.5">
             <Label className="text-xs">Target Value</Label>
             <Input
               className="h-9"
@@ -818,7 +818,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
               onChange={(e) => setFormData(prev => ({ ...prev, target_value: e.target.value }))}
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label className="text-xs">UOM</Label>
             <Select
               value={formData.uom}
@@ -836,7 +836,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label className="text-xs">Weightage (%)</Label>
             <Input
               className="h-9"
@@ -850,8 +850,8 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
 
       {/* Non-numeric: Weightage + Frequency (+ Cycle Start) */}
       {formData.uom_type !== 'numeric' && (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="min-w-0 space-y-1.5">
             <Label className="text-xs">Weightage (%)</Label>
             <Input
               className="h-9"
@@ -860,7 +860,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
               onChange={(e) => setFormData(prev => ({ ...prev, weightage: e.target.value }))}
             />
           </div>
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label className="text-xs">Frequency</Label>
             <Select
               value={formData.frequency}
@@ -904,8 +904,8 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
 
       {/* Numeric: Frequency / Criteria / Cycle Start */}
       {formData.uom_type === 'numeric' && (
-        <div className="grid grid-cols-3 gap-3">
-          <div className="space-y-1.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="min-w-0 space-y-1.5">
             <Label className="text-xs">Frequency</Label>
             <Select
               value={formData.frequency}
@@ -921,7 +921,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5">
+          <div className="min-w-0 space-y-1.5">
             <Label className="text-xs">Criteria</Label>
             <Select
               value={formData.criteria}
@@ -941,7 +941,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
             const cycleOptions = getCycleOptionsForFrequency(formData.frequency);
             if (!cycleOptions) return <div />;
             return (
-              <div className="space-y-1.5">
+              <div className="min-w-0 space-y-1.5">
                 <Label className="text-xs">Cycle Start</Label>
                 <Select
                   value={formData.frequency_cycle_start}
@@ -971,7 +971,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
             value={formData.day_count_type}
             onValueChange={(value: 'working_days' | 'all_days') => setFormData(prev => ({ ...prev, day_count_type: value }))}
           >
-            <SelectTrigger className="h-9 w-[220px]">
+            <SelectTrigger className="h-9 w-full sm:w-[220px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1028,7 +1028,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
                 setFormData(prev => ({ ...prev, org_level_scope: value }))
               }
             >
-              <SelectTrigger className="h-8 w-[140px] text-xs">
+              <SelectTrigger className="h-8 w-full sm:w-[140px] text-xs">
                 <SelectValue placeholder="Scope" />
               </SelectTrigger>
               <SelectContent>
@@ -1060,8 +1060,8 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
       {/* ═══ PERIOD & STATUS ═══ */}
       <SectionHeader>Period & Status</SectionHeader>
 
-      <div className="grid grid-cols-3 gap-3">
-        <div className="space-y-1.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs">Review Period</Label>
           <Select
             value={formData.review_period}
@@ -1077,7 +1077,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs">Review Year</Label>
           <Input
             className="h-9"
@@ -1086,7 +1086,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
             onChange={(e) => setFormData(prev => ({ ...prev, review_year: e.target.value }))}
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label className="text-xs">Status</Label>
           <Select
             value={formData.status}
@@ -1302,7 +1302,7 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
       )}
 
       {/* Reason */}
-      <div className="space-y-1.5">
+      <div className="min-w-0 space-y-1.5">
         <Label className="text-xs">
           Reason for Change {formData.status !== originalStatus && <span className="text-destructive">* (Required)</span>}
         </Label>
