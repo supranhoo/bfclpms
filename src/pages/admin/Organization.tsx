@@ -236,24 +236,13 @@ export default function Organization() {
     },
   });
 
+  // ADR-308: deletions go through the guarded server RPC, never a raw table
+  // delete, so dependencies are checked and the action is audited.
   const deleteEntity = useMutation({
-    mutationFn: async ({ type, id }: { type: string; id: string }) => {
-      let table = '';
-      switch (type) {
-        case 'division': table = 'divisions'; break;
-        case 'bu': table = 'business_units'; break;
-        case 'department': table = 'departments'; break;
-        case 'sub-branch': table = 'sub_branches'; break;
-        case 'designation': table = 'designations'; break;
-        case 'pms-grade': table = 'pms_grades'; break;
-        case 'level': table = 'levels'; break;
-        case 'location': table = 'locations'; break;
-        case 'employee-category': table = 'employee_categories'; break;
-        case 'employment-status': table = 'employment_statuses'; break;
-      }
-      const { error } = await supabase.from(table as any).delete().eq('id', id);
-      if (error) throw error;
+    mutationFn: async ({ type, id, cleanup }: { type: string; id: string; cleanup: boolean }) => {
+      await deleteOrgMaster(type, id, cleanup);
     },
+
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['divisions'] });
       queryClient.invalidateQueries({ queryKey: ['business-units'] });
