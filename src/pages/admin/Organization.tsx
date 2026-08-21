@@ -342,8 +342,10 @@ export default function Organization() {
     staleTime: 0,
   });
   const impact = useMemo(() => splitImpact(impactQuery.data ?? []), [impactQuery.data]);
+  const cascadeNames = useMemo(() => cascadeSummaries(impactQuery.data ?? []), [impactQuery.data]);
   const cleanableTotal = impact.cleanable.reduce((s, r) => s + r.row_count, 0);
   const deleteBlocked = impact.blocking.length > 0;
+
 
   const handleDelete = () => {
     if (deleteTarget && !deleteBlocked) {
