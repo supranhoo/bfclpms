@@ -1,0 +1,2 @@
+GRANT EXECUTE ON FUNCTION public.org_master_delete_impact(text, uuid) TO supabase_read_only_user;
+GRANT EXECUTE ON FUNCTION public.org_master_delete_impact_at(text, uuid, text, int) TO supabase_read_only_user;

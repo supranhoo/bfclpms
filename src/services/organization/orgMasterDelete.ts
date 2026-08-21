@@ -19,7 +19,31 @@ export interface OrgDeleteImpactRow {
   row_count: number;
   classification: OrgDependencyClass;
   labels: string[] | null;
+  /**
+   * ADR-308a — cascade path this dependency was found through.
+   * Empty for direct references, e.g. `departments "Executive"` when the
+   * dependency belongs to a child record that would be deleted with this one.
+   */
+  via_path?: string | null;
+  target_table?: string | null;
+  target_id?: string | null;
 }
+
+/** Human sentence for a cascade path, e.g. `departments "Executive"`. */
+export function describeViaPath(via: string | null | undefined): string | null {
+  const raw = (via ?? '').trim();
+  if (!raw) return null;
+  return raw
+    .split('>')
+    .map((seg) => {
+      const s = seg.trim();
+      const m = s.match(/^([a-z_ ]+?)\s*"(.*)"$/i);
+      if (m) return `${describeTable(m[1].trim().replace(/ /g, '_'))}: ${m[2]}`;
+      return describeTable(s.replace(/ /g, '_'));
+    })
+    .join(' → ');
+}
+
 
 /** Human labels for referencing tables, so users never see raw table names. */
 const TABLE_LABELS: Record<string, string> = {
@@ -81,7 +105,9 @@ export async function fetchOrgDeleteImpact(
     ...r,
     row_count: Number(r.row_count ?? 0),
     labels: r.labels ?? [],
+    via_path: r.via_path ?? '',
   }));
+
 }
 
 export async function deleteOrgMaster(
@@ -97,7 +123,18 @@ export async function deleteOrgMaster(
   if (error) throw new Error(describeOrgDeleteError(error.message));
 }
 
+/** Distinct child records that would be removed along with the target (ADR-308a). */
+export function cascadeSummaries(rows: OrgDeleteImpactRow[]): string[] {
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const label = describeViaPath(r.via_path);
+    if (label) seen.add(label);
+  }
+  return Array.from(seen);
+}
+
 export function splitImpact(rows: OrgDeleteImpactRow[]) {
+
   return {
     blocking: rows.filter((r) => r.classification === 'blocking'),
     cleanable: rows.filter((r) => r.classification === 'cleanable'),

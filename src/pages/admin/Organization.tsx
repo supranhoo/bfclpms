@@ -21,7 +21,7 @@ import { useResolvedTabs } from '@/hooks/useResolvedMenu';
 import { useQuery } from '@tanstack/react-query';
 import { BuHeadColumn, OrgHeadColumn } from '@/components/admin/BuHeadColumn';
 import { listBuHeads, listDepartmentHeads } from '@/services/orgHeads/orgHeadsService';
-import { deleteOrgMaster, fetchOrgDeleteImpact, splitImpact, describeTable, describeOrgDeleteError } from '@/services/organization/orgMasterDelete';
+import { deleteOrgMaster, fetchOrgDeleteImpact, splitImpact, describeTable, describeOrgDeleteError, describeViaPath, cascadeSummaries } from '@/services/organization/orgMasterDelete';
 
 
 type OrgTabKey =
@@ -342,8 +342,10 @@ export default function Organization() {
     staleTime: 0,
   });
   const impact = useMemo(() => splitImpact(impactQuery.data ?? []), [impactQuery.data]);
+  const cascadeNames = useMemo(() => cascadeSummaries(impactQuery.data ?? []), [impactQuery.data]);
   const cleanableTotal = impact.cleanable.reduce((s, r) => s + r.row_count, 0);
   const deleteBlocked = impact.blocking.length > 0;
+
 
   const handleDelete = () => {
     if (deleteTarget && !deleteBlocked) {
@@ -1021,18 +1023,34 @@ export default function Organization() {
               <p className="text-destructive">Could not check dependencies. Try again in a moment.</p>
             )}
 
-            {!impactQuery.isLoading && deleteBlocked && (
-              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-1">
-                <p className="font-medium text-destructive">Still in use — reassign these first:</p>
-                <ul className="list-disc pl-5 text-destructive">
-                  {impact.blocking.map((r) => (
-                    <li key={`${r.child_table}.${r.child_column}`}>
-                      {describeTable(r.child_table)} — {r.row_count} record{r.row_count === 1 ? '' : 's'}
-                    </li>
+            {!impactQuery.isLoading && cascadeNames.length > 0 && (
+              <div className="rounded-md border bg-muted/40 p-3 space-y-1">
+                <p className="font-medium">Deleting this also removes:</p>
+                <ul className="list-disc pl-5 text-muted-foreground">
+                  {cascadeNames.map((n) => (
+                    <li key={n}>{n}</li>
                   ))}
                 </ul>
               </div>
             )}
+
+            {!impactQuery.isLoading && deleteBlocked && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-1">
+                <p className="font-medium text-destructive">Still in use — reassign these first:</p>
+                <ul className="list-disc pl-5 text-destructive">
+                  {impact.blocking.map((r) => {
+                    const via = describeViaPath(r.via_path);
+                    return (
+                      <li key={`${r.child_table}.${r.child_column}.${r.via_path ?? ''}`}>
+                        {describeTable(r.child_table)} — {r.row_count} record{r.row_count === 1 ? '' : 's'}
+                        {via ? <span className="opacity-80"> (on {via})</span> : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
 
             {!impactQuery.isLoading && !deleteBlocked && cleanableTotal > 0 && (
               <label className="flex items-start gap-2 rounded-md border p-3">

@@ -19798,6 +19798,23 @@ export type Database = {
           delete_action: string
           labels: string[]
           row_count: number
+          target_id: string
+          target_table: string
+          via_path: string
+        }[]
+      }
+      org_master_delete_impact_at: {
+        Args: { p_depth: number; p_id: string; p_path: string; p_table: string }
+        Returns: {
+          child_column: string
+          child_table: string
+          classification: string
+          delete_action: string
+          labels: string[]
+          row_count: number
+          target_id: string
+          target_table: string
+          via_path: string
         }[]
       }
       org_master_table: { Args: { p_entity_type: string }; Returns: string }

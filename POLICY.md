@@ -6710,3 +6710,12 @@ transactions — an unlisted action aborts the parent operation (root cause of t
    append-only.
 6. `org_master_delete` is admin-only and `SECURITY DEFINER` with a pinned `search_path`.
    Cleanup without confirmation is rejected server-side even if the UI is bypassed.
+7. **(ADR-308a)** The impact report is **cascade-aware**: it recursively follows children
+   that the database would delete with the record (for example a department under a
+   business unit) and reports *their* dependencies as dependencies of the record, carrying
+   a `via_path` that names the child. A record is never presented as deletable while a
+   cascaded descendant is blocked. Cleanup deletes are targeted at the exact record each
+   cleanable row hangs off (`target_id`), never blindly at the top-level id, and the audit
+   row records the path each cleaned group came from. Recursion is depth-capped and skips
+   cascade sets larger than 200 rows.
+
