@@ -511,7 +511,7 @@ export default function Organization() {
                         <TableCell>{renderCodeCell('division', div.id, div.code)}</TableCell>
                         <TableCell>{buCount}</TableCell>
                         <TableCell>
-                          {hasEmployees ? <Badge variant="secondary">In Use</Badge> : <Badge variant="outline">Unused</Badge>}
+                          {hasEmployees ? <Badge variant="secondary">In Use</Badge> : <Badge variant="outline" title="No employees. Other references (access profiles, KPIs, targets) are checked when you delete.">No employees</Badge>}
                         </TableCell>
                         <TableCell>
                           {!hasEmployees && (
@@ -565,7 +565,7 @@ export default function Organization() {
                         <TableCell>{(bu.divisions as any)?.name || '-'}</TableCell>
                         <TableCell>{deptCount}</TableCell>
                         <TableCell>
-                          {hasEmployees ? <Badge variant="secondary">In Use</Badge> : <Badge variant="outline">Unused</Badge>}
+                          {hasEmployees ? <Badge variant="secondary">In Use</Badge> : <Badge variant="outline" title="No employees. Other references (access profiles, KPIs, targets) are checked when you delete.">No employees</Badge>}
                         </TableCell>
                         <TableCell>
                           <BuHeadColumn
@@ -629,7 +629,7 @@ export default function Organization() {
                         <TableCell>{(dept.business_units as any)?.name || '-'}</TableCell>
                         <TableCell>{sbCount}</TableCell>
                         <TableCell>
-                          {hasEmployees ? <Badge variant="secondary">{empCount} employees</Badge> : <Badge variant="outline">Unused</Badge>}
+                          {hasEmployees ? <Badge variant="secondary">{empCount} employees</Badge> : <Badge variant="outline" title="No employees. Other references (access profiles, KPIs, targets) are checked when you delete.">No employees</Badge>}
                         </TableCell>
                         <TableCell>
                           <OrgHeadColumn
