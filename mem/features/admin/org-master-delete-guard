@@ -1,0 +1,12 @@
+---
+name: Organisation Master Delete Guard
+description: Dependency-aware, audited deletion for org master records (divisions, BUs, departments, designations, grades, levels, locations, categories, statuses) — ADR-308
+type: feature
+---
+
+- Deletions run only through `public.org_master_delete` (admin-only, SECURITY DEFINER, pinned search_path). Raw client table deletes on org master tables are forbidden.
+- The UI must preflight with `public.org_master_delete_impact` and list dependencies in plain language (never raw table names).
+- Classification is server-side: `blocking` (operational data — disable Delete, tell the user what to reassign), `cleanable` (config-only rows registered in `public.org_master_cleanable_dependencies`, e.g. `access_profile_org_scope`; removed only after an explicit checkbox), `auto` (already cascaded).
+- Every successful delete appends one row to the append-only `public.org_master_delete_audit` with actor, entity, name and cleaned counts.
+- Usage badges may only claim what they measured: "No employees", never "Unused".
+- POLICY §ORG-MASTER-DELETE-DEPENDENCY-GUARD / ADR-308. Regression: `src/test/orgMasterDelete.test.ts`.
