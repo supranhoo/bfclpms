@@ -54,7 +54,34 @@ describe('ADR-308 org master delete impact model', () => {
   });
 });
 
+describe('ADR-308a cascade-aware impact', () => {
+  const hrShape = [
+    row({ child_table: 'departments', child_column: 'business_unit_id', delete_action: 'c', classification: 'auto', row_count: 1 }),
+    row({ child_table: 'org_kpi_values', child_column: 'department_id', classification: 'blocking', row_count: 2, via_path: 'departments "Executive"' }),
+    row({ child_table: 'access_profile_org_scope', child_column: 'department_id', classification: 'cleanable', row_count: 3, via_path: 'departments "Executive"', labels: ['Auditor', 'Management', 'Onboarding'] }),
+    row({ child_table: 'access_profile_org_scope', child_column: 'business_unit_id', classification: 'cleanable', row_count: 3, labels: ['Auditor', 'Management', 'Onboarding'] }),
+  ];
+
+  it('HR-HUMAN RESOURCES shape is blocked by its cascaded department', () => {
+    const out = splitImpact(hrShape);
+    expect(out.blocking).toHaveLength(1);
+    expect(out.blocking[0].child_table).toBe('org_kpi_values');
+    expect(out.blocking[0].via_path).toContain('Executive');
+  });
+
+  it('names the cascaded child in plain language', () => {
+    expect(describeViaPath('departments "Executive"')).toBe('Departments: Executive');
+    expect(describeViaPath('')).toBeNull();
+    expect(cascadeSummaries(hrShape)).toEqual(['Departments: Executive']);
+  });
+
+  it('direct dependencies have no cascade path', () => {
+    expect(cascadeSummaries([row({})])).toEqual([]);
+  });
+});
+
 describe('ADR-308 server guard contract', () => {
+
   const sql = () => {
     const { readdirSync, readFileSync } = require('node:fs');
     const { join } = require('node:path');
