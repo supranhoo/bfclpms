@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { useKraCategories, useProfiles, useCreateKraCategory } from '@/hooks/useOrganization';
 import { useCreateKpi, ReviewStatus } from '@/hooks/useKpis';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { Separator } from '@/components/ui/separator';
 import { UomTypeSelector } from './UomTypeSelector';
 import { TieredOptionsBuilder } from './TieredOptionsBuilder';
@@ -441,16 +441,25 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="max-w-4xl max-h-[92vh]">
-        <DialogHeader>
+      <DialogContent className="max-w-none w-screen h-screen sm:max-w-none sm:rounded-none p-0 gap-0 flex flex-col">
+        <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>Assign New KRA</DialogTitle>
           <DialogDescription>Create and assign a new KRA/KPI to an employee</DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="h-[72vh] pr-4">
-          <div className="py-2 space-y-4">
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="mx-auto w-full max-w-7xl space-y-5">
+
+            {/* ─── ASSIGNMENT: library search + employee ─── */}
+            <div className="space-y-4 rounded-lg border bg-card p-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Assignment</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+
             {/* KRA Library Quick Search */}
             <KraLibrarySearchPanel
+
               templates={templates}
               allKpis={allKpis}
               categories={categories}
@@ -498,12 +507,16 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                 </Select>
               </div>
             )}
+            </div>
 
-            {/* Two-column main layout */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+
+
+            {/* Main layout — two structured panels, side by side on wide screens */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
 
               {/* ─── LEFT COLUMN: KRA Identity ─── */}
-              <div className="space-y-4">
+              <div className="space-y-4 rounded-lg border bg-card p-4">
+
                 {/* Section header */}
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">KRA Identity</span>
@@ -892,7 +905,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
               </div>
 
               {/* ─── RIGHT COLUMN: Metrics & Configuration ─── */}
-              <div className="space-y-4">
+              <div className="space-y-4 rounded-lg border bg-card p-4">
+
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Metrics & Configuration</span>
                   <div className="flex-1 h-px bg-border" />
@@ -1162,9 +1176,10 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
               </div>
             </div>
           </div>
-        </ScrollArea>
+        </div>
 
-        <DialogFooter className="gap-2">
+        <DialogFooter className="shrink-0 gap-2 border-t bg-background px-6 py-4">
+
           <Button variant="outline" onClick={handleClose}>
             Cancel
           </Button>

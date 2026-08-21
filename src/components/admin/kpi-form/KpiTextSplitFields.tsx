@@ -2,11 +2,14 @@
  * ADR-272 / ADR-269 — Structured KPI text fields shared by "Assign New KRA"
  * and the "Admin KPI Editor".
  */
+import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Wand2 } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronRight, Wand2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { KpiTextState, suggestTextState } from './kpiFormModel';
 
 interface Props {
@@ -20,21 +23,46 @@ interface Props {
 export function KpiTextSplitFields({ value, onChange, hideName, nameSlot }: Props) {
   const set = (patch: Partial<KpiTextState>) => onChange({ ...value, ...patch });
   const isStructured = value.kpi_title.trim().length > 0;
+  // Legacy text stays out of the way once the KPI is structured, but opens by
+  // default while it is still the only definition the row has.
+  const [legacyOpen, setLegacyOpen] = useState(
+    !isStructured && value.kpi_name.trim().length > 0,
+  );
+  const legacyPreview = value.kpi_name.trim().replace(/\s+/g, ' ');
 
   return (
     <div className="space-y-3">
       {!hideName && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">KPI Name (legacy free text)</Label>
-          <Textarea
-            value={value.kpi_name}
-            onChange={(e) => set({ kpi_name: e.target.value })}
-            rows={3}
-            className="min-h-[80px] resize-y"
-            disabled={isStructured}
-          />
-        </div>
+        <Collapsible open={legacyOpen} onOpenChange={setLegacyOpen} className="rounded-md border">
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 rounded-md"
+              aria-expanded={legacyOpen}
+            >
+              <ChevronRight
+                className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', legacyOpen && 'rotate-90')}
+              />
+              <span className="text-xs font-medium shrink-0">KPI Name (legacy free text)</span>
+              {!legacyOpen && (
+                <span className="truncate text-[11px] text-muted-foreground">
+                  {legacyPreview || 'empty'}
+                </span>
+              )}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="px-3 pb-3">
+            <Textarea
+              value={value.kpi_name}
+              onChange={(e) => set({ kpi_name: e.target.value })}
+              rows={3}
+              className="min-h-[80px] resize-y"
+              disabled={isStructured}
+            />
+          </CollapsibleContent>
+        </Collapsible>
       )}
+
       {nameSlot}
 
       <div className="rounded-md border p-3 space-y-3 bg-muted/20">
