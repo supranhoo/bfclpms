@@ -500,11 +500,12 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
               </div>
             )}
 
-            {/* Two-column main layout */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            {/* Main layout — two structured panels, side by side on wide screens */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
 
               {/* ─── LEFT COLUMN: KRA Identity ─── */}
-              <div className="space-y-4">
+              <div className="space-y-4 rounded-lg border bg-card p-4">
+
                 {/* Section header */}
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">KRA Identity</span>
