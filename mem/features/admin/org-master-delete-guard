@@ -1,12 +1,13 @@
 ---
 name: Organisation Master Delete Guard
-description: Dependency-aware, audited deletion for org master records (divisions, BUs, departments, designations, grades, levels, locations, categories, statuses) — ADR-308
+description: Dependency-aware, cascade-aware, audited deletion for org master records (divisions, BUs, departments, designations, grades, levels, locations, categories, statuses) — ADR-308 / ADR-308a
 type: feature
 ---
 
 - Deletions run only through `public.org_master_delete` (admin-only, SECURITY DEFINER, pinned search_path). Raw client table deletes on org master tables are forbidden.
 - The UI must preflight with `public.org_master_delete_impact` and list dependencies in plain language (never raw table names).
 - Classification is server-side: `blocking` (operational data — disable Delete, tell the user what to reassign), `cleanable` (config-only rows registered in `public.org_master_cleanable_dependencies`, e.g. `access_profile_org_scope`; removed only after an explicit checkbox), `auto` (already cascaded).
-- Every successful delete appends one row to the append-only `public.org_master_delete_audit` with actor, entity, name and cleaned counts.
+- ADR-308a: the impact report is **recursive** (`org_master_delete_impact_at`, depth-capped 4, skips cascade sets > 200 rows). Dependencies of CASCADE children are reported as dependencies of the parent with a `via_path` naming the child, and cleanup deletes target `target_id`, not the top-level id. Never present a record as deletable when a cascaded descendant is blocked.
+- Every successful delete appends one row to the append-only `public.org_master_delete_audit` with actor, entity, name and cleaned counts (including the via path).
 - Usage badges may only claim what they measured: "No employees", never "Unused".
-- POLICY §ORG-MASTER-DELETE-DEPENDENCY-GUARD / ADR-308. Regression: `src/test/orgMasterDelete.test.ts`.
+- POLICY §ORG-MASTER-DELETE-DEPENDENCY-GUARD / ADR-308 + amendment 308a. Regression: `src/test/orgMasterDelete.test.ts`.
