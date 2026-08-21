@@ -10754,6 +10754,309 @@ export type Database = {
           },
         ]
       }
+      org_kpi_dataset_columns: {
+        Row: {
+          column_key: string
+          created_at: string
+          data_type: string
+          dataset_id: string
+          display_format: string | null
+          editable_by: string
+          formula: string | null
+          id: string
+          is_key: boolean
+          is_required: boolean
+          label: string
+          options: Json
+          sort_order: number
+          unit: string | null
+        }
+        Insert: {
+          column_key: string
+          created_at?: string
+          data_type?: string
+          dataset_id: string
+          display_format?: string | null
+          editable_by?: string
+          formula?: string | null
+          id?: string
+          is_key?: boolean
+          is_required?: boolean
+          label: string
+          options?: Json
+          sort_order?: number
+          unit?: string | null
+        }
+        Update: {
+          column_key?: string
+          created_at?: string
+          data_type?: string
+          dataset_id?: string
+          display_format?: string | null
+          editable_by?: string
+          formula?: string | null
+          id?: string
+          is_key?: boolean
+          is_required?: boolean
+          label?: string
+          options?: Json
+          sort_order?: number
+          unit?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_kpi_dataset_columns_dataset_id_fkey"
+            columns: ["dataset_id"]
+            isOneToOne: false
+            referencedRelation: "org_kpi_dataset_defs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_kpi_dataset_defs: {
+        Row: {
+          allow_provider_override: boolean
+          category_id: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          granularity: string
+          id: string
+          is_active: boolean
+          kpi_name: string
+          kra_name: string
+          rollup_rule: string
+          target_column_key: string | null
+          title: string
+          updated_at: string
+          value_column_key: string | null
+          weight_column_key: string | null
+        }
+        Insert: {
+          allow_provider_override?: boolean
+          category_id: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          granularity?: string
+          id?: string
+          is_active?: boolean
+          kpi_name: string
+          kra_name: string
+          rollup_rule?: string
+          target_column_key?: string | null
+          title?: string
+          updated_at?: string
+          value_column_key?: string | null
+          weight_column_key?: string | null
+        }
+        Update: {
+          allow_provider_override?: boolean
+          category_id?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          granularity?: string
+          id?: string
+          is_active?: boolean
+          kpi_name?: string
+          kra_name?: string
+          rollup_rule?: string
+          target_column_key?: string | null
+          title?: string
+          updated_at?: string
+          value_column_key?: string | null
+          weight_column_key?: string | null
+        }
+        Relationships: []
+      }
+      org_kpi_dataset_row_history: {
+        Row: {
+          action: string
+          dataset_id: string
+          id: string
+          new_values: Json | null
+          old_values: Json | null
+          performed_at: string
+          performed_by: string | null
+          reason: string | null
+          revision: number
+          row_id: string
+        }
+        Insert: {
+          action: string
+          dataset_id: string
+          id?: string
+          new_values?: Json | null
+          old_values?: Json | null
+          performed_at?: string
+          performed_by?: string | null
+          reason?: string | null
+          revision: number
+          row_id: string
+        }
+        Update: {
+          action?: string
+          dataset_id?: string
+          id?: string
+          new_values?: Json | null
+          old_values?: Json | null
+          performed_at?: string
+          performed_by?: string | null
+          reason?: string | null
+          revision?: number
+          row_id?: string
+        }
+        Relationships: []
+      }
+      org_kpi_dataset_rows: {
+        Row: {
+          business_unit_id: string | null
+          created_at: string
+          dataset_id: string
+          department_id: string | null
+          division_id: string | null
+          employee_id: string | null
+          entered_by: string | null
+          id: string
+          impact_scope: Json
+          level_id: string | null
+          location_id: string | null
+          period_start: string | null
+          pms_grade_id: string | null
+          review_period: string
+          review_year: number
+          revision: number
+          scope_label: string | null
+          updated_at: string
+          updated_by: string | null
+          values: Json
+        }
+        Insert: {
+          business_unit_id?: string | null
+          created_at?: string
+          dataset_id: string
+          department_id?: string | null
+          division_id?: string | null
+          employee_id?: string | null
+          entered_by?: string | null
+          id?: string
+          impact_scope?: Json
+          level_id?: string | null
+          location_id?: string | null
+          period_start?: string | null
+          pms_grade_id?: string | null
+          review_period: string
+          review_year: number
+          revision?: number
+          scope_label?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          values?: Json
+        }
+        Update: {
+          business_unit_id?: string | null
+          created_at?: string
+          dataset_id?: string
+          department_id?: string | null
+          division_id?: string | null
+          employee_id?: string | null
+          entered_by?: string | null
+          id?: string
+          impact_scope?: Json
+          level_id?: string | null
+          location_id?: string | null
+          period_start?: string | null
+          pms_grade_id?: string | null
+          review_period?: string
+          review_year?: number
+          revision?: number
+          scope_label?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          values?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_kpi_dataset_rows_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_dataset_rows_dataset_id_fkey"
+            columns: ["dataset_id"]
+            isOneToOne: false
+            referencedRelation: "org_kpi_dataset_defs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_dataset_rows_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "org_kpi_dataset_rows_division_id_fkey"
+            columns: ["division_id"]
+            isOneToOne: false
+            referencedRelation: "divisions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      org_kpi_dataset_validations: {
+        Row: {
+          dataset_id: string
+          id: string
+          invalidated_at: string | null
+          invalidated_reason: string | null
+          note: string | null
+          review_period: string
+          review_year: number
+          row_count: number
+          validated_at: string
+          validated_by: string | null
+          verdict: string
+        }
+        Insert: {
+          dataset_id: string
+          id?: string
+          invalidated_at?: string | null
+          invalidated_reason?: string | null
+          note?: string | null
+          review_period: string
+          review_year: number
+          row_count?: number
+          validated_at?: string
+          validated_by?: string | null
+          verdict?: string
+        }
+        Update: {
+          dataset_id?: string
+          id?: string
+          invalidated_at?: string | null
+          invalidated_reason?: string | null
+          note?: string | null
+          review_period?: string
+          review_year?: number
+          row_count?: number
+          validated_at?: string
+          validated_by?: string | null
+          verdict?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_kpi_dataset_validations_dataset_id_fkey"
+            columns: ["dataset_id"]
+            isOneToOne: false
+            referencedRelation: "org_kpi_dataset_defs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       org_kpi_owner_key_backup: {
         Row: {
           action: string
@@ -17919,6 +18222,13 @@ export type Database = {
         Args: { p_context_id: string; p_folder: string }
         Returns: boolean
       }
+      can_read_kpi_dataset_row: {
+        Args: {
+          p_row: Database["public"]["Tables"]["org_kpi_dataset_rows"]["Row"]
+          p_user: string
+        }
+        Returns: boolean
+      }
       can_read_kpi_evidence: { Args: { p_kpi_id: string }; Returns: boolean }
       can_send_notification_to:
         | { Args: { sender: string; target: string }; Returns: boolean }
@@ -17956,6 +18266,10 @@ export type Database = {
       }
       can_view_safety_incident: {
         Args: { _incident_id: string }
+        Returns: boolean
+      }
+      can_write_kpi_dataset: {
+        Args: { p_dataset_id: string; p_user: string }
         Returns: boolean
       }
       canonical_stage_order: { Args: { _stage: string }; Returns: number }
@@ -18172,6 +18486,17 @@ export type Database = {
       dust_rating_to_level: {
         Args: { p_rating: number }
         Returns: Database["public"]["Enums"]["rating_level"]
+      }
+      employee_org_scope: {
+        Args: { p_user: string }
+        Returns: {
+          business_unit_id: string
+          department_id: string
+          division_id: string
+          level_id: string
+          location_id: string
+          pms_grade_id: string
+        }[]
       }
       enqueue_safety_notification: {
         Args: {
@@ -19679,6 +20004,56 @@ export type Database = {
           p_kra_name: string
           p_propagation_mode?: string
           p_steps: Json
+        }
+        Returns: Json
+      }
+      org_kpi_dataset_bulk_import: {
+        Args: { p_dataset_id: string; p_dry_run?: boolean; p_rows: Json }
+        Returns: Json
+      }
+      org_kpi_dataset_get: {
+        Args: { p_category_id: string; p_kpi_name: string; p_kra_name: string }
+        Returns: Json
+      }
+      org_kpi_dataset_rollup: {
+        Args: {
+          p_dataset_id: string
+          p_review_period?: string
+          p_review_year: number
+        }
+        Returns: Json
+      }
+      org_kpi_dataset_row_delete: {
+        Args: { p_reason?: string; p_row_id: string }
+        Returns: Json
+      }
+      org_kpi_dataset_row_save: { Args: { p_payload: Json }; Returns: Json }
+      org_kpi_dataset_rows_read: {
+        Args: {
+          p_dataset_id: string
+          p_limit?: number
+          p_offset?: number
+          p_review_period?: string
+          p_review_year?: number
+        }
+        Returns: Json
+      }
+      org_kpi_dataset_upsert_def: { Args: { p_payload: Json }; Returns: Json }
+      org_kpi_dataset_validate: {
+        Args: {
+          p_dataset_id: string
+          p_note?: string
+          p_review_period: string
+          p_review_year: number
+          p_verdict?: string
+        }
+        Returns: Json
+      }
+      org_kpi_dataset_validation_state: {
+        Args: {
+          p_dataset_id: string
+          p_review_period: string
+          p_review_year: number
         }
         Returns: Json
       }

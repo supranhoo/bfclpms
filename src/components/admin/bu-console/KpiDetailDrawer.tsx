@@ -175,6 +175,21 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
           />
         )}
 
+        {/* ADR-309 — the data table behind the number: rows, history, exception
+            flags and the one-shot audit validation for the period. */}
+        {data?.authorized && args && (
+          <KpiLedgerPanel
+            categoryId={args.categoryId}
+            kraName={args.kraName}
+            kpiName={args.kpiName}
+            kpiTitle={args.kpiTitle ?? def.kpi_title ?? null}
+            period={args.period}
+            year={args.year}
+          />
+        )}
+
+
+
         {showGroupActions && (
           <div className="sticky top-0 z-10 -mx-6 mb-4 flex flex-wrap items-center gap-2 border-b bg-background/95 px-6 pb-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
             <Button
