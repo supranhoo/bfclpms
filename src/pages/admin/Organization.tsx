@@ -326,14 +326,27 @@ export default function Organization() {
 
   const confirmDelete = (type: string, id: string, name: string) => {
     setDeleteTarget({ type, id, name });
+    setCleanupConfirmed(false);
     setDeleteDialogOpen(true);
   };
 
+  // ADR-308 dependency preflight for the record about to be deleted.
+  const impactQuery = useQuery({
+    queryKey: ['org-master-delete-impact', deleteTarget?.type, deleteTarget?.id],
+    queryFn: () => fetchOrgDeleteImpact(deleteTarget!.type, deleteTarget!.id),
+    enabled: !!deleteTarget && deleteDialogOpen,
+    staleTime: 0,
+  });
+  const impact = useMemo(() => splitImpact(impactQuery.data ?? []), [impactQuery.data]);
+  const cleanableTotal = impact.cleanable.reduce((s, r) => s + r.row_count, 0);
+  const deleteBlocked = impact.blocking.length > 0;
+
   const handleDelete = () => {
-    if (deleteTarget) {
-      deleteEntity.mutate({ type: deleteTarget.type, id: deleteTarget.id });
+    if (deleteTarget && !deleteBlocked) {
+      deleteEntity.mutate({ type: deleteTarget.type, id: deleteTarget.id, cleanup: cleanupConfirmed });
     }
   };
+
 
   const startEditCode = (type: string, id: string, currentCode: string | null) => {
     setEditingCode({ type, id, code: currentCode || '' });
