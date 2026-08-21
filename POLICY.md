@@ -6050,6 +6050,28 @@ overwrite fields absent from the upload.
 
 ---
 
+## §EVIDENCE-UPLOAD-SESSION-BOUND-IDENTITY (ADR-305, 2026-08-21)
+
+1. **Owner-scoped storage paths come from the live session.** Any upload into
+   an owner-scoped bucket path MUST derive its folder prefix from
+   `supabase.auth.getSession()` at upload time. Building the prefix from
+   cached React state is forbidden: a silently expired token yields
+   `auth.uid() = NULL` and the write is rejected by RLS.
+2. **No session, no upload.** When no live session is present the upload aborts
+   with an explicit sign-in message; it MUST NOT be attempted "hopefully".
+3. **Recover once, then fail honestly.** An RLS denial triggers exactly one
+   session refresh + retry. Repeated retries are forbidden.
+4. **Never surface raw Postgres RLS text as the primary message.** RLS denials
+   read as an expired-session instruction; the raw reason stays visible as a
+   secondary detail for support.
+5. **No zombie sessions.** A failed token refresh MUST clear auth state
+   (user, profile, roles) rather than leaving a signed-in-looking UI.
+6. Logic lives in `src/lib/evidenceUpload.ts`; `MultiFileUpload` stays a
+   rendering + orchestration component. No storage policy is loosened to make
+   an upload succeed.
+
+---
+
 ## §EVIDENCE-PREVIEW-TRANSPORT-FALLBACK (ADR-300, 2026-08-19)
 
 1. **Never fail while a working transport exists.** If the signed-URL path does

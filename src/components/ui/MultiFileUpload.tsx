@@ -8,6 +8,12 @@ import { Upload, X, FileText, Image, FileSpreadsheet, Loader2, Plus } from 'luci
 import { openStorageFileGroup } from '@/lib/storageDownload';
 import { cn } from '@/lib/utils';
 import { useUploadLimits } from '@/hooks/useUploadLimits';
+import {
+  resolveUploadIdentity,
+  buildEvidenceFilePath,
+  isRlsDenialError,
+  describeUploadFailure,
+} from '@/lib/evidenceUpload';
 
 interface MultiFileUploadProps {
   userId: string;
@@ -146,9 +152,27 @@ export function MultiFileUpload({
 
     try {
       const fileExt = ACCEPTED_TYPES[file.type as keyof typeof ACCEPTED_TYPES]?.ext || 'file';
-      const timestamp = Date.now();
-      const sanitizedName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').substring(0, 40);
-      const filePath = `${userId}/${contextId}/${folder}/${timestamp}_${sanitizedName}.${fileExt}`;
+
+      // ADR-305: the folder prefix must come from the LIVE session, otherwise a
+      // silently expired token makes storage RLS reject the row.
+      const identity = await resolveUploadIdentity(userId);
+      if (!identity) {
+        throw new Error('No active session — sign in again to attach files. (row-level security)');
+      }
+      if (!identity.matchesCachedUser) {
+        console.warn('[evidence-upload] session user differs from cached user', {
+          cached: userId,
+          live: identity.id,
+        });
+      }
+
+      const filePath = buildEvidenceFilePath({
+        userId: identity.id,
+        contextId,
+        folder,
+        file,
+        ext: fileExt,
+      });
 
       // Simulate progress (Supabase doesn't provide upload progress)
       const progressInterval = setInterval(() => {
@@ -159,9 +183,42 @@ export function MultiFileUpload({
         );
       }, 100);
 
-      const { error: uploadError } = await supabase.storage
+      let { error: uploadError } = await supabase.storage
         .from('review-evidence')
         .upload(filePath, file, { upsert: true });
+
+      // Recover once from an RLS denial: refresh the session and retry with the
+      // refreshed identity before surfacing a failure to the user.
+      if (uploadError && isRlsDenialError(uploadError)) {
+        const { data: refreshed } = await supabase.auth.refreshSession();
+        const retryId = refreshed?.session?.user?.id;
+        if (retryId) {
+          const retryPath = buildEvidenceFilePath({
+            userId: retryId,
+            contextId,
+            folder,
+            file,
+            ext: fileExt,
+          });
+          const retry = await supabase.storage
+            .from('review-evidence')
+            .upload(retryPath, file, { upsert: true });
+          if (!retry.error) {
+            clearInterval(progressInterval);
+            setUploadingFiles(prev =>
+              prev.map(f => (f.id === fileId ? { ...f, progress: 100 } : f))
+            );
+            const { data: retryUrl } = supabase.storage
+              .from('review-evidence')
+              .getPublicUrl(retryPath);
+            setTimeout(() => {
+              setUploadingFiles(prev => prev.filter(f => f.id !== fileId));
+            }, 500);
+            return retryUrl.publicUrl;
+          }
+          uploadError = retry.error;
+        }
+      }
 
       clearInterval(progressInterval);
 
@@ -184,14 +241,19 @@ export function MultiFileUpload({
       return publicUrl;
     } catch (error: any) {
       setUploadingFiles(prev => prev.filter(f => f.id !== fileId));
+      const described = describeUploadFailure(error, file.name);
       toast({
-        title: 'Upload failed',
-        description: error.message || `Failed to upload "${file.name}"`,
+        title: described.title,
+        description:
+          described.message === described.detail
+            ? described.message
+            : `${described.message} (${described.detail})`,
         variant: 'destructive',
       });
       return null;
     }
   };
+
 
   const handleFilesSelected = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
