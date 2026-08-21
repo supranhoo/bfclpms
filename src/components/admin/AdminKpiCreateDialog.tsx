@@ -450,8 +450,16 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
         <div className="flex-1 overflow-y-auto px-6 py-5">
           <div className="mx-auto w-full max-w-7xl space-y-5">
 
+            {/* ─── ASSIGNMENT: library search + employee ─── */}
+            <div className="space-y-4 rounded-lg border bg-card p-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Assignment</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+
             {/* KRA Library Quick Search */}
             <KraLibrarySearchPanel
+
               templates={templates}
               allKpis={allKpis}
               categories={categories}
