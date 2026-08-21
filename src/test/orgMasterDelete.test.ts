@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { splitImpact, describeTable, describeOrgDeleteError, type OrgDeleteImpactRow } from '@/services/organization/orgMasterDelete';
+import { splitImpact, describeTable, describeOrgDeleteError, describeViaPath, cascadeSummaries, type OrgDeleteImpactRow } from '@/services/organization/orgMasterDelete';
 
 const row = (over: Partial<OrgDeleteImpactRow>): OrgDeleteImpactRow => ({
   child_table: 'profiles',
@@ -8,8 +8,10 @@ const row = (over: Partial<OrgDeleteImpactRow>): OrgDeleteImpactRow => ({
   row_count: 1,
   classification: 'blocking',
   labels: [],
+  via_path: '',
   ...over,
 });
+
 
 describe('ADR-308 org master delete impact model', () => {
   it('splits blocking, cleanable and auto dependencies', () => {
