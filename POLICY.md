@@ -6688,3 +6688,25 @@ transactions — an unlisted action aborts the parent operation (root cause of t
    server's rejection reason verbatim. Propagation stays an explicit admin action —
    never automatic on final approval — so skipped locked submissions are visible.
 
+
+### §ORG-MASTER-DELETE-DEPENDENCY-GUARD — organisation master deletions (ADR-308)
+
+1. Deleting an organisation master record (division, business unit, department, sub-branch,
+   designation, grade, level, location, employee category, employment status) happens only
+   through `public.org_master_delete`. Raw client table deletes on those tables are forbidden.
+2. Before the confirmation is shown, the UI must call `public.org_master_delete_impact`
+   and list every referencing record in plain language. Raw table names are never shown.
+3. Dependencies are classified by the server, not the client:
+   - **blocking** — operational data (employees, KPIs, targets, incentive slabs …).
+     The delete button stays disabled; the user is told what to reassign first.
+   - **cleanable** — configuration-only references registered in
+     `public.org_master_cleanable_dependencies` (for example `access_profile_org_scope`).
+     They are removed only when the user explicitly confirms the cleanup checkbox.
+   - **auto** — rows the database already cascades.
+4. A usage badge may only claim what it has measured. Employee-count badges say
+   "No employees", never "Unused", because other references are not counted there.
+5. Every successful delete writes one immutable row to `public.org_master_delete_audit`
+   recording actor, entity, name, and the cleaned dependency counts. The audit table is
+   append-only.
+6. `org_master_delete` is admin-only and `SECURITY DEFINER` with a pinned `search_path`.
+   Cleanup without confirmation is rejected server-side even if the UI is bypassed.
