@@ -21,6 +21,8 @@ import { useResolvedTabs } from '@/hooks/useResolvedMenu';
 import { useQuery } from '@tanstack/react-query';
 import { BuHeadColumn, OrgHeadColumn } from '@/components/admin/BuHeadColumn';
 import { listBuHeads, listDepartmentHeads } from '@/services/orgHeads/orgHeadsService';
+import { deleteOrgMaster, fetchOrgDeleteImpact, splitImpact, describeTable, describeOrgDeleteError } from '@/services/organization/orgMasterDelete';
+
 
 type OrgTabKey =
   | 'divisions' | 'business-units' | 'departments' | 'sub-branches'
@@ -102,6 +104,8 @@ export default function Organization() {
   // Delete confirmation state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; name: string } | null>(null);
+  const [cleanupConfirmed, setCleanupConfirmed] = useState(false);
+
 
   // Inline code editing state
   const [editingCode, setEditingCode] = useState<{ type: string; id: string; code: string } | null>(null);
@@ -236,24 +240,13 @@ export default function Organization() {
     },
   });
 
+  // ADR-308: deletions go through the guarded server RPC, never a raw table
+  // delete, so dependencies are checked and the action is audited.
   const deleteEntity = useMutation({
-    mutationFn: async ({ type, id }: { type: string; id: string }) => {
-      let table = '';
-      switch (type) {
-        case 'division': table = 'divisions'; break;
-        case 'bu': table = 'business_units'; break;
-        case 'department': table = 'departments'; break;
-        case 'sub-branch': table = 'sub_branches'; break;
-        case 'designation': table = 'designations'; break;
-        case 'pms-grade': table = 'pms_grades'; break;
-        case 'level': table = 'levels'; break;
-        case 'location': table = 'locations'; break;
-        case 'employee-category': table = 'employee_categories'; break;
-        case 'employment-status': table = 'employment_statuses'; break;
-      }
-      const { error } = await supabase.from(table as any).delete().eq('id', id);
-      if (error) throw error;
+    mutationFn: async ({ type, id, cleanup }: { type: string; id: string; cleanup: boolean }) => {
+      await deleteOrgMaster(type, id, cleanup);
     },
+
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['divisions'] });
       queryClient.invalidateQueries({ queryKey: ['business-units'] });
@@ -265,13 +258,16 @@ export default function Organization() {
       queryClient.invalidateQueries({ queryKey: ['locations'] });
       queryClient.invalidateQueries({ queryKey: ['employee-categories'] });
       queryClient.invalidateQueries({ queryKey: ['employment-statuses'] });
+      queryClient.invalidateQueries({ queryKey: ['access-profiles'] });
       toast({ title: 'Deleted successfully' });
       setDeleteDialogOpen(false);
       setDeleteTarget(null);
+      setCleanupConfirmed(false);
     },
     onError: (error: Error) => {
-      toast({ title: 'Failed to delete', description: error.message, variant: 'destructive' });
+      toast({ title: 'Failed to delete', description: describeOrgDeleteError(error.message), variant: 'destructive' });
     },
+
   });
 
   const updateCode = useMutation({
@@ -334,14 +330,27 @@ export default function Organization() {
 
   const confirmDelete = (type: string, id: string, name: string) => {
     setDeleteTarget({ type, id, name });
+    setCleanupConfirmed(false);
     setDeleteDialogOpen(true);
   };
 
+  // ADR-308 dependency preflight for the record about to be deleted.
+  const impactQuery = useQuery({
+    queryKey: ['org-master-delete-impact', deleteTarget?.type, deleteTarget?.id],
+    queryFn: () => fetchOrgDeleteImpact(deleteTarget!.type, deleteTarget!.id),
+    enabled: !!deleteTarget && deleteDialogOpen,
+    staleTime: 0,
+  });
+  const impact = useMemo(() => splitImpact(impactQuery.data ?? []), [impactQuery.data]);
+  const cleanableTotal = impact.cleanable.reduce((s, r) => s + r.row_count, 0);
+  const deleteBlocked = impact.blocking.length > 0;
+
   const handleDelete = () => {
-    if (deleteTarget) {
-      deleteEntity.mutate({ type: deleteTarget.type, id: deleteTarget.id });
+    if (deleteTarget && !deleteBlocked) {
+      deleteEntity.mutate({ type: deleteTarget.type, id: deleteTarget.id, cleanup: cleanupConfirmed });
     }
   };
+
 
   const startEditCode = (type: string, id: string, currentCode: string | null) => {
     setEditingCode({ type, id, code: currentCode || '' });
@@ -502,7 +511,7 @@ export default function Organization() {
                         <TableCell>{renderCodeCell('division', div.id, div.code)}</TableCell>
                         <TableCell>{buCount}</TableCell>
                         <TableCell>
-                          {hasEmployees ? <Badge variant="secondary">In Use</Badge> : <Badge variant="outline">Unused</Badge>}
+                          {hasEmployees ? <Badge variant="secondary">In Use</Badge> : <Badge variant="outline" title="No employees. Other references (access profiles, KPIs, targets) are checked when you delete.">No employees</Badge>}
                         </TableCell>
                         <TableCell>
                           {!hasEmployees && (
@@ -556,7 +565,7 @@ export default function Organization() {
                         <TableCell>{(bu.divisions as any)?.name || '-'}</TableCell>
                         <TableCell>{deptCount}</TableCell>
                         <TableCell>
-                          {hasEmployees ? <Badge variant="secondary">In Use</Badge> : <Badge variant="outline">Unused</Badge>}
+                          {hasEmployees ? <Badge variant="secondary">In Use</Badge> : <Badge variant="outline" title="No employees. Other references (access profiles, KPIs, targets) are checked when you delete.">No employees</Badge>}
                         </TableCell>
                         <TableCell>
                           <BuHeadColumn
@@ -620,7 +629,7 @@ export default function Organization() {
                         <TableCell>{(dept.business_units as any)?.name || '-'}</TableCell>
                         <TableCell>{sbCount}</TableCell>
                         <TableCell>
-                          {hasEmployees ? <Badge variant="secondary">{empCount} employees</Badge> : <Badge variant="outline">Unused</Badge>}
+                          {hasEmployees ? <Badge variant="secondary">{empCount} employees</Badge> : <Badge variant="outline" title="No employees. Other references (access profiles, KPIs, targets) are checked when you delete.">No employees</Badge>}
                         </TableCell>
                         <TableCell>
                           <OrgHeadColumn
@@ -994,23 +1003,80 @@ export default function Organization() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
+      {/* Delete Confirmation Dialog — ADR-308 dependency-aware */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={(o) => { setDeleteDialogOpen(o); if (!o) { setDeleteTarget(null); setCleanupConfirmed(false); } }}>
+        <AlertDialogContent className="max-w-lg">
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {deleteTarget?.type === 'bu' ? 'Business Unit' : deleteTarget?.type}?</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete "{deleteTarget?.name}"? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          <div className="space-y-3 text-sm">
+            {impactQuery.isLoading && (
+              <p className="text-muted-foreground">Checking what depends on this record…</p>
+            )}
+            {impactQuery.isError && (
+              <p className="text-destructive">Could not check dependencies. Try again in a moment.</p>
+            )}
+
+            {!impactQuery.isLoading && deleteBlocked && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-1">
+                <p className="font-medium text-destructive">Still in use — reassign these first:</p>
+                <ul className="list-disc pl-5 text-destructive">
+                  {impact.blocking.map((r) => (
+                    <li key={`${r.child_table}.${r.child_column}`}>
+                      {describeTable(r.child_table)} — {r.row_count} record{r.row_count === 1 ? '' : 's'}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {!impactQuery.isLoading && !deleteBlocked && cleanableTotal > 0 && (
+              <label className="flex items-start gap-2 rounded-md border p-3">
+                <Checkbox
+                  checked={cleanupConfirmed}
+                  onCheckedChange={(v) => setCleanupConfirmed(v === true)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Also remove this {deleteTarget?.type === 'bu' ? 'business unit' : deleteTarget?.type} from{' '}
+                  {cleanableTotal} configuration reference{cleanableTotal === 1 ? '' : 's'}
+                  {impact.cleanable.some((r) => (r.labels ?? []).length > 0) && (
+                    <>
+                      {' '}
+                      (
+                      {impact.cleanable
+                        .flatMap((r) => r.labels ?? [])
+                        .join(', ')}
+                      )
+                    </>
+                  )}
+                  .
+                </span>
+              </label>
+            )}
+
+            {!impactQuery.isLoading && !deleteBlocked && cleanableTotal === 0 && (
+              <p className="text-muted-foreground">Nothing else references this record.</p>
+            )}
+          </div>
+
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleDelete(); }}
+              disabled={impactQuery.isLoading || deleteBlocked || deleteEntity.isPending || (cleanableTotal > 0 && !cleanupConfirmed)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               {deleteEntity.isPending ? 'Deleting...' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
 
       {/* Manage Companies Dialog */}
       <Dialog open={manageCompaniesOpen} onOpenChange={setManageCompaniesOpen}>

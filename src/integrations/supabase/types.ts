@@ -11208,6 +11208,60 @@ export type Database = {
           },
         ]
       }
+      org_master_cleanable_dependencies: {
+        Row: {
+          created_at: string
+          label_sql: string | null
+          reason: string
+          table_name: string
+        }
+        Insert: {
+          created_at?: string
+          label_sql?: string | null
+          reason: string
+          table_name: string
+        }
+        Update: {
+          created_at?: string
+          label_sql?: string | null
+          reason?: string
+          table_name?: string
+        }
+        Relationships: []
+      }
+      org_master_delete_audit: {
+        Row: {
+          cleaned: Json
+          entity_id: string
+          entity_name: string | null
+          entity_table: string
+          entity_type: string
+          id: string
+          performed_at: string
+          performed_by: string | null
+        }
+        Insert: {
+          cleaned?: Json
+          entity_id: string
+          entity_name?: string | null
+          entity_table: string
+          entity_type: string
+          id?: string
+          performed_at?: string
+          performed_by?: string | null
+        }
+        Update: {
+          cleaned?: Json
+          entity_id?: string
+          entity_name?: string | null
+          entity_table?: string
+          entity_type?: string
+          id?: string
+          performed_at?: string
+          performed_by?: string | null
+        }
+        Relationships: []
+      }
       password_rollout_logs: {
         Row: {
           created_at: string
@@ -19727,6 +19781,26 @@ export type Database = {
         }
         Returns: Json
       }
+      org_master_delete: {
+        Args: {
+          p_cleanup_dependencies?: boolean
+          p_entity_id: string
+          p_entity_type: string
+        }
+        Returns: Json
+      }
+      org_master_delete_impact: {
+        Args: { p_entity_id: string; p_entity_type: string }
+        Returns: {
+          child_column: string
+          child_table: string
+          classification: string
+          delete_action: string
+          labels: string[]
+          row_count: number
+        }[]
+      }
+      org_master_table: { Args: { p_entity_type: string }; Returns: string }
       override_annual_review_rating: {
         Args: { p_instance_id: string; p_new_rating: string; p_reason: string }
         Returns: undefined
