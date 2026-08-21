@@ -17861,6 +17861,10 @@ export type Database = {
         Args: { _instance_id: string; _proxy_user_id: string }
         Returns: boolean
       }
+      can_read_evidence_context: {
+        Args: { p_context_id: string; p_folder: string }
+        Returns: boolean
+      }
       can_read_kpi_evidence: { Args: { p_kpi_id: string }; Returns: boolean }
       can_send_notification_to:
         | { Args: { sender: string; target: string }; Returns: boolean }
