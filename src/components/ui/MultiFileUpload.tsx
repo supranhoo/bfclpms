@@ -185,7 +185,7 @@ export function MultiFileUpload({
 
       let { error: uploadError } = await supabase.storage
         .from('review-evidence')
-        .upload(filePath, file, { upsert: true });
+        .upload(filePath, file, { upsert: false });
 
       // Recover once from an RLS denial: refresh the session and retry with the
       // refreshed identity before surfacing a failure to the user.
@@ -202,7 +202,7 @@ export function MultiFileUpload({
           });
           const retry = await supabase.storage
             .from('review-evidence')
-            .upload(retryPath, file, { upsert: true });
+            .upload(retryPath, file, { upsert: false });
           if (!retry.error) {
             clearInterval(progressInterval);
             setUploadingFiles(prev =>
@@ -241,7 +241,12 @@ export function MultiFileUpload({
       return publicUrl;
     } catch (error: any) {
       setUploadingFiles(prev => prev.filter(f => f.id !== fileId));
-      const described = describeUploadFailure(error, file.name);
+      const { data: sessionCheck } = await supabase.auth.getSession();
+      const described = describeUploadFailure(
+        error,
+        file.name,
+        Boolean(sessionCheck.session?.user),
+      );
       toast({
         title: described.title,
         description:
