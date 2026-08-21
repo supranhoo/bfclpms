@@ -254,13 +254,16 @@ export default function Organization() {
       queryClient.invalidateQueries({ queryKey: ['locations'] });
       queryClient.invalidateQueries({ queryKey: ['employee-categories'] });
       queryClient.invalidateQueries({ queryKey: ['employment-statuses'] });
+      queryClient.invalidateQueries({ queryKey: ['access-profiles'] });
       toast({ title: 'Deleted successfully' });
       setDeleteDialogOpen(false);
       setDeleteTarget(null);
+      setCleanupConfirmed(false);
     },
     onError: (error: Error) => {
-      toast({ title: 'Failed to delete', description: error.message, variant: 'destructive' });
+      toast({ title: 'Failed to delete', description: describeOrgDeleteError(error.message), variant: 'destructive' });
     },
+
   });
 
   const updateCode = useMutation({
