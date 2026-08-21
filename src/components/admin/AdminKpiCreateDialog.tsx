@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { useKraCategories, useProfiles, useCreateKraCategory } from '@/hooks/useOrganization';
 import { useCreateKpi, ReviewStatus } from '@/hooks/useKpis';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
-import { ScrollArea } from '@/components/ui/scroll-area';
+
 import { Separator } from '@/components/ui/separator';
 import { UomTypeSelector } from './UomTypeSelector';
 import { TieredOptionsBuilder } from './TieredOptionsBuilder';
