@@ -507,6 +507,9 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                 </Select>
               </div>
             )}
+            </div>
+
+
 
             {/* Main layout — two structured panels, side by side on wide screens */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
