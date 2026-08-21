@@ -123,7 +123,18 @@ export async function deleteOrgMaster(
   if (error) throw new Error(describeOrgDeleteError(error.message));
 }
 
+/** Distinct child records that would be removed along with the target (ADR-308a). */
+export function cascadeSummaries(rows: OrgDeleteImpactRow[]): string[] {
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const label = describeViaPath(r.via_path);
+    if (label) seen.add(label);
+  }
+  return Array.from(seen);
+}
+
 export function splitImpact(rows: OrgDeleteImpactRow[]) {
+
   return {
     blocking: rows.filter((r) => r.classification === 'blocking'),
     cleanable: rows.filter((r) => r.classification === 'cleanable'),
