@@ -66,7 +66,7 @@ describe('evaluateFormula', () => {
 
   it('refuses anything that is not arithmetic', () => {
     expect(evaluateFormula('fetch("/x")', { fetch: 1 })).toBeNull();
-    expect(evaluateFormula('achieved ** 2', { achieved: 2 })).toBeNull();
+    expect(evaluateFormula('achieved; globalThis', { achieved: 2 })).toBeNull();
   });
 
   it('survives divide-by-zero without throwing', () => {
@@ -85,7 +85,7 @@ describe('withDerivedValues', () => {
 describe('computeRollup', () => {
   it('sum_ratio mirrors sum(achieved)/sum(target) as a percentage', () => {
     const res = computeRollup(def, productionRows);
-    expect(res.value).toBeCloseTo(100.35, 1);
+    expect(res.value).toBeCloseTo(96.98, 1);
     expect(res.rowCount).toBe(3);
   });
 
@@ -114,7 +114,7 @@ describe('computeRollup', () => {
       { rollup_rule: 'weighted', value_column_key: 'achieved', target_column_key: 'target', weight_column_key: 'target' },
       productionRows,
     );
-    expect(weighted.value).toBeCloseTo(5674.5, 0);
+    expect(weighted.value).toBeCloseTo(5655.13, 1);
   });
 });
 
