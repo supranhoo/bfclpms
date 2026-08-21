@@ -6719,3 +6719,36 @@ transactions — an unlisted action aborts the parent operation (root cause of t
    row records the path each cleaned group came from. Recursion is depth-capped and skips
    cascade sets larger than 200 rows.
 
+### §CONSOLE-KPI-DATA-LEDGER — the data table behind a central KPI (ADR-309)
+
+1. A central KPI may carry a **dataset**: a configured table of detail rows whose
+   headline number is derived from those rows. Datasets are optional; a KPI without
+   one behaves exactly as it did before ADR-309.
+2. **Zero hardcoding.** Column keys, labels, data types, required flags, order,
+   formulas and the roll-up rule are configuration rows
+   (`org_kpi_dataset_defs` / `org_kpi_dataset_columns`), never code. A new KPI sheet
+   shape must never require a release.
+3. **The headline is derived, never typed twice.** `org_kpi_dataset_rollup` computes
+   it (`sum`, `sum_ratio`, `avg`, `weighted`, `last`, `max`, `min`) and returns its
+   own working. A zero or missing denominator returns no value with a stated reason —
+   never a fabricated number. The client mirror in `kpiLedgerModel.ts` is preview only;
+   the server value is authoritative.
+4. **Formulas are arithmetic only.** Identifiers, numbers and `+ - * / ( ) .`.
+   Any other token, or a missing input, yields no value.
+5. **Scope decides visibility.** Rows carry real org FK columns, and
+   `can_read_kpi_dataset_row` grants: Audit / Management / HR PMS / admin everything;
+   data owners and ladder step holders their assigned scope; an employee only rows
+   that resolve to them or are unscoped for their unit. Writes are limited by
+   `can_write_kpi_dataset` to the provider, the KPI's data owners and admins.
+   RLS and the RPCs share these two functions — one rule, not two.
+6. **Every row write is history.** `org_kpi_dataset_row_history` records before/after,
+   actor and revision, append-only.
+7. **Audit sign-off is one live verdict per dataset and period.** Re-validating
+   invalidates the previous verdict with a reason rather than overwriting it.
+8. **Reads are paged server-side.** `org_kpi_dataset_rows_read` returns
+   `{rows, total, limit, offset}`; no surface may load a whole dataset blindly.
+9. **Imports are dry-run first.** `org_kpi_dataset_bulk_import` reports what it would
+   write before anything is written.
+10. All ledger routines revoke `EXECUTE` from `PUBLIC` and `anon`, and are granted
+    only to `authenticated` and `service_role`.
+
