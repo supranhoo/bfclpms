@@ -894,7 +894,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
               </div>
 
               {/* ─── RIGHT COLUMN: Metrics & Configuration ─── */}
-              <div className="space-y-4">
+              <div className="space-y-4 rounded-lg border bg-card p-4">
+
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Metrics & Configuration</span>
                   <div className="flex-1 h-px bg-border" />
