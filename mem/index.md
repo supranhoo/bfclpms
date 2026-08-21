@@ -193,3 +193,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Days in Stage audit SSOT](mem://features/reports/days-in-stage-audit-ssot) — Ageing/day columns derive from kpi_audit_logs, never kpis.updated_at (ADR-292)
 - [Pending At Level chain SSOT](mem://features/reports/pending-at-level-chain-ssot) — pending_at_level = next stage in resolved chain, never a status→label map (ADR-293)
 - [Central Org KPI Approval](mem://features/admin/central-org-kpi-approval) — Per-KPI approval ladder on org_kpi_values, RPC-only writes, per-employee band recompute (ADR-301)
+- [Org Master Delete Guard](mem://features/admin/org-master-delete-guard) — Dependency-aware guarded deletion of org master records: blocking vs cleanable config refs, confirmation, audit (ADR-308)
