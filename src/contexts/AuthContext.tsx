@@ -239,7 +239,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        // ADR-305: never keep a "zombie" user object after a failed token
+        // refresh — RLS-scoped writes (evidence uploads) would then be built
+        // from cached state while the request carries no identity.
+        if ((event as string) === 'TOKEN_REFRESH_FAILED' || (event === 'TOKEN_REFRESHED' && !session)) {
+          initializedRef.current = true;
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setRole(null);
+          setRoles([]);
+          setNaturalRole(null);
+          setLoading(false);
+          return;
+        }
         if (!initializedRef.current && session?.user) {
+
           initializedRef.current = true;
           setSession(session);
           setUser(session.user);
