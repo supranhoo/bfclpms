@@ -35,6 +35,8 @@ import { GroupApprovalDialog } from './GroupApprovalDialog';
 import { GroupDefinitionEditDialog } from './GroupDefinitionEditDialog';
 import { RowOverrideDialog } from './RowOverrideDialog';
 import { CentralValuePanel } from './CentralValuePanel';
+import { KpiLedgerPanel } from './KpiLedgerPanel';
+
 
 interface Props {
   args: KpiDetailArgs | null;
