@@ -105,7 +105,9 @@ export async function fetchOrgDeleteImpact(
     ...r,
     row_count: Number(r.row_count ?? 0),
     labels: r.labels ?? [],
+    via_path: r.via_path ?? '',
   }));
+
 }
 
 export async function deleteOrgMaster(
