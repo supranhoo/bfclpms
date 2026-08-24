@@ -331,7 +331,65 @@ export function isKpiLockedForPeriod(
       
     default:
       return false;
+}
+
+/**
+ * ADR-310 / POLICY §ORG-KPI-ENTRY-WINDOW-VISIBILITY
+ *
+ * Describe the entry window of a KPI for a given review month WITHOUT changing
+ * the lock rule itself. Surfaces let a not-yet-due multi-month KPI stay visible
+ * (read-only) instead of disappearing, so the admin console and the employee
+ * scorecard never disagree about which KPIs exist for a period.
+ */
+export type EntryWindowStatus = 'open' | 'not_due';
+
+export interface EntryWindowInfo {
+  status: EntryWindowStatus;
+  /** Human month name the entry opens in (null when already open). */
+  dueMonth: string | null;
+  /** Cycle group label, e.g. 'Jul-Aug' or 'Q3' (null when not resolvable). */
+  cycleLabel: string | null;
+  /** Ready-to-render sentence, null when the window is open. */
+  label: string | null;
+}
+
+export function describeEntryWindow(
+  rawFrequency: FrequencyType | string | null,
+  reviewMonth: string,
+  reviewYear: number,
+  frequencyCycleStart?: string | null,
+  config?: FrequencyConfig | null
+): EntryWindowInfo {
+  const open: EntryWindowInfo = { status: 'open', dueMonth: null, cycleLabel: frequencyCycleStart ?? null, label: null };
+  const frequency = normalizeFrequency(rawFrequency);
+  if (!frequency || frequency === 'Monthly' || frequency === 'Daily' || frequency === 'Weekly') return open;
+  if (!isKpiLockedForPeriod(frequency, reviewMonth, reviewYear, frequencyCycleStart, config)) return open;
+
+  const monthNum = getMonthNumber(reviewMonth);
+  const effective = resolveEffectiveCycleOption(frequency, frequencyCycleStart, config?.sub_frequency);
+  const groups = (effective?.lockedMonths ?? (config?.locked_months as Record<string, number[]> | undefined)) || null;
+
+  let cycleLabel: string | null = frequencyCycleStart ?? null;
+  let dueNum: number | null = null;
+  if (groups) {
+    for (const [key, months] of Object.entries(groups)) {
+      if (Array.isArray(months) && months.includes(monthNum)) {
+        cycleLabel = key;
+        dueNum = (Math.max(...months) % 12) + 1;
+        break;
+      }
+    }
   }
+
+  const dueMonth = dueNum ? getMonthName(dueNum) : null;
+  const cyclePart = cycleLabel ? ` (${cycleLabel})` : '';
+  const label = dueMonth
+    ? `${frequency}${cyclePart} — entry opens in ${dueMonth}`
+    : `${frequency}${cyclePart} — not due in ${reviewMonth}`;
+
+  return { status: 'not_due', dueMonth, cycleLabel, label };
+}
+
 }
 
 /**
