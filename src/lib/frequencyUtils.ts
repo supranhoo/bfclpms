@@ -391,8 +391,6 @@ export function describeEntryWindow(
   return { status: 'not_due', dueMonth, cycleLabel, label };
 }
 
-}
-
 /**
  * Check if locked for yearly frequency based on cycle start
  */
