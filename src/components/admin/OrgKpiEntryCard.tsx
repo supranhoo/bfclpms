@@ -82,6 +82,8 @@ interface OrgKpiEntryCardProps {
   reviewYear: number;
   isAdmin?: boolean;
   governanceLocked?: boolean;
+  /** ADR-310 — set when the KPI's multi-month cycle is not enterable yet. */
+  notDueLabel?: string | null;
   employeeKpiIds?: string[];
   sentBackMap?: Map<string, SentBackInfo>;
   onSave: (values: {
@@ -123,8 +125,8 @@ const scopeIcons = {
   employee: User,
 };
 
-export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, governanceLocked, employeeKpiIds, sentBackMap, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg, onClearEntry }: OrgKpiEntryCardProps) {
-  const isLocked = (data.status === 'propagated' && !isAdmin) || (governanceLocked === true);
+export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, governanceLocked, notDueLabel, employeeKpiIds, sentBackMap, onSave, onSaveAndPropagate, onUnlock, onRollback, onBulkRollback, onOpenImpact, onRemoveFromOrg, onClearEntry }: OrgKpiEntryCardProps) {
+  const isLocked = (data.status === 'propagated' && !isAdmin) || (governanceLocked === true) || !!notDueLabel;
   const isPropagated = data.status === 'propagated';
   // ADR-091 — Bulk Rollback visibility uses OKV-truth (per-scope status),
   // not the fact-based card status. See src/lib/orgKpiStatus.ts.
@@ -1011,7 +1013,11 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
           {isLocked && (
             <div className="flex items-center gap-2 p-2 rounded-md bg-muted text-sm text-muted-foreground">
               <Lock className="h-4 w-4 shrink-0" />
-              <span>Locked after propagation. Contact admin to unlock.</span>
+              <span>
+                {notDueLabel
+                  ? `${notDueLabel}. It stays visible here so the console matches the employee scorecard.`
+                  : 'Locked after propagation. Contact admin to unlock.'}
+              </span>
             </div>
           )}
         </div>
