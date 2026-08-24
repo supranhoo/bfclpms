@@ -67,7 +67,7 @@ export default function OrgKpiDataEntry() {
   const [selectedYear, setSelectedYear] = useState(defaultYear);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'entered' | 'propagated' | 'stuck'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'entered' | 'propagated' | 'stuck' | 'not_due'>('all');
   const [activeTab, setActiveTab] = useState<'entry' | 'suggestions' | 'owners'>('entry');
   const [importOpen, setImportOpen] = useState(false);
   const [selectedOwnerId, setSelectedOwnerId] = useState<string | null>(null);
@@ -214,14 +214,40 @@ export default function OrgKpiDataEntry() {
     });
   }, [orgLevelKpis, isAdmin, ownershipMap]);
 
-  // Filter by frequency — hide KPIs not due in the selected month
-  const frequencyFilteredKpis = useMemo(() => {
-    return ownershipFilteredKpis.filter(kpi => {
-      const freq = (kpi as any).frequency;
-      if (!freq || freq === 'Monthly' || freq === 'Daily' || freq === 'Weekly') return true;
-      return !isKpiLockedForPeriod(freq, selectedPeriod, selectedYear, (kpi as any).frequency_cycle_start);
+  // ADR-310 — multi-month KPIs are NOT hidden any more. They stay in the list
+  // as read-only "not yet due" cards so the console and the employee scorecard
+  // list the same definitions for the period. The lock rule itself is unchanged.
+  const entryWindowByKey = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof describeEntryWindow>>();
+    ownershipFilteredKpis.forEach(kpi => {
+      map.set(
+        kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name),
+        describeEntryWindow(
+          (kpi as any).frequency,
+          selectedPeriod,
+          selectedYear,
+          (kpi as any).frequency_cycle_start
+        )
+      );
     });
+    return map;
   }, [ownershipFilteredKpis, selectedPeriod, selectedYear]);
+
+  const getEntryWindow = useCallback((kpi: { category_id: string; kra_name: string; kpi_name: string }) => {
+    return entryWindowByKey.get(kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name))
+      ?? { status: 'open' as const, dueMonth: null, cycleLabel: null, label: null };
+  }, [entryWindowByKey]);
+
+  const frequencyFilteredKpis = ownershipFilteredKpis;
+
+  const openWindowKpis = useMemo(
+    () => frequencyFilteredKpis.filter(k => getEntryWindow(k).status === 'open'),
+    [frequencyFilteredKpis, getEntryWindow]
+  );
+  const notDueKpis = useMemo(
+    () => frequencyFilteredKpis.filter(k => getEntryWindow(k).status === 'not_due'),
+    [frequencyFilteredKpis, getEntryWindow]
+  );
 
   // Get categories
   const orgLevelCategories = useMemo(() => {
@@ -305,11 +331,13 @@ export default function OrgKpiDataEntry() {
         k.kra_categories?.name?.toLowerCase().includes(q)
       );
     }
-    if (statusFilter !== 'all') {
-      result = result.filter(k => getKpiStatus(k) === statusFilter);
+    if (statusFilter === 'not_due') {
+      result = result.filter(k => getEntryWindow(k).status === 'not_due');
+    } else if (statusFilter !== 'all') {
+      result = result.filter(k => getEntryWindow(k).status === 'open' && getKpiStatus(k) === statusFilter);
     }
     return result;
-  }, [frequencyFilteredKpis, selectedCategoryId, searchQuery, statusFilter, getKpiStatus]);
+  }, [frequencyFilteredKpis, selectedCategoryId, searchQuery, statusFilter, getKpiStatus, getEntryWindow]);
 
   // Compute data owner tiles data
   const ownerTilesData = useMemo(() => {
@@ -401,6 +429,7 @@ export default function OrgKpiDataEntry() {
     totalOrgKpis: orgLevelData?.totalOrgKpis ?? 0,
     ownershipFilteredCount: ownershipFilteredKpis.length,
     frequencyFilteredCount: frequencyFilteredKpis.length,
+    openWindowCount: openWindowKpis.length,
     groupedCount: groupedKpis.length,
     isMaskedAdmin: role === 'admin' && !isAdminMode,
     hasActiveFilters,
@@ -415,13 +444,13 @@ export default function OrgKpiDataEntry() {
 
   // Scope KPIs for progress: respect owner filter
   const progressScopedKpis = useMemo(() => {
-    if (!selectedOwnerId) return frequencyFilteredKpis;
-    return frequencyFilteredKpis.filter(kpi => {
+    if (!selectedOwnerId) return openWindowKpis;
+    return openWindowKpis.filter(kpi => {
       const k = kpiKey(kpi.category_id, kpi.kra_name, kpi.kpi_name);
       const entry = ownershipMap.get(k);
       return entry?.owners.some(o => o.owner_id === selectedOwnerId);
     });
-  }, [frequencyFilteredKpis, selectedOwnerId, ownershipMap]);
+  }, [openWindowKpis, selectedOwnerId, ownershipMap]);
 
   // Progress calculation with 3-state tracking (scoped to selected owner)
   const progressData = useMemo(() => {
@@ -1848,11 +1877,12 @@ export default function OrgKpiDataEntry() {
         <div className="space-y-1.5">
           <div className="flex flex-wrap gap-2">
             {([
-              { key: 'all' as const, label: 'All', count: progressData.totalKpis },
+              { key: 'all' as const, label: 'All', count: frequencyFilteredKpis.length },
               { key: 'pending' as const, label: 'Pending', count: progressData.totalKpis - progressData.enteredKpis - progressData.propagatedKpis },
               { key: 'entered' as const, label: 'Entered', count: progressData.enteredKpis },
               { key: 'propagated' as const, label: 'Propagated', count: progressData.propagatedKpis },
-              { key: 'stuck' as const, label: 'Stuck (admin repair)', count: frequencyFilteredKpis.filter(k => getKpiStatus(k) === 'stuck').length },
+              { key: 'stuck' as const, label: 'Stuck (admin repair)', count: openWindowKpis.filter(k => getKpiStatus(k) === 'stuck').length },
+              { key: 'not_due' as const, label: 'Not yet due', count: notDueKpis.length },
             ]).map(f => (
               <Badge
                 key={f.key}
@@ -1987,6 +2017,9 @@ export default function OrgKpiDataEntry() {
                 {orgKpiEmptyKind === 'all-frequency-locked' && (
                   <p>All {ownershipFilteredKpis.length} org-level KPI{ownershipFilteredKpis.length === 1 ? '' : 's'} are locked for {selectedPeriod} (multi-month cycle). They will become editable in their active month.</p>
                 )}
+                {orgKpiEmptyKind === 'all-not-yet-due' && (
+                  <p>All {frequencyFilteredKpis.length} org-level KPI{frequencyFilteredKpis.length === 1 ? '' : 's'} for {selectedPeriod} {selectedYear} belong to multi-month cycles and open for entry in a later month. Use the “Not yet due” chip to review them.</p>
+                )}
                 {orgKpiEmptyKind === 'filtered-out' && (
                   <div className="space-y-2">
                     <p>
@@ -1997,7 +2030,7 @@ export default function OrgKpiDataEntry() {
                 )}
                 {isAdmin && (
                   <p className="text-xs text-muted-foreground/70 pt-2">
-                    Diagnostics — backend: {orgLevelData?.totalOrgKpis ?? 0} · ownership: {ownershipFilteredKpis.length} · frequency: {frequencyFilteredKpis.length} · grouped: {groupedKpis.length}
+                    Diagnostics — backend: {orgLevelData?.totalOrgKpis ?? 0} · unmapped: {orgLevelData?.unmappedCount ?? 0} · ownership: {ownershipFilteredKpis.length} · not yet due: {notDueKpis.length} · enterable: {openWindowKpis.length} · grouped: {groupedKpis.length}
                   </p>
                 )}
               </CardContent>
@@ -2028,7 +2061,8 @@ export default function OrgKpiDataEntry() {
           )}
 
           {groupedKpis.map(([catId, group]) => {
-            const catPending = group.kpis.filter(kpi => getKpiStatus(kpi) === 'pending').length;
+            const catNotDue = group.kpis.filter(kpi => getEntryWindow(kpi).status === 'not_due').length;
+            const catPending = group.kpis.filter(kpi => getEntryWindow(kpi).status === 'open' && getKpiStatus(kpi) === 'pending').length;
             const catEntered = group.kpis.filter(kpi => getKpiStatus(kpi) === 'entered').length;
             const catPropagated = group.kpis.filter(kpi => getKpiStatus(kpi) === 'propagated').length;
 
@@ -2042,6 +2076,7 @@ export default function OrgKpiDataEntry() {
                     {catPending > 0 && <Badge variant="outline" className="text-xs">{catPending} Pending</Badge>}
                     {catEntered > 0 && <Badge variant="secondary" className="text-xs">{catEntered} Entered</Badge>}
                     {catPropagated > 0 && <Badge variant="default" className="text-xs">{catPropagated} Propagated</Badge>}
+                    {catNotDue > 0 && <Badge variant="outline" className="text-xs border-amber-500/50 text-amber-700 dark:text-amber-400">{catNotDue} Not yet due</Badge>}
                   </div>
                 </div>
 
@@ -2059,6 +2094,7 @@ export default function OrgKpiDataEntry() {
                       reviewYear={selectedYear}
                       isAdmin={isAdmin}
                       governanceLocked={governanceLocked}
+                      notDueLabel={getEntryWindow(kpi).label}
                       employeeKpiIds={empKpiIds}
                       onSave={(values) => handleCardSave(kpi, values)}
                       onSaveAndPropagate={(values, filterIds) => handleCardSaveAndPropagate(kpi, values, filterIds)}
