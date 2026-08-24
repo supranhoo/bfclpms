@@ -331,6 +331,7 @@ export function isKpiLockedForPeriod(
       
     default:
       return false;
+  }
 }
 
 /**
