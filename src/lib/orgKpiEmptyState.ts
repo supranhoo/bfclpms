@@ -10,6 +10,7 @@ export type OrgKpiEmptyKind =
   | 'masked-admin'         // admin viewing as natural role, owns nothing
   | 'no-backend-rows'      // backend truly has zero org KPIs for this period
   | 'all-frequency-locked' // rows exist but every one is locked for this month
+  | 'all-not-yet-due'      // rows exist but every one is a multi-month KPI due later
   | 'filtered-out'         // rows exist but UI filters hide them
   | 'query-error'          // backend query failed (e.g. statement timeout 57014)
   | 'ok';                  // groupedKpis has at least one card
@@ -19,6 +20,7 @@ export interface OrgKpiEmptyInput {
   totalOrgKpis: number;            // backend definitions for the period
   ownershipFilteredCount: number;  // after RLS/ownership filter
   frequencyFilteredCount: number;  // after frequency lock filter
+  openWindowCount?: number;        // of those, how many are enterable this month
   groupedCount: number;            // after category/search/status/owner filters
   isMaskedAdmin: boolean;          // role==='admin' && !isAdminMode
   hasActiveFilters: boolean;       // category/search/status/owner != defaults
@@ -36,6 +38,13 @@ export function deriveOrgKpiEmptyState(input: OrgKpiEmptyInput): OrgKpiEmptyKind
   if (input.isMaskedAdmin && input.ownershipFilteredCount === 0) return 'masked-admin';
   if (input.frequencyFilteredCount === 0 && input.ownershipFilteredCount > 0) {
     return 'all-frequency-locked';
+  }
+  if (
+    input.openWindowCount === 0 &&
+    input.frequencyFilteredCount > 0 &&
+    !input.hasActiveFilters
+  ) {
+    return 'all-not-yet-due';
   }
   if (input.hasActiveFilters) return 'filtered-out';
   // Defensive fallback — rows after frequency filter but groupedCount=0 with no

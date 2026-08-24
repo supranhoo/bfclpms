@@ -6752,3 +6752,27 @@ transactions — an unlisted action aborts the parent operation (root cause of t
 10. All ledger routines revoke `EXECUTE` from `PUBLIC` and `anon`, and are granted
     only to `authenticated` and `service_role`.
 
+### §ORG-KPI-ENTRY-WINDOW-VISIBILITY — the entry list must match the scorecard (ADR-310)
+
+1. **Show, never hide.** Every org-level KPI definition that exists for the selected
+   review month appears in Org KPI Data Entry. A multi-month KPI (Bi-Monthly,
+   Quarterly, Half-Yearly, Yearly) whose entry window opens in a later month of its
+   cycle is rendered **read-only** and labelled "Not yet due — entry opens in <month>".
+   It is never silently filtered out.
+2. **The lock rule is unchanged.** `isKpiLockedForPeriod` remains the single source of
+   truth for whether a value may be entered; `describeEntryWindow` only *describes* that
+   decision for display. A not-due card cannot be edited, submitted or propagated.
+3. **Counters state what they count.** Progress ("N of M entered"), the Pending /
+   Entered / Propagated / Stuck chips and the category badges count **open windows
+   only**. Not-due definitions are counted separately under a "Not yet due" chip and in
+   the "All" total, so 100% never means "some KPIs were hidden".
+4. **Empty states are honest.** When every definition for the period opens later, the
+   page reports `all-not-yet-due` with the count and the reason — never the generic
+   "no org KPIs exist" copy.
+5. **Every multi-month definition carries a cycle anchor.** `frequency_cycle_start` is
+   mandatory for any frequency other than Daily / Weekly / Monthly. A missing anchor is
+   a data defect to be repaired (audited as `cycle_anchor_repaired`), not defaulted
+   silently at read time.
+6. **Scope rows materialise for what is shown.** Because not-due cards now mount,
+   `ensure_org_kpi_scope_rows` runs for them too, so their `org_kpi_values` placeholders
+   and evidence parity chips exist before their window opens.
