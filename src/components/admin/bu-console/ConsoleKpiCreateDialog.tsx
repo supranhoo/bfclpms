@@ -32,6 +32,7 @@ import {
   type BuConsoleScope, type ConsoleKpiCreateResult, type ConsoleKpiKind,
 } from '@/hooks/useBuConsole';
 import { Loader2, Users } from 'lucide-react';
+import { coreTitle } from './mergeTriage';
 
 const KIND_COPY: Record<ConsoleKpiKind, { label: string; hint: string }> = {
   individual: {
@@ -61,10 +62,16 @@ export interface ConsoleKpiCreateDialogProps {
   categories: Array<{ id: string; name: string }>;
   /** KRA names already present in scope, offered as suggestions. */
   kraNames: string[];
+  /**
+   * ADR-313 — KPI names already in scope. Used only to warn, at typing time,
+   * that the metric already exists under a slightly different title, so the
+   * console stops manufacturing the duplicates the merge queue has to clean.
+   */
+  existingKpiNames?: string[];
 }
 
 export function ConsoleKpiCreateDialog({
-  open, onOpenChange, scope, scopeLabel, categories, kraNames,
+  open, onOpenChange, scope, scopeLabel, categories, kraNames, existingKpiNames = [],
 }: ConsoleKpiCreateDialogProps) {
   const [kind, setKind] = useState<ConsoleKpiKind>('individual');
   const [categoryId, setCategoryId] = useState('');
@@ -92,6 +99,13 @@ export function ConsoleKpiCreateDialog({
     }),
     [kind, categoryId, kraName, kpiName, criteria, uom, targetValue, weightage],
   );
+
+  // ADR-313 — look-alike detection uses the same cleaning as the merge queue.
+  const lookalikes = useMemo(() => {
+    const typed = coreTitle(kpiName);
+    if (typed.length < 4) return [];
+    return existingKpiNames.filter((n) => coreTitle(n) === typed).slice(0, 5);
+  }, [kpiName, existingKpiNames]);
 
   const canPreview =
     !!scope && !!categoryId && kraName.trim().length > 0 && kpiName.trim().length > 0;
@@ -203,7 +217,16 @@ export function ConsoleKpiCreateDialog({
                   value={kpiName}
                   onChange={(e) => { setKpiName(e.target.value); setPreview(null); }}
                   placeholder="e.g. Power generation from 45 MWh"
+                  aria-describedby={lookalikes.length ? 'new-kpi-name-dup' : undefined}
                 />
+                {lookalikes.length > 0 && (
+                  <p id="new-kpi-name-dup" className="text-xs text-amber-600 dark:text-amber-500">
+                    This scope already measures{' '}
+                    <span className="font-medium">{lookalikes[0]}</span>
+                    {lookalikes.length > 1 ? ` (+${lookalikes.length - 1} more variant${lookalikes.length > 2 ? 's' : ''})` : ''}
+                    . Reuse the existing KPI instead of creating another variant.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
