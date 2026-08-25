@@ -1,15 +1,10 @@
 /**
  * ADR-297 — add one KPI to many people, from the console.
- *
- * The console's job is to run the group, so creating a KPI is a group act:
- * define it once, choose who it lands on (the current scope), preview exactly
- * who receives it, then issue it. Three kinds:
- *
- *  - Individual        — each person owns their own number (classic KPI).
- *  - Shared value      — one value (e.g. production target vs actual) spreads
- *                        to everyone in scope.
- *  - Department event  — a single event (e.g. an LTI) hits the whole
- *                        department it lands in.
+ * ADR-319 — the three "kinds" are gone: the dialog now speaks the same scope
+ * vocabulary as the rest of the product (POLICY §KPI-SCOPE-SINGLE-VOCABULARY),
+ * imported from `@/lib/review/kpiScope`. Individual, Organization, Department
+ * and Employee behave exactly as before; only the words are unified, and the
+ * not-yet-built scopes are shown disabled so both surfaces read identically.
  *
  * Writes go through `bu_console_kpi_create` (admin-only, dry-run first).
  */
@@ -29,29 +24,18 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   useConsoleKpiCreate, useConsoleKpiCreatePreview,
-  type BuConsoleScope, type ConsoleKpiCreateResult, type ConsoleKpiKind,
+  type BuConsoleScope, type ConsoleKpiCreateResult,
 } from '@/hooks/useBuConsole';
+import {
+  KPI_SCOPES, KPI_SCOPE_COPY, PLANNED_KPI_SCOPES, PLANNED_KPI_SCOPE_LABELS, type KpiScope,
+} from '@/lib/review/kpiScope';
 import { Loader2, Users } from 'lucide-react';
 import { coreTitle } from './mergeTriage';
-
-const KIND_COPY: Record<ConsoleKpiKind, { label: string; hint: string }> = {
-  individual: {
-    label: 'Individual',
-    hint: 'Each person is measured on their own number.',
-  },
-  shared: {
-    label: 'Shared value',
-    hint: 'One value — e.g. production target vs actual — spreads to everyone in scope.',
-  },
-  department_event: {
-    label: 'Department event',
-    hint: 'A single event — e.g. an LTI — applies to the whole department it lands in.',
-  },
-};
 
 const SKIP_LABELS: Record<string, string> = {
   duplicate_kpi: 'Already has this KPI this month',
 };
+
 
 export interface ConsoleKpiCreateDialogProps {
   open: boolean;
