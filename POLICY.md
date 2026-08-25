@@ -6776,3 +6776,12 @@ transactions — an unlisted action aborts the parent operation (root cause of t
 6. **Scope rows materialise for what is shown.** Because not-due cards now mount,
    `ensure_org_kpi_scope_rows` runs for them too, so their `org_kpi_values` placeholders
    and evidence parity chips exist before their window opens.
+
+## §WF-CHANGE-NO-RATING-LOSS (amended 2026-08-25, ADR-311)
+
+Changing an employee's, department's or grade's workflow mapping MUST never fail because of a
+column-type mismatch in the rating-snapshot path. `review_submissions.prior_final_rating` is
+TEXT and `final_rating` is the `rating_level` enum: any expression combining them must cast
+explicitly (`final_rating::text` when snapshotting, `prior_final_rating::rating_level` when
+restoring). Admin screens performing workflow mapping writes MUST display the backend error
+message verbatim; a generic "Failed to ..." string that discards the cause is a defect.
