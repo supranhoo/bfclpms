@@ -7,7 +7,7 @@
  *      renders on first paint (previously `defaultValue` swallowed prefills);
  *   2. improvement areas can be picked from the employee's low-scoring KPIs.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
