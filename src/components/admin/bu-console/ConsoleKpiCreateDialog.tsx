@@ -57,7 +57,7 @@ export interface ConsoleKpiCreateDialogProps {
 export function ConsoleKpiCreateDialog({
   open, onOpenChange, scope, scopeLabel, categories, kraNames, existingKpiNames = [],
 }: ConsoleKpiCreateDialogProps) {
-  const [kind, setKind] = useState<ConsoleKpiKind>('individual');
+  const [kpiScope, setKpiScope] = useState<KpiScope>('individual');
   const [categoryId, setCategoryId] = useState('');
   const [kraName, setKraName] = useState('');
   const [kpiName, setKpiName] = useState('');
@@ -72,7 +72,7 @@ export function ConsoleKpiCreateDialog({
 
   const payload = useMemo(
     () => ({
-      kind,
+      scope: kpiScope,
       category_id: categoryId,
       kra_name: kraName.trim(),
       kpi_name: kpiName.trim(),
@@ -81,8 +81,9 @@ export function ConsoleKpiCreateDialog({
       target_value: targetValue.trim() || null,
       weightage: weightage.trim() || null,
     }),
-    [kind, categoryId, kraName, kpiName, criteria, uom, targetValue, weightage],
+    [kpiScope, categoryId, kraName, kpiName, criteria, uom, targetValue, weightage],
   );
+
 
   // ADR-313 — look-alike detection uses the same cleaning as the merge queue.
   const lookalikes = useMemo(() => {
