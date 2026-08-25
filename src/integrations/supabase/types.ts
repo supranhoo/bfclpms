@@ -10820,15 +10820,19 @@ export type Database = {
         Row: {
           allow_provider_override: boolean
           category_id: string
+          clean_value: number | null
           created_at: string
           created_by: string | null
           description: string | null
+          entry_mode: string
+          exception_direction: string
           granularity: string
           id: string
           is_active: boolean
           kpi_name: string
           kra_name: string
           rollup_rule: string
+          scope_dimension: string | null
           target_column_key: string | null
           title: string
           updated_at: string
@@ -10838,15 +10842,19 @@ export type Database = {
         Insert: {
           allow_provider_override?: boolean
           category_id: string
+          clean_value?: number | null
           created_at?: string
           created_by?: string | null
           description?: string | null
+          entry_mode?: string
+          exception_direction?: string
           granularity?: string
           id?: string
           is_active?: boolean
           kpi_name: string
           kra_name: string
           rollup_rule?: string
+          scope_dimension?: string | null
           target_column_key?: string | null
           title?: string
           updated_at?: string
@@ -10856,15 +10864,19 @@ export type Database = {
         Update: {
           allow_provider_override?: boolean
           category_id?: string
+          clean_value?: number | null
           created_at?: string
           created_by?: string | null
           description?: string | null
+          entry_mode?: string
+          exception_direction?: string
           granularity?: string
           id?: string
           is_active?: boolean
           kpi_name?: string
           kra_name?: string
           rollup_rule?: string
+          scope_dimension?: string | null
           target_column_key?: string | null
           title?: string
           updated_at?: string
@@ -10872,6 +10884,77 @@ export type Database = {
           weight_column_key?: string | null
         }
         Relationships: []
+      }
+      org_kpi_dataset_release_runs: {
+        Row: {
+          clean_scopes: number
+          clean_value: number | null
+          created_at: string
+          dataset_id: string
+          employees_skipped: number
+          employees_targeted: number
+          employees_updated: number
+          error_message: string | null
+          finished_at: string | null
+          flagged_scopes: number
+          id: string
+          lease_expires_at: string
+          performed_by: string | null
+          review_period: string
+          review_year: number
+          scope_dimension: string | null
+          skipped_details: Json
+          status: string
+        }
+        Insert: {
+          clean_scopes?: number
+          clean_value?: number | null
+          created_at?: string
+          dataset_id: string
+          employees_skipped?: number
+          employees_targeted?: number
+          employees_updated?: number
+          error_message?: string | null
+          finished_at?: string | null
+          flagged_scopes?: number
+          id?: string
+          lease_expires_at?: string
+          performed_by?: string | null
+          review_period: string
+          review_year: number
+          scope_dimension?: string | null
+          skipped_details?: Json
+          status?: string
+        }
+        Update: {
+          clean_scopes?: number
+          clean_value?: number | null
+          created_at?: string
+          dataset_id?: string
+          employees_skipped?: number
+          employees_targeted?: number
+          employees_updated?: number
+          error_message?: string | null
+          finished_at?: string | null
+          flagged_scopes?: number
+          id?: string
+          lease_expires_at?: string
+          performed_by?: string | null
+          review_period?: string
+          review_year?: number
+          scope_dimension?: string | null
+          skipped_details?: Json
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "org_kpi_dataset_release_runs_dataset_id_fkey"
+            columns: ["dataset_id"]
+            isOneToOne: false
+            referencedRelation: "org_kpi_dataset_defs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       org_kpi_dataset_row_history: {
         Row: {
@@ -20021,8 +20104,35 @@ export type Database = {
         Args: { p_dataset_id: string; p_dry_run?: boolean; p_rows: Json }
         Returns: Json
       }
+      org_kpi_dataset_exception_summary: {
+        Args: {
+          p_dataset_id: string
+          p_review_period: string
+          p_review_year: number
+        }
+        Returns: Json
+      }
       org_kpi_dataset_get: {
         Args: { p_category_id: string; p_kpi_name: string; p_kra_name: string }
+        Returns: Json
+      }
+      org_kpi_dataset_release_scoped: {
+        Args: {
+          p_dataset_id: string
+          p_dry_run?: boolean
+          p_max_employees?: number
+          p_overwrite_policy?: string
+          p_review_period: string
+          p_review_year: number
+        }
+        Returns: Json
+      }
+      org_kpi_dataset_release_state: {
+        Args: {
+          p_dataset_id: string
+          p_review_period: string
+          p_review_year: number
+        }
         Returns: Json
       }
       org_kpi_dataset_rollup: {
@@ -20045,6 +20155,26 @@ export type Database = {
           p_offset?: number
           p_review_period?: string
           p_review_year?: number
+        }
+        Returns: Json
+      }
+      org_kpi_dataset_seed_scope_rows: {
+        Args: {
+          p_dataset_id: string
+          p_dry_run?: boolean
+          p_mapped_only?: boolean
+          p_review_period: string
+          p_review_year: number
+        }
+        Returns: Json
+      }
+      org_kpi_dataset_set_exception_config: {
+        Args: {
+          p_clean_value: number
+          p_dataset_id: string
+          p_entry_mode: string
+          p_exception_direction: string
+          p_scope_dimension: string
         }
         Returns: Json
       }
