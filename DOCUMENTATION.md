@@ -9096,3 +9096,22 @@ button; unresolved ids show an inline `text-destructive` message and the searcha
 `src/lib/pip/pipEmployeeField.ts`; UI: `src/components/pip/PipEmployeeField.tsx`;
 tests: `src/tests/pipEmployeeField.test.ts`.
 See POLICY §PIP-EMPLOYEE-PREFILL-CONFIRMATION and docs/adr/ADR-312.md.
+
+### v2.66.313 — ADR-313 KPI bulk de-duplication
+
+**What.** The duplicate-KPI queue moved from a flat pairwise list to a grouped triage
+workbench: proposals are grouped by canonical KPI, each group is classified as
+"Identical after cleaning" or "Needs judgement", and whole groups can be approved or
+rejected in one action via `public.bu_console_decide_merge_proposals`. The console's
+New KPI dialog now warns when the cleaned title already exists in scope.
+
+**Why.** With ~2,500 KPI rows and only ~966 distinct names in a single month, most
+"duplicates" are the same metric with its description or scoring ladder appended to the
+title. Reviewing them pair by pair was impractical.
+
+**How.** Pass 1 — clean titles with the text splitter. Pass 2 — scan, then work the
+grouped queue (`mergeTriage.ts` provides `coreTitle`, `buildMergeGroups`, triage
+classification). Pass 3 — "Select all identical" and approve in bulk; judgement groups
+stay per-variant. Decisions remain records only and never touch past scores.
+
+See POLICY §KPI-BULK-DEDUPLICATION and docs/adr/ADR-313.md.
