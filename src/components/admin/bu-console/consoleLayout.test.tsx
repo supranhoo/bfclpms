@@ -120,6 +120,45 @@ describe('Console single surface (ADR-289 / ADR-297)', () => {
   });
 });
 
+describe('Variant badge (ADR-315a)', () => {
+  const noop = () => {};
+  const treeWith = (over: Record<string, unknown>) => [
+    {
+      ...tree[0],
+      kras: [{ ...tree[0].kras[0], kpis: [{ ...tree[0].kras[0].kpis[0], ...over }] }],
+    },
+  ] as any;
+
+  const renderTree = (over: Record<string, unknown>) =>
+    render(
+      <BuConsoleTree
+        categories={treeWith(over)}
+        selectedCategoryId="c1"
+        selectedKraKey="kra-1"
+        onSelectCategory={noop}
+        onSelectKra={noop}
+        onSelectKpi={noop}
+      />,
+    );
+
+  it('stays silent for a single definition, whatever the weightage spread', () => {
+    renderTree({ variant_count: 1, weightage_values: [10, 12, 15] });
+    expect(screen.queryByText(/variant/i)).toBeNull();
+    // The weightage spread is still reported in its own column.
+    expect(screen.getByText('3 values')).toBeTruthy();
+  });
+
+  it('stays silent when the KPI reports no variant count at all', () => {
+    renderTree({ weightage_values: [10, 25] });
+    expect(screen.queryByText(/variant/i)).toBeNull();
+  });
+
+  it('warns once there really is more than one definition', () => {
+    renderTree({ variant_count: 3, weightage_values: [10] });
+    expect(screen.getByText('3 variants')).toBeTruthy();
+  });
+});
+
 describe('Duplicate KPI merge queue layout (ADR-314)', () => {
   it('uses wrap-safe containers instead of truncation-only rows', () => {
     render(

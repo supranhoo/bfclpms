@@ -9156,6 +9156,25 @@ Regression: `src/components/admin/bu-console/variantNormalise.test.ts` (17 tests
 
 See POLICY §CONSOLE-VARIANT-NORMALISE and docs/adr/ADR-315.md.
 
+### v2.66.315a — ADR-315a Variant badge only for real definition splits
+
+**What.** The amber "N variants" badge on a Performance Console KPI row is now shown only when the
+KPI genuinely has two or more definition variants. A KPI with a single definition shows no badge,
+however many distinct weightage values its employees carry.
+
+**Why.** The badge fired on `variant_count > 1 OR weightage values > 1`, then printed the variant
+number — so a clean single-definition KPI whose employees hold 3 or 4 different weightages was
+flagged with an amber "1 variant" warning that named a problem which did not exist and offered
+nothing to collapse. Weightage spread is legitimate per-employee data and is already reported in the
+Weightage column ("3 values").
+
+**How.** `BuConsoleTree.tsx`: `hasVariance` drops the weightage clause and reads `variantCount > 1`;
+the singular label branch is gone. Row expansion and the people panel are computed separately and
+are untouched. Presentation only — no data, query, RPC or permission change.
+Regression: `consoleLayout.test.tsx` → "Variant badge (ADR-315a)" (3 tests).
+
+
+
 ### v2.66.316 — ADR-316 KPI data table: per-KPI rhythm, history and bottom line
 
 **What.** The KPI data table now supports weekly, monthly, bi-monthly, quarterly,

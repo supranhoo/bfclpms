@@ -6655,6 +6655,12 @@ An admin may collapse them with the **Make this one** action, subject to:
 6. §88 immutability holds: rows in review are skipped unless the admin explicitly includes them,
    approved final scores are never altered, and individually overridden rows stay exempt unless the
    admin opts in. Each variant/month writes its own individually undoable edit run.
+7. **The amber variant badge is a warning, not a counter (ADR-315a).** It is displayed only when a
+   KPI carries two or more definition variants. A single-definition KPI is never badged, whatever
+   weightage spread its employees have; weightage spread is legitimate per-employee data and is
+   reported in the Weightage column instead.
+
+
 
 ## §CONSOLE-KPI-CREATE — creating a KPI from the Performance Console (ADR-297)
 
