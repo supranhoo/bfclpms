@@ -1067,12 +1067,13 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                     New scopes (coming soon)
                   </DropdownMenuLabel>
                   {([
-                    { id: 'division',      label: 'Division',      Icon: Network },
-                    { id: 'business_unit', label: 'Business Unit', Icon: Briefcase },
-                    { id: 'location',      label: 'Location',      Icon: MapPin },
-                    { id: 'pms_grade',     label: 'PMS Grade',     Icon: Award },
-                    { id: 'level',         label: 'Level',         Icon: Layers },
-                  ] as const).map(({ id, label, Icon }) => (
+                    { id: 'division',      Icon: Network },
+                    { id: 'business_unit', Icon: Briefcase },
+                    { id: 'location',      Icon: MapPin },
+                    { id: 'pms_grade',     Icon: Award },
+                    { id: 'level',         Icon: Layers },
+                  ] as const).map(({ id, Icon }) => (
+
                     <DropdownMenuItem
                       key={id}
                       disabled
