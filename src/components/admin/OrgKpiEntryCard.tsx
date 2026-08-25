@@ -1079,14 +1079,14 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                   ] as const).map(({ id, Icon, live }) => (
                     <DropdownMenuItem
                       key={id}
-                      disabled={!live || data.scope === id}
+                      disabled={!live || (data.scope as string) === id}
                       className={live ? undefined : 'opacity-60'}
                       onClick={live ? () => setScopeChangeTarget(id) : undefined}
                       title={live ? undefined : 'Ships in the next scope flight'}
                     >
                       <Icon className="h-3.5 w-3.5 mr-2" />
                       {PLANNED_KPI_SCOPE_LABELS[id]}
-                      {data.scope === id && ' (current)'}
+                      {(data.scope as string) === id && ' (current)'}
                       {!live && <span className="ml-auto text-[10px] text-muted-foreground">Soon</span>}
                     </DropdownMenuItem>
                   ))}
