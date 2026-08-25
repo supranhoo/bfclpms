@@ -78,9 +78,7 @@ export function isSafePair(p: MergeProposalLike): boolean {
 
 
 const groupKey = (p: MergeProposalLike) =>
-  `${p.category_id ?? '-'}::${normalizeConsoleTitle(p.canonical_kra_name)}::${normalizeConsoleTitle(
-    p.canonical_kpi_name,
-  )}`;
+  `${p.category_id ?? '-'}::${coreTitle(p.canonical_kra_name)}::${coreTitle(p.canonical_kpi_name)}`;
 
 /** Prefer the shortest clean title; break ties by widest employee reach. */
 export function suggestCanonical(proposals: MergeProposalLike[]): string {
