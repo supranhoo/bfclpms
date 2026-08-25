@@ -196,3 +196,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Org Master Delete Guard](mem://features/admin/org-master-delete-guard) — Dependency-aware guarded deletion of org master records: blocking vs cleanable config refs, confirmation, audit (ADR-308)
 - [Console Variant Normaliser](mem://features/admin/console-variant-normalise) — "Make this one" collapses KPI definition variants; never writes weightage (ADR-315)
 - [KPI Ledger Period Ownership](mem://features/admin/kpi-ledger-period-ownership) — Ledger rows own their (period, year); header is a default only; fiscal history grid + CSV date columns (ADR-318)
+- [KPI Scope Vocabulary](mem://features/admin/kpi-scope-vocabulary) — One scope vocabulary (Individual/Organization/Department/Employee), SSOT kpiScope.ts, kpi_group_type deprecated (ADR-319)
