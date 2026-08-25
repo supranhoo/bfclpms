@@ -28,6 +28,7 @@ import {
   useBuConsoleTree,
   type BuConsoleScope,
   type KpiDetailArgs,
+  type BuConsoleKpiVariant,
 } from '@/hooks/useBuConsole';
 import { BuConsoleTree } from '@/components/admin/bu-console/BuConsoleTree';
 import { ScopeToolbar } from '@/components/admin/bu-console/ScopeToolbar';
@@ -38,6 +39,7 @@ import { StageRail } from '@/components/admin/bu-console/StageRail';
 import { KpiPeopleStrip } from '@/components/admin/bu-console/KpiPeopleStrip';
 import { KraReviewBar } from '@/components/admin/bu-console/KraReviewBar';
 import { ConsoleKpiCreateDialog } from '@/components/admin/bu-console/ConsoleKpiCreateDialog';
+import { VariantNormaliseDialog } from '@/components/admin/bu-console/VariantNormaliseDialog';
 import { useBuConsoleCapability } from '@/hooks/useBuConsoleCapability';
 import {
   ConsoleStatBand,
@@ -63,6 +65,12 @@ export default function BuConsole() {
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [kraKey, setKraKey] = useState<string | null>(null);
   const [detail, setDetail] = useState<KpiDetailArgs | null>(null);
+  // ADR-315 — variance normaliser target (scope args + the variants to collapse).
+  const [normalise, setNormalise] = useState<{
+    args: KpiDetailArgs;
+    variants: BuConsoleKpiVariant[];
+    label: string;
+  } | null>(null);
 
   // ADR-294 — one console: configuration and review live on the same surface.
   // Write actions stay gated by capability, so non-admins simply see it read-only.
@@ -443,6 +451,23 @@ export default function BuConsole() {
                   )}
                 </nav>
               }
+              onNormaliseVariants={(cId, kraName, kpi) =>
+                scope &&
+                setNormalise({
+                  args: {
+                    ...scope,
+                    categoryId: cId,
+                    kraName,
+                    kpiName: kpi.kpi_name,
+                    titleKey: kpi.title_key,
+                    kpiTitle: kpi.kpi_title,
+                    variantKey: null,
+                    page: 1,
+                  },
+                  variants: kpi.variants ?? [],
+                  label: kpi.kpi_title || kpi.kpi_name,
+                })
+              }
               onFixTextSplit={(kpi) =>
                 navigate(
                   `/admin/kpi-standardization?tab=split&q=${encodeURIComponent(kpi.kpi_name)}`,
@@ -468,6 +493,14 @@ export default function BuConsole() {
       </div>
 
       {/* ADR-289 — alignment and library are tools off the console, not tabs. */}
+      <VariantNormaliseDialog
+        open={!!normalise}
+        onOpenChange={(v) => { if (!v) setNormalise(null); }}
+        args={normalise?.args ?? null}
+        variants={normalise?.variants ?? []}
+        kpiLabel={normalise?.label ?? ''}
+      />
+
       <ConsoleKpiCreateDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
