@@ -6812,3 +6812,10 @@ Duplicate KPI titles are cleaned in bulk, never one pair at a time, and never au
    locked periods.
 5. **Stop making new duplicates.** Any KPI creation surface MUST warn, at typing time,
    when the cleaned title already exists in the loaded scope.
+6. **No horizontal decision surfaces.** The duplicate-merge queue MUST stay usable inside
+   the Performance Console dialog without left-right scrolling. Long KRA/KPI text wraps,
+   action rails wrap, and only the dialog body scrolls vertically.
+
+- **v2.66.314 (2026-08-25):** §KPI-BULK-DEDUPLICATION amended — duplicate-merge workbench
+  enlarged and made wrap-safe so high-volume grouped decisions do not require horizontal
+  scrolling. Presentation only; no proposal, decision, score or historical KPI data changed.

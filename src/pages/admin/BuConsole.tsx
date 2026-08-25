@@ -504,11 +504,13 @@ export default function BuConsole() {
       </Dialog>
 
       <Dialog open={libraryOpen} onOpenChange={setLibraryOpen}>
-        <DialogContent className="max-w-[1180px] max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[92vh] w-[96vw] max-w-[1400px] min-w-0 flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b px-6 py-4 pr-12">
             <DialogTitle>KPI library &amp; duplicates</DialogTitle>
           </DialogHeader>
-          <MergeProposalsTab />
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+            <MergeProposalsTab />
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -36,7 +36,7 @@ type StatusTab = 'pending' | 'approved' | 'rejected';
 
 function Stat({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
   return (
-    <div className="rounded-lg border p-3">
+    <div className="min-w-0 rounded-lg border p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="text-xl font-semibold tabular-nums">{value}</div>
       {hint ? <div className="text-[11px] text-muted-foreground">{hint}</div> : null}
@@ -94,16 +94,16 @@ export function MergeProposalsTab() {
     setSelected(new Set(allGroups.filter((g) => g.triage === 'safe').map((g) => g.key)));
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-4">
-        <div>
+    <Card className="min-w-0 overflow-hidden">
+      <CardHeader className="flex flex-col items-start gap-4 lg:flex-row lg:justify-between">
+        <div className="min-w-0 space-y-1">
           <CardTitle>Duplicate KPI merge queue</CardTitle>
-          <CardDescription>
+          <CardDescription className="max-w-3xl">
             Near-identical KPI names are grouped by the metric they describe. Approving records
             the decision — it never edits past scores.
           </CardDescription>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:shrink-0">
           <Button variant="outline" asChild>
             <Link to="/admin/kpi-standardization?tab=split">
               <SplitSquareHorizontal className="mr-2 h-4 w-4" />
@@ -120,24 +120,24 @@ export function MergeProposalsTab() {
           )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <CardContent className="min-w-0 space-y-4">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Stat label="Groups on this page" value={summary.groups} hint={`${summary.proposals} pairs`} />
           <Stat label="Identical after cleaning" value={summary.safeGroups} hint="safe to batch" />
           <Stat label="Needs judgement" value={summary.judgementGroups} hint="different scale or logic" />
           <Stat label="Employees affected" value={summary.employees} />
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           <Tabs value={status} onValueChange={(v) => { setStatus(v as StatusTab); setPage(1); setSelected(new Set()); }}>
-            <TabsList>
+            <TabsList className="h-auto max-w-full flex-wrap justify-start">
               <TabsTrigger value="pending">Pending</TabsTrigger>
               <TabsTrigger value="approved">Approved</TabsTrigger>
               <TabsTrigger value="rejected">Rejected</TabsTrigger>
             </TabsList>
           </Tabs>
           <Tabs value={triage} onValueChange={(v) => { setTriage(v as TriageFilter); setSelected(new Set()); }}>
-            <TabsList>
+            <TabsList className="h-auto max-w-full flex-wrap justify-start">
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="safe">Identical</TabsTrigger>
               <TabsTrigger value="judgement">Needs judgement</TabsTrigger>
@@ -148,7 +148,7 @@ export function MergeProposalsTab() {
         {scanError && (
           <div
             role="alert"
-            className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+            className="min-w-0 overflow-hidden break-words flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
           >
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
@@ -164,7 +164,7 @@ export function MergeProposalsTab() {
         )}
 
         {decidable && (
-          <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 p-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-md border bg-muted/40 p-2">
             <Checkbox
               checked={allShownSelected}
               onCheckedChange={toggleAllShown}
@@ -178,7 +178,7 @@ export function MergeProposalsTab() {
             <Button size="sm" variant="ghost" onClick={selectSafe} disabled={summary.safeGroups === 0}>
               Select all identical
             </Button>
-            <div className="ml-auto flex gap-2">
+            <div className="flex w-full flex-wrap gap-2 sm:ml-auto sm:w-auto">
               <Button size="sm" disabled={selected.size === 0 || busy} onClick={() => runBulk(true)}>
                 {bulk.isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
                 Approve selected
@@ -205,10 +205,10 @@ export function MergeProposalsTab() {
         )}
 
         {!isLoading && groups.length > 0 && (
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3">
             {groups.map((g) => (
-              <div key={g.key} className="rounded-md border">
-                <div className="flex flex-wrap items-start gap-3 border-b bg-muted/30 p-3">
+              <div key={g.key} className="min-w-0 overflow-hidden rounded-md border">
+                <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-3 border-b bg-muted/30 p-3 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
                   {decidable && (
                     <Checkbox
                       className="mt-1"
@@ -217,32 +217,32 @@ export function MergeProposalsTab() {
                       aria-label={`Select ${g.canonical_kpi_name}`}
                     />
                   )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{g.suggestedCanonicalKpiName}</p>
-                    <p className="truncate text-xs text-muted-foreground">{g.canonical_kra_name}</p>
+                  <div className="min-w-0">
+                    <p className="break-words font-medium leading-snug">{g.suggestedCanonicalKpiName}</p>
+                    <p className="mt-1 break-words text-xs text-muted-foreground">{g.canonical_kra_name}</p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-2 text-xs lg:col-span-1 lg:justify-end">
                     <Badge variant={g.triage === 'safe' ? 'secondary' : 'outline'}>
                       {g.triage === 'safe' ? 'Identical after cleaning' : 'Needs judgement'}
                     </Badge>
-                    <span className="text-muted-foreground tabular-nums">
+                    <span className="break-words text-muted-foreground tabular-nums">
                       {g.variantCount} variant{g.variantCount === 1 ? '' : 's'} · {g.affectedKpiCount} rows · {g.affectedEmployeeCount} employees
                     </span>
                   </div>
                 </div>
                 <ul className="divide-y">
                   {g.proposals.map((p) => (
-                    <li key={p.id} className="flex flex-wrap items-center gap-3 p-3 text-sm">
+                    <li key={p.id} className="grid min-w-0 grid-cols-1 items-start gap-3 p-3 text-sm lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate">{p.variant_kpi_name}</p>
-                        <p className="truncate text-xs text-muted-foreground">{p.variant_kra_name}</p>
+                        <p className="break-words leading-snug">{p.variant_kpi_name}</p>
+                        <p className="mt-1 break-words text-xs text-muted-foreground">{p.variant_kra_name}</p>
                       </div>
                       <Badge variant={p.match_type === 'exact' ? 'secondary' : 'outline'}>
                         {p.match_type}
                         {p.similarity != null && ` · ${Math.round(Number(p.similarity) * 100)}%`}
                       </Badge>
                       {decidable && (
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap gap-2 lg:justify-end">
                           <Button
                             size="sm"
                             variant="outline"
@@ -270,8 +270,8 @@ export function MergeProposalsTab() {
         )}
 
         {!isLoading && total > 0 && (
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">
+          <div className="flex min-w-0 flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <span className="break-words text-muted-foreground">
               {groups.length} group{groups.length === 1 ? '' : 's'} from {rows.length} of {total} proposal
               {total === 1 ? '' : 's'} · page {data?.page ?? 1} of {totalPages}
             </span>
