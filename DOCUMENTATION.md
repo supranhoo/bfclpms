@@ -1,6 +1,6 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-08-22 · **Version:** v2.66.310
+> **Last Updated:** 2026-08-25 · **Version:** v2.66.314
 >
 > **Version:** 2.66.308a — **Org master delete preflight is cascade-aware (ADR-308a, 2026-08-21).** RCA for "Failed to delete: This record is still linked to other data" on the duplicate business unit **HR-HUMAN RESOURCES**: the BU has no employees and only 3 cleanable access-profile scope rows of its own, but it owns one CASCADE child department ("Executive") which is still referenced by 2 `org_kpi_values` rows (Feb-2026, Mar-2026 "Adherence to Manning Norms") and 3 access-profile scope rows under RESTRICT. The ADR-308 impact report walked only direct foreign keys, so the record looked clean and the cascade failed inside the delete. Five Whys: RESTRICT violation -> on the cascaded child -> report ignores descendants -> written for the single-level CLU case -> guard trusted its own single-level report. CAPA: `org_master_delete_impact` now delegates to the recursive, depth-capped `org_master_delete_impact_at`, returning `via_path` / `target_table` / `target_id`; `org_master_delete` blocks on descendant blockers before touching anything and targets cleanup deletes at the owning record; the dialog lists "Deleting this also removes: Departments: Executive" and names blockers with their path. No constraint loosened, nothing new auto-deleted. Rollback: restore the ADR-308 single-level function pair. Regression: `src/test/orgMasterDelete.test.ts` (11). See POLICY §ORG-MASTER-DELETE-DEPENDENCY-GUARD and `docs/adr/ADR-308.md`.
 
@@ -9115,3 +9115,19 @@ classification). Pass 3 — "Select all identical" and approve in bulk; judgemen
 stay per-variant. Decisions remain records only and never touch past scores.
 
 See POLICY §KPI-BULK-DEDUPLICATION and docs/adr/ADR-313.md.
+
+### v2.66.314 — ADR-314 Duplicate KPI merge queue viewport fit
+
+**What.** The Performance Console's KPI library dialog is now a larger contained work surface
+(`96vw`, capped at 1400px, `92vh`) with a sticky header and a single vertical scroll region.
+The duplicate merge queue wraps long KRA/KPI titles, wraps tab/action rows, and uses `min-w-0`
+through the group cards so the page does not require left-right scrolling.
+
+**Why.** The ADR-313 workbench could load 100+ groups, but the previous modal width and
+truncate-only rows caused long KPI text to pressure the layout and show a horizontal scrollbar.
+
+**How.** This is a presentation-only change in `BuConsole.tsx` and `MergeProposalsTab.tsx`.
+No merge proposal data, approval logic, scoring, RLS, RPC, backup or historical KPI row changes.
+Regression: `src/components/admin/bu-console/consoleLayout.test.tsx`.
+
+See POLICY §KPI-BULK-DEDUPLICATION and docs/adr/ADR-314.md.

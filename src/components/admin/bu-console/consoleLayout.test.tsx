@@ -5,10 +5,49 @@
  */
 import { describe, it, expect } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { ConsoleMetricRow, ConsoleMetricHeader } from './ConsoleMetricRow';
 import { ConsoleStatBand, computeConsoleStats } from './ConsoleStatBand';
 import { scoreBand } from './ScorePill';
 import { BuConsoleTree } from './BuConsoleTree';
+import { MergeProposalsTab } from './MergeProposalsTab';
+
+vi.mock('@/hooks/useBuConsoleCapability', () => ({
+  useBuConsoleCapability: () => ({ canWrite: true }),
+}));
+
+vi.mock('@/hooks/useBuConsole', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/hooks/useBuConsole')>();
+  return {
+    ...actual,
+    useMergeProposals: () => ({
+      data: {
+        rows: [
+          {
+            id: 'p1',
+            category_id: 'cat-1',
+            canonical_kra_name: 'Power generation and thermal efficiency for captive power plant operations',
+            canonical_kpi_name: 'Power generation from 45 MWh/WHRB',
+            variant_kra_name: 'Power generation and thermal efficiency for captive power plant operations',
+            variant_kpi_name:
+              'Power generation from 45 MWh/WHRB - Description: daily power generated from waste heat recovery boiler with formula and scoring logic appended for operators',
+            match_type: 'fuzzy',
+            similarity: 0.96,
+            affected_kpi_count: 3,
+            affected_employee_count: 27,
+          },
+        ],
+        total: 1,
+        page_size: 200,
+        page: 1,
+      },
+      isLoading: false,
+    }),
+    useGenerateMergeProposals: () => ({ mutate: vi.fn(), isPending: false, error: null }),
+    useDecideMergeProposal: () => ({ mutate: vi.fn(), isPending: false }),
+    useDecideMergeProposalsBulk: () => ({ mutate: vi.fn(), isPending: false }),
+  };
+});
 
 const tree = [
   {
@@ -78,6 +117,21 @@ describe('Console single surface (ADR-289 / ADR-297)', () => {
     fireEvent.click(titles()[0]);
     expect(screen.getByText('people for Dust emission · Power generation · c1')).toBeTruthy();
     expect(titles()).toHaveLength(1);
+  });
+});
+
+describe('Duplicate KPI merge queue layout (ADR-314)', () => {
+  it('uses wrap-safe containers instead of truncation-only rows', () => {
+    render(
+      <MemoryRouter>
+        <MergeProposalsTab />
+      </MemoryRouter>,
+    );
+
+    const card = screen.getByText('Duplicate KPI merge queue').closest('.min-w-0');
+    expect(card).toBeTruthy();
+    expect(screen.getByText(/Description: daily power generated/)).toHaveClass('break-words');
+    expect(screen.getByText('Power generation from 45 MWh/WHRB')).toHaveClass('break-words');
   });
 });
 
