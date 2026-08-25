@@ -5,6 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { ConsoleMetricRow, ConsoleMetricHeader } from './ConsoleMetricRow';
 import { ConsoleStatBand, computeConsoleStats } from './ConsoleStatBand';
 import { scoreBand } from './ScorePill';
@@ -121,7 +122,11 @@ describe('Console single surface (ADR-289 / ADR-297)', () => {
 
 describe('Duplicate KPI merge queue layout (ADR-314)', () => {
   it('uses wrap-safe containers instead of truncation-only rows', () => {
-    render(<MergeProposalsTab />);
+    render(
+      <MemoryRouter>
+        <MergeProposalsTab />
+      </MemoryRouter>,
+    );
 
     const card = screen.getByText('Duplicate KPI merge queue').closest('.min-w-0');
     expect(card).toBeTruthy();
