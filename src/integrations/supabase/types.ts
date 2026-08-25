@@ -20168,6 +20168,16 @@ export type Database = {
         }
         Returns: Json
       }
+      org_kpi_dataset_set_exception_config: {
+        Args: {
+          p_clean_value: number
+          p_dataset_id: string
+          p_entry_mode: string
+          p_exception_direction: string
+          p_scope_dimension: string
+        }
+        Returns: Json
+      }
       org_kpi_dataset_upsert_def: { Args: { p_payload: Json }; Returns: Json }
       org_kpi_dataset_validate: {
         Args: {
