@@ -333,6 +333,38 @@ export function useDecideMergeProposal() {
   });
 }
 
+/**
+ * ADR-313 — bulk decision. Clears whole duplicate groups in one call instead
+ * of one pair at a time; the server still records a decision per proposal.
+ */
+export function useDecideMergeProposalsBulk() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { ids: string[]; approve: boolean; note?: string }) => {
+      const { data, error } = await supabase.rpc('bu_console_decide_merge_proposals' as any, {
+        p_ids: args.ids,
+        p_approve: args.approve,
+        p_note: args.note ?? null,
+      });
+      if (error) throw error;
+      return (data ?? { requested: 0, decided: 0, skipped: 0 }) as unknown as {
+        requested: number;
+        decided: number;
+        skipped: number;
+      };
+    },
+    onSuccess: (res, vars) => {
+      qc.invalidateQueries({ queryKey: ['kpi-merge-proposals'] });
+      toast.success(
+        `${res.decided} proposal${res.decided === 1 ? '' : 's'} ${vars.approve ? 'approved' : 'rejected'}.`,
+        res.skipped > 0 ? { description: `${res.skipped} were already decided.` } : undefined,
+      );
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not record the decisions.'),
+  });
+}
+
+
 /* ------------------------------------------------------------------ */
 /* ADR-259 Phase 3 — one-value entry, many employees                   */
 /* ------------------------------------------------------------------ */
