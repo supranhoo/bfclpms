@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   KPI_SCOPES, toKpiScope, toKpiColumns, fromKpiColumns, kpiScopeLabel, KPI_SCOPE_COPY,
+  scopeNeedsTarget, KPI_SCOPE_TARGET_COLUMNS,
 } from './kpiScope';
 
 describe('kpiScope (ADR-319)', () => {
@@ -44,5 +45,28 @@ describe('kpiScope (ADR-319)', () => {
       expect(KPI_SCOPE_COPY[s].label.length).toBeGreaterThan(0);
       expect(KPI_SCOPE_COPY[s].hint.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// ADR-320 — grouped scopes must each name a target before they can be saved.
+describe('ADR-320 grouped scope targeting', () => {
+  it('requires a target for every grouped scope', () => {
+    for (const scope of ['department', 'employee', 'business_unit', 'location', 'division', 'pms_grade', 'level']) {
+      expect(scopeNeedsTarget(scope)).toBe(true);
+    }
+  });
+
+  it('requires no target for individual and organization', () => {
+    expect(scopeNeedsTarget('individual')).toBe(false);
+    expect(scopeNeedsTarget('organization')).toBe(false);
+    expect(scopeNeedsTarget(null)).toBe(false);
+    expect(scopeNeedsTarget('nonsense')).toBe(false);
+  });
+
+  it('maps each grouped scope to exactly one distinct target column', () => {
+    const grouped = ['department', 'employee', 'business_unit', 'location', 'division', 'pms_grade', 'level'] as const;
+    const columns = grouped.map((s) => KPI_SCOPE_TARGET_COLUMNS[s]);
+    expect(new Set(columns).size).toBe(grouped.length);
+    expect(columns).not.toContain(null);
   });
 });

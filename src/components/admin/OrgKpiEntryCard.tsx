@@ -40,7 +40,7 @@ import { OrgKpiParityBadge } from '@/components/admin/OrgKpiParityBadge';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { Save } from 'lucide-react';
 // ADR-319 — one scope vocabulary shared with the console create dialog.
-import { KPI_SCOPE_COPY, PLANNED_KPI_SCOPE_LABELS } from '@/lib/review/kpiScope';
+import { KPI_SCOPE_COPY, PLANNED_KPI_SCOPE_LABELS, type AnyKpiScope } from '@/lib/review/kpiScope';
 
 
 export interface OrgKpiCardData {
@@ -140,7 +140,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
   const [isRemoving, setIsRemoving] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [showOwnerDialog, setShowOwnerDialog] = useState(false);
-  const [scopeChangeTarget, setScopeChangeTarget] = useState<'organization' | 'department' | 'employee' | null>(null);
+  const [scopeChangeTarget, setScopeChangeTarget] = useState<AnyKpiScope | null>(null);
   const [rollbackReason, setRollbackReason] = useState('');
   const [bulkRollbackReason, setBulkRollbackReason] = useState('');
   const [achievedValue, setAchievedValue] = useState<string>(data.achievedValue?.toString() ?? '');
@@ -1067,25 +1067,27 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
 
                   <DropdownMenuSeparator />
                   <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    New scopes (coming soon)
+                    Grouped scopes
                   </DropdownMenuLabel>
+                  {/* ADR-320 — Business Unit and Location are live; the rest ship next flight. */}
                   {([
-                    { id: 'division',      Icon: Network },
-                    { id: 'business_unit', Icon: Briefcase },
-                    { id: 'location',      Icon: MapPin },
-                    { id: 'pms_grade',     Icon: Award },
-                    { id: 'level',         Icon: Layers },
-                  ] as const).map(({ id, Icon }) => (
-
+                    { id: 'business_unit', Icon: Briefcase, live: true },
+                    { id: 'location',      Icon: MapPin,    live: true },
+                    { id: 'division',      Icon: Network,   live: false },
+                    { id: 'pms_grade',     Icon: Award,     live: false },
+                    { id: 'level',         Icon: Layers,    live: false },
+                  ] as const).map(({ id, Icon, live }) => (
                     <DropdownMenuItem
                       key={id}
-                      disabled
-                      className="opacity-60"
-                      title="Target picker + cascade RPC ship in Step 5c/5d"
+                      disabled={!live || (data.scope as string) === id}
+                      className={live ? undefined : 'opacity-60'}
+                      onClick={live ? () => setScopeChangeTarget(id) : undefined}
+                      title={live ? undefined : 'Ships in the next scope flight'}
                     >
                       <Icon className="h-3.5 w-3.5 mr-2" />
                       {PLANNED_KPI_SCOPE_LABELS[id]}
-                      <span className="ml-auto text-[10px] text-muted-foreground">Soon</span>
+                      {(data.scope as string) === id && ' (current)'}
+                      {!live && <span className="ml-auto text-[10px] text-muted-foreground">Soon</span>}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>

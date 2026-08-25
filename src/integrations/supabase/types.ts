@@ -18366,20 +18366,36 @@ export type Database = {
         Returns: boolean
       }
       canonical_stage_order: { Args: { _stage: string }; Returns: number }
-      change_org_kpi_scope_cascading: {
-        Args: {
-          p_base_period: string
-          p_base_year: number
-          p_cascade_forward?: boolean
-          p_category_id: string
-          p_dry_run?: boolean
-          p_kpi_name: string
-          p_kra_name: string
-          p_new_scope: string
-          p_triggered_by?: string
-        }
-        Returns: Json
-      }
+      change_org_kpi_scope_cascading:
+        | {
+            Args: {
+              p_base_period: string
+              p_base_year: number
+              p_cascade_forward?: boolean
+              p_category_id: string
+              p_dry_run?: boolean
+              p_kpi_name: string
+              p_kra_name: string
+              p_new_scope: string
+              p_triggered_by?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_base_period: string
+              p_base_year: number
+              p_cascade_forward?: boolean
+              p_category_id: string
+              p_dry_run?: boolean
+              p_kpi_name: string
+              p_kra_name: string
+              p_new_scope: string
+              p_new_target?: string
+              p_triggered_by?: string
+            }
+            Returns: Json
+          }
       check_review_period_permission: {
         Args: {
           p_action: string
@@ -19828,6 +19844,20 @@ export type Database = {
         Args: { p_period: string; p_year: number }
         Returns: number
       }
+      kpi_scope_options: {
+        Args: { p_scope: string }
+        Returns: {
+          code: string
+          employee_count: number
+          label: string
+          target_id: string
+        }[]
+      }
+      kpi_scope_population_summary: {
+        Args: { p_scope: string; p_target_id?: string }
+        Returns: Json
+      }
+      kpi_scope_target_column: { Args: { p_scope: string }; Returns: string }
       kpi_split_apply: {
         Args: { p_confidence?: string; p_ids?: string[]; p_limit?: number }
         Returns: Json
@@ -20029,6 +20059,21 @@ export type Database = {
           p_kra_name: string
           p_new_scope: string
           p_old_scope: string
+          p_review_period: string
+          p_review_year: number
+          p_triggered_by?: string
+        }
+        Returns: Json
+      }
+      migrate_okv_scope_generic: {
+        Args: {
+          p_category_id: string
+          p_kpi_name: string
+          p_kra_name: string
+          p_new_scope: string
+          p_new_target?: string
+          p_old_scope: string
+          p_old_target?: string
           p_review_period: string
           p_review_year: number
           p_triggered_by?: string
@@ -20713,41 +20758,78 @@ export type Database = {
         Args: { p_bu_head_id: string; p_employee_id: string }
         Returns: string
       }
-      resolve_org_kpi_target_kpis: {
-        Args: {
-          p_category_id: string
-          p_department_id?: string
-          p_employee_id?: string
-          p_kpi_name: string
-          p_kra_name: string
-          p_review_period: string
-          p_review_year: number
-          p_scope?: string
-        }
-        Returns: {
-          criteria: string
-          department_id: string
-          department_name: string
-          employee_code: string
-          employee_id: string
-          full_name: string
-          id: string
-          is_org_level: boolean
-          org_level_scope: string
-          qualitative_options: Json
-          r0: string
-          r1: string
-          r2: string
-          r3: string
-          r4: string
-          r5: string
-          target_value: number
-          threshold_mode: string
-          uom: string
-          uom_type: string
-          weightage: number
-        }[]
-      }
+      resolve_org_kpi_target_kpis:
+        | {
+            Args: {
+              p_category_id: string
+              p_department_id?: string
+              p_employee_id?: string
+              p_kpi_name: string
+              p_kra_name: string
+              p_review_period: string
+              p_review_year: number
+              p_scope?: string
+            }
+            Returns: {
+              criteria: string
+              department_id: string
+              department_name: string
+              employee_code: string
+              employee_id: string
+              full_name: string
+              id: string
+              is_org_level: boolean
+              org_level_scope: string
+              qualitative_options: Json
+              r0: string
+              r1: string
+              r2: string
+              r3: string
+              r4: string
+              r5: string
+              target_value: number
+              threshold_mode: string
+              uom: string
+              uom_type: string
+              weightage: number
+            }[]
+          }
+        | {
+            Args: {
+              p_category_id: string
+              p_department_id?: string
+              p_employee_id?: string
+              p_kpi_name: string
+              p_kra_name: string
+              p_review_period: string
+              p_review_year: number
+              p_scope?: string
+              p_target_id?: string
+            }
+            Returns: {
+              criteria: string
+              department_id: string
+              department_name: string
+              employee_code: string
+              employee_id: string
+              full_name: string
+              id: string
+              is_org_level: boolean
+              org_level_scope: string
+              qualitative_options: Json
+              r0: string
+              r1: string
+              r2: string
+              r3: string
+              r4: string
+              r5: string
+              target_value: number
+              threshold_mode: string
+              uom: string
+              uom_type: string
+              weightage: number
+            }[]
+          }
       resolve_safety_incident_sla: {
         Args: {
           p_priority: Database["public"]["Enums"]["safety_priority"]

@@ -27,8 +27,10 @@ import {
   type BuConsoleScope, type ConsoleKpiCreateResult,
 } from '@/hooks/useBuConsole';
 import {
-  KPI_SCOPES, KPI_SCOPE_COPY, PLANNED_KPI_SCOPES, PLANNED_KPI_SCOPE_LABELS, type KpiScope,
+  KPI_SCOPES, KPI_SCOPE_COPY, PLANNED_KPI_SCOPES, PLANNED_KPI_SCOPE_LABELS,
+  scopeNeedsTarget, type KpiScope,
 } from '@/lib/review/kpiScope';
+import { ScopeTargetPicker } from '@/components/admin/kpi-scope/ScopeTargetPicker';
 import { Loader2, Users } from 'lucide-react';
 import { coreTitle } from './mergeTriage';
 
@@ -58,6 +60,8 @@ export function ConsoleKpiCreateDialog({
   open, onOpenChange, scope, scopeLabel, categories, kraNames, existingKpiNames = [],
 }: ConsoleKpiCreateDialogProps) {
   const [kpiScope, setKpiScope] = useState<KpiScope>('individual');
+  // ADR-320 — a grouped scope owns exactly one target id.
+  const [scopeTargetId, setScopeTargetId] = useState<string | null>(null);
   const [categoryId, setCategoryId] = useState('');
   const [kraName, setKraName] = useState('');
   const [kpiName, setKpiName] = useState('');
@@ -73,6 +77,7 @@ export function ConsoleKpiCreateDialog({
   const payload = useMemo(
     () => ({
       scope: kpiScope,
+      scope_target_id: scopeTargetId,
       category_id: categoryId,
       kra_name: kraName.trim(),
       kpi_name: kpiName.trim(),
@@ -81,8 +86,10 @@ export function ConsoleKpiCreateDialog({
       target_value: targetValue.trim() || null,
       weightage: weightage.trim() || null,
     }),
-    [kpiScope, categoryId, kraName, kpiName, criteria, uom, targetValue, weightage],
+    [kpiScope, scopeTargetId, categoryId, kraName, kpiName, criteria, uom, targetValue, weightage],
   );
+
+
 
 
   // ADR-313 — look-alike detection uses the same cleaning as the merge queue.
@@ -92,8 +99,10 @@ export function ConsoleKpiCreateDialog({
     return existingKpiNames.filter((n) => coreTitle(n) === typed).slice(0, 5);
   }, [kpiName, existingKpiNames]);
 
+  // ADR-320 — a grouped scope cannot be previewed until it names its target.
   const canPreview =
-    !!scope && !!categoryId && kraName.trim().length > 0 && kpiName.trim().length > 0;
+    !!scope && !!categoryId && kraName.trim().length > 0 && kpiName.trim().length > 0
+    && (!scopeNeedsTarget(kpiScope) || !!scopeTargetId);
 
   const reset = () => {
     setPreview(null);
@@ -102,6 +111,7 @@ export function ConsoleKpiCreateDialog({
     setUom('');
     setTargetValue('');
     setWeightage('');
+    setScopeTargetId(null);
   };
 
   const runPreview = async () => {
@@ -151,7 +161,7 @@ export function ConsoleKpiCreateDialog({
                   <button
                     key={s}
                     type="button"
-                    onClick={() => { setKpiScope(s); setPreview(null); }}
+                    onClick={() => { setKpiScope(s); setScopeTargetId(null); setPreview(null); }}
                     aria-pressed={kpiScope === s}
                     className={
                       'min-h-10 rounded-lg border p-3 text-left transition-colors min-w-0 ' +
@@ -175,6 +185,14 @@ export function ConsoleKpiCreateDialog({
                   </Badge>
                 ))}
               </div>
+
+              {/* ADR-320 — the grouped scopes ask which one, with live reach. */}
+              <ScopeTargetPicker
+                scope={kpiScope}
+                value={scopeTargetId}
+                onChange={(v) => { setScopeTargetId(v); setPreview(null); }}
+                id="new-kpi-scope-target"
+              />
             </fieldset>
 
 

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import type { AnyKpiScope } from '@/lib/review/kpiScope';
 
 interface OrgKpiIdentifier {
   categoryId: string;
@@ -195,10 +196,14 @@ export function useChangeOrgKpiScope() {
     mutationFn: async ({
       identifier,
       newScope,
+      newTarget = null,
       cascadeMode = 'current_only',
     }: {
       identifier: OrgKpiIdentifier;
-      newScope: 'organization' | 'department' | 'employee';
+      // ADR-320 — every scope word the model ships, grouped ones included.
+      newScope: AnyKpiScope;
+      /** Required for a grouped scope: which BU / location / division / grade / level. */
+      newTarget?: string | null;
       cascadeMode?: ScopeCascadeMode;
     }): Promise<CascadeResponse> => {
       const { categoryId, kraName, kpiName, reviewPeriod, reviewYear } = identifier;
@@ -214,7 +219,8 @@ export function useChangeOrgKpiScope() {
         p_cascade_forward: cascadeMode === 'current_and_future',
         p_dry_run: false,
         p_triggered_by: user?.id ?? null,
-      });
+        p_new_target: newTarget,
+      } as never);
 
       if (error) throw error;
       return data as unknown as CascadeResponse;
@@ -244,10 +250,12 @@ export function useScopeCascadePreview() {
     mutationFn: async ({
       identifier,
       newScope,
+      newTarget = null,
       cascadeForward,
     }: {
       identifier: OrgKpiIdentifier;
-      newScope: 'organization' | 'department' | 'employee';
+      newScope: AnyKpiScope;
+      newTarget?: string | null;
       cascadeForward: boolean;
     }): Promise<CascadeResponse> => {
       const { categoryId, kraName, kpiName, reviewPeriod, reviewYear } = identifier;
@@ -261,7 +269,8 @@ export function useScopeCascadePreview() {
         p_cascade_forward: cascadeForward,
         p_dry_run: true,
         p_triggered_by: null,
-      });
+        p_new_target: newTarget,
+      } as never);
       if (error) throw error;
       return data as unknown as CascadeResponse;
     },

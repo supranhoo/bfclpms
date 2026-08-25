@@ -16,6 +16,8 @@ import {
   useScopeCascadePreview,
   type ScopeCascadeMode,
 } from '@/hooks/useOrgKpiManagement';
+import { ScopeTargetPicker } from '@/components/admin/kpi-scope/ScopeTargetPicker';
+import { scopeNeedsTarget, kpiScopeLabel, type AnyKpiScope } from '@/lib/review/kpiScope';
 
 interface Props {
   open: boolean;
@@ -28,7 +30,8 @@ interface Props {
     reviewYear: number;
   };
   currentScope: string;
-  newScope: 'organization' | 'department' | 'employee';
+  // ADR-320 — grouped scopes (business unit, location, …) are selectable too.
+  newScope: AnyKpiScope;
   /**
    * Optional: KPI frequency (e.g. 'Bi-Monthly', 'Quarterly'). When provided and
    * multi-month, the dialog surfaces a cycle-anchor warning so admins know the
@@ -46,22 +49,26 @@ export function OrgKpiScopeChangeDialog({
   frequency,
 }: Props) {
   const [cascadeForward, setCascadeForward] = useState(false);
+  // ADR-320 — a grouped scope must name the one target it moves to.
+  const [newTarget, setNewTarget] = useState<string | null>(null);
+  const needsTarget = scopeNeedsTarget(newScope) && newScope !== 'department' && newScope !== 'employee';
   const previewMutation = useScopeCascadePreview();
   const applyMutation = useChangeOrgKpiScope();
 
   // Re-run dry-run whenever the cascade option toggles
   useEffect(() => {
     if (!open) return;
-    previewMutation.mutate({ identifier, newScope, cascadeForward });
+    if (needsTarget && !newTarget) return;
+    previewMutation.mutate({ identifier, newScope, newTarget, cascadeForward });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, cascadeForward]);
+  }, [open, cascadeForward, newTarget]);
 
   const preview = previewMutation.data;
 
   const handleApply = () => {
     const mode: ScopeCascadeMode = cascadeForward ? 'current_and_future' : 'current_only';
     applyMutation.mutate(
-      { identifier, newScope, cascadeMode: mode },
+      { identifier, newScope, newTarget, cascadeMode: mode },
       { onSuccess: () => onClose() }
     );
   };
@@ -84,7 +91,7 @@ export function OrgKpiScopeChangeDialog({
             <span className="block font-medium text-foreground">{identifier.kraName} → {identifier.kpiName}</span>
             <span className="block">
               From <Badge variant="outline" className="mx-1">{currentScope}</Badge>
-              to <Badge className="mx-1">{newScope}</Badge>
+              to <Badge className="mx-1">{kpiScopeLabel(newScope)}</Badge>
             </span>
           </DialogDescription>
         </DialogHeader>
@@ -123,6 +130,15 @@ export function OrgKpiScopeChangeDialog({
               )}
             </div>
           </div>
+        )}
+
+        {/* ADR-320 — grouped scopes ask which one before anything is previewed. */}
+        {needsTarget && (
+          <ScopeTargetPicker
+            scope={newScope}
+            value={newTarget}
+            onChange={setNewTarget}
+          />
         )}
 
         {/* Cascade option */}
@@ -183,6 +199,10 @@ export function OrgKpiScopeChangeDialog({
                 </div>
               ))}
             </div>
+          ) : needsTarget && !newTarget ? (
+            <div className="p-4 text-sm text-muted-foreground">
+              Choose a {kpiScopeLabel(newScope).toLowerCase()} above to see which periods change.
+            </div>
           ) : (
             <div className="p-4 text-sm text-muted-foreground">Toggle the cascade option to refresh preview.</div>
           )}
@@ -194,7 +214,12 @@ export function OrgKpiScopeChangeDialog({
           </Button>
           <Button
             onClick={handleApply}
-            disabled={applyMutation.isPending || !preview || preview.periods.length === 0}
+            disabled={
+              applyMutation.isPending ||
+              !preview ||
+              preview.periods.length === 0 ||
+              (needsTarget && !newTarget)
+            }
           >
             {applyMutation.isPending ? (
               <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Applying…</>

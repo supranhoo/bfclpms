@@ -9156,6 +9156,25 @@ Regression: `src/components/admin/bu-console/variantNormalise.test.ts` (17 tests
 
 See POLICY §CONSOLE-VARIANT-NORMALISE and docs/adr/ADR-315.md.
 
+### v2.66.320 — ADR-320 Grouped KPI scopes (Business Unit & Location)
+
+**What.** The scopes previously labelled *Soon* are now real. Business Unit and Location can be
+chosen when creating a KPI and when changing an existing KPI's scope; both ask which business unit
+or location and show how many people that reaches before anything is saved. Division, PMS Grade and
+Level stay marked *Soon* pending a master-data audit.
+
+**Why.** The five labels advertised a capability that did not exist — the columns and the employee
+keys were in place, but no UI and no migration path were. Building each scope its own picker would
+have multiplied the same code five times.
+
+**How.** `kpi_scope_options` and `kpi_scope_population_summary` serve targets and live reach for any
+scope; `ScopeTargetPicker` + `useKpiScopeTargets` render that one question anywhere;
+`migrate_okv_scope_generic` re-keys recorded values between any two dimensions with the existing
+audit trail. `change_org_kpi_scope_cascading` gained an optional target, refuses a grouped move with
+no target or an empty population, stamps the target column on affected rows, and keeps the legacy
+Organization/Department/Employee path unchanged. Locked periods are still skipped. No historical
+data changed. POLICY §KPI-SCOPE-GROUPED-TARGETING, docs/adr/ADR-320.md.
+
 ### v2.66.319 — ADR-319 One scope vocabulary for KPIs
 
 **What.** The console's "Individual / Shared value / Department event" chooser is replaced by the

@@ -6944,3 +6944,28 @@ cascade still to ship).
    ignore the field when `is_org_level = false`.
 
 - **v2.66.319 (2026-08-26):** §KPI-SCOPE-SINGLE-VOCABULARY introduced (ADR-319).
+
+## §KPI-SCOPE-GROUPED-TARGETING (ADR-320)
+
+A grouped scope — Business Unit, Location, and later Division, PMS Grade and
+Level — always names the one group it applies to, and that group must contain
+people.
+
+1. **One question, one component.** Every grouped scope asks "which one?"
+   through the same picker, whose options and reach are read from the server
+   (`kpi_scope_options`, `kpi_scope_population_summary`). No surface hardcodes
+   how a scope resolves to employees.
+2. **No empty reach.** Creating or re-scoping onto a grouped scope is refused
+   when no target is chosen, or when the chosen target resolves to zero active
+   employees. The reach is shown before anything is saved.
+3. **One key per KPI.** Writing a grouped scope stamps its target column and
+   clears the other scope columns, so a KPI can never carry two group keys.
+4. **Value moves stay audited.** Re-scoping across any two dimensions carries
+   the recorded values through `migrate_okv_scope_generic`, which writes the
+   same history and audit rows as the legacy three-scope path. Locked periods
+   are skipped, unchanged.
+5. **Labels tell the truth.** A scope is offered as selectable only when its
+   cascade is live; the rest stay marked *Soon* until their master data is
+   audited.
+
+- **v2.66.320 (2026-08-26):** §KPI-SCOPE-GROUPED-TARGETING introduced (ADR-320).
