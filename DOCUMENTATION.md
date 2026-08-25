@@ -9155,3 +9155,31 @@ stopping at the first hard error. No schema, RPC, RLS or backup change.
 Regression: `src/components/admin/bu-console/variantNormalise.test.ts` (17 tests).
 
 See POLICY §CONSOLE-VARIANT-NORMALISE and docs/adr/ADR-315.md.
+
+### v2.66.316 — ADR-316 KPI data table: per-KPI rhythm, history and bottom line
+
+**What.** The KPI data table now supports weekly, monthly, bi-monthly, quarterly,
+half-yearly, yearly and event rhythms; each column can declare how its bottom-line
+total is produced; every row records its source (entry / import / legacy); and the
+panel can be read per period, per calendar year, or across the fiscal Jul–Jun cycle
+with a pinned totals row.
+
+**Why.** Teams maintain these tables in Excel with a Jul–Jun cycle, a bottom line
+and legacy years kept in place. Different KPIs run at different cadences, so one
+fixed monthly shape did not fit. The "Add column" crash (an empty column key fed to
+a Radix `Select`) also blocked table design.
+
+**How.**
+- DB: `okdd_granularity_chk` widened; `org_kpi_dataset_rows.source` added with an
+  index; `org_kpi_dataset_columns.total_rule` added; `org_kpi_dataset_row_save`
+  and `org_kpi_dataset_upsert_def` pass the new fields through.
+- Model (`src/lib/review/kpiLedgerModel.ts`): `granularityForFrequency`,
+  `fiscalPeriodIndex`, `sortRowsFiscal`, `defaultTotalRule`, `effectiveTotalRule`,
+  `computeTotalsRow`.
+- UI: `DatasetSchemaDialog` seeds rhythm from the KPI frequency, allocates unique
+  placeholder column keys (crash fix), filters blank keys out of the key pickers
+  and exposes the per-column bottom-line rule. `KpiLedgerPanel` gains the
+  period / year / fiscal scope selector, source badges and the pinned totals row.
+- Tests: `src/components/admin/bu-console/kpiLedgerRhythm.test.ts` (16 cases).
+
+See POLICY §KPI-LEDGER-RHYTHM-AND-HISTORY.
