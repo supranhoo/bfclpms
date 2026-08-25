@@ -1,15 +1,10 @@
 /**
  * ADR-297 — add one KPI to many people, from the console.
- *
- * The console's job is to run the group, so creating a KPI is a group act:
- * define it once, choose who it lands on (the current scope), preview exactly
- * who receives it, then issue it. Three kinds:
- *
- *  - Individual        — each person owns their own number (classic KPI).
- *  - Shared value      — one value (e.g. production target vs actual) spreads
- *                        to everyone in scope.
- *  - Department event  — a single event (e.g. an LTI) hits the whole
- *                        department it lands in.
+ * ADR-319 — the three "kinds" are gone: the dialog now speaks the same scope
+ * vocabulary as the rest of the product (POLICY §KPI-SCOPE-SINGLE-VOCABULARY),
+ * imported from `@/lib/review/kpiScope`. Individual, Organization, Department
+ * and Employee behave exactly as before; only the words are unified, and the
+ * not-yet-built scopes are shown disabled so both surfaces read identically.
  *
  * Writes go through `bu_console_kpi_create` (admin-only, dry-run first).
  */
@@ -29,29 +24,18 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   useConsoleKpiCreate, useConsoleKpiCreatePreview,
-  type BuConsoleScope, type ConsoleKpiCreateResult, type ConsoleKpiKind,
+  type BuConsoleScope, type ConsoleKpiCreateResult,
 } from '@/hooks/useBuConsole';
+import {
+  KPI_SCOPES, KPI_SCOPE_COPY, PLANNED_KPI_SCOPES, PLANNED_KPI_SCOPE_LABELS, type KpiScope,
+} from '@/lib/review/kpiScope';
 import { Loader2, Users } from 'lucide-react';
 import { coreTitle } from './mergeTriage';
-
-const KIND_COPY: Record<ConsoleKpiKind, { label: string; hint: string }> = {
-  individual: {
-    label: 'Individual',
-    hint: 'Each person is measured on their own number.',
-  },
-  shared: {
-    label: 'Shared value',
-    hint: 'One value — e.g. production target vs actual — spreads to everyone in scope.',
-  },
-  department_event: {
-    label: 'Department event',
-    hint: 'A single event — e.g. an LTI — applies to the whole department it lands in.',
-  },
-};
 
 const SKIP_LABELS: Record<string, string> = {
   duplicate_kpi: 'Already has this KPI this month',
 };
+
 
 export interface ConsoleKpiCreateDialogProps {
   open: boolean;
@@ -73,7 +57,7 @@ export interface ConsoleKpiCreateDialogProps {
 export function ConsoleKpiCreateDialog({
   open, onOpenChange, scope, scopeLabel, categories, kraNames, existingKpiNames = [],
 }: ConsoleKpiCreateDialogProps) {
-  const [kind, setKind] = useState<ConsoleKpiKind>('individual');
+  const [kpiScope, setKpiScope] = useState<KpiScope>('individual');
   const [categoryId, setCategoryId] = useState('');
   const [kraName, setKraName] = useState('');
   const [kpiName, setKpiName] = useState('');
@@ -88,7 +72,7 @@ export function ConsoleKpiCreateDialog({
 
   const payload = useMemo(
     () => ({
-      kind,
+      scope: kpiScope,
       category_id: categoryId,
       kra_name: kraName.trim(),
       kpi_name: kpiName.trim(),
@@ -97,8 +81,9 @@ export function ConsoleKpiCreateDialog({
       target_value: targetValue.trim() || null,
       weightage: weightage.trim() || null,
     }),
-    [kind, categoryId, kraName, kpiName, criteria, uom, targetValue, weightage],
+    [kpiScope, categoryId, kraName, kpiName, criteria, uom, targetValue, weightage],
   );
+
 
   // ADR-313 — look-alike detection uses the same cleaning as the merge queue.
   const lookalikes = useMemo(() => {
@@ -157,27 +142,41 @@ export function ConsoleKpiCreateDialog({
           </Alert>
         ) : (
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              {(Object.keys(KIND_COPY) as ConsoleKpiKind[]).map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => { setKind(k); setPreview(null); }}
-                  aria-pressed={kind === k}
-                  className={
-                    'min-h-10 rounded-lg border p-3 text-left transition-colors ' +
-                    (kind === k
-                      ? 'border-primary bg-primary/5'
-                      : 'hover:bg-muted/50 focus-visible:bg-muted/50')
-                  }
-                >
-                  <span className="block text-sm font-medium">{KIND_COPY[k].label}</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {KIND_COPY[k].hint}
-                  </span>
-                </button>
-              ))}
-            </div>
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Scope
+              </legend>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {KPI_SCOPES.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => { setKpiScope(s); setPreview(null); }}
+                    aria-pressed={kpiScope === s}
+                    className={
+                      'min-h-10 rounded-lg border p-3 text-left transition-colors min-w-0 ' +
+                      (kpiScope === s
+                        ? 'border-primary bg-primary/5'
+                        : 'hover:bg-muted/50 focus-visible:bg-muted/50')
+                    }
+                  >
+                    <span className="block text-sm font-medium">{KPI_SCOPE_COPY[s].label}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground break-words">
+                      {KPI_SCOPE_COPY[s].hint}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>Coming soon:</span>
+                {PLANNED_KPI_SCOPES.map((s) => (
+                  <Badge key={s} variant="outline" className="opacity-60 font-normal">
+                    {PLANNED_KPI_SCOPE_LABELS[s]}
+                  </Badge>
+                ))}
+              </div>
+            </fieldset>
+
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">

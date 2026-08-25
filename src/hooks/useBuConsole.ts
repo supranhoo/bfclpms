@@ -1654,11 +1654,16 @@ export function useBuConsolePipeline(args: BuConsolePipelineArgs | null) {
 /* ADR-297 — create one KPI for many people from the console           */
 /* ------------------------------------------------------------------ */
 
-/** Individual = one per person; shared = one value spread to all; department_event = whole dept. */
+/**
+ * ADR-319 — the console speaks one scope vocabulary (see `@/lib/review/kpiScope`).
+ * `ConsoleKpiKind` stays as a deprecated alias so older callers keep compiling.
+ */
+export type { KpiScope } from '@/lib/review/kpiScope';
+/** @deprecated Use `KpiScope` from `@/lib/review/kpiScope`. */
 export type ConsoleKpiKind = 'individual' | 'shared' | 'department_event';
 
 export interface ConsoleKpiCreateArgs {
-  kpi: Record<string, unknown> & { kind: ConsoleKpiKind; kpi_name: string; kra_name: string; category_id: string };
+  kpi: Record<string, unknown> & { scope?: string; kind?: ConsoleKpiKind; kpi_name: string; kra_name: string; category_id: string };
   period: string;
   year: number;
   buIds?: string[];
@@ -1672,6 +1677,8 @@ export interface ConsoleKpiCreateResult {
   authorized: boolean;
   reason?: string;
   dry_run?: boolean;
+  /** Echoed back by the RPC — the resolved scope. */
+  scope?: string;
   kind?: ConsoleKpiKind;
   will_create?: number;
   will_skip?: number;

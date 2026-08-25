@@ -39,6 +39,9 @@ import { OrgKpiEvidenceStatusChip } from '@/components/admin/OrgKpiEvidenceStatu
 import { OrgKpiParityBadge } from '@/components/admin/OrgKpiParityBadge';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { Save } from 'lucide-react';
+// ADR-319 — one scope vocabulary shared with the console create dialog.
+import { KPI_SCOPE_COPY, PLANNED_KPI_SCOPE_LABELS } from '@/lib/review/kpiScope';
+
 
 export interface OrgKpiCardData {
   categoryId: string;
@@ -1053,25 +1056,27 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                       key={s}
                       disabled={data.scope === s}
                       onClick={() => setScopeChangeTarget(s)}
-                      className="capitalize"
                     >
                       {s === 'organization' && <Building2 className="h-3.5 w-3.5 mr-2" />}
                       {s === 'department' && <Users className="h-3.5 w-3.5 mr-2" />}
                       {s === 'employee' && <User className="h-3.5 w-3.5 mr-2" />}
-                      {s}{data.scope === s ? ' (current)' : ''}
+                      {/* ADR-319 — labels come from the one scope vocabulary. */}
+                      {KPI_SCOPE_COPY[s].label}{data.scope === s ? ' (current)' : ''}
                     </DropdownMenuItem>
                   ))}
+
                   <DropdownMenuSeparator />
                   <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
                     New scopes (coming soon)
                   </DropdownMenuLabel>
                   {([
-                    { id: 'division',      label: 'Division',      Icon: Network },
-                    { id: 'business_unit', label: 'Business Unit', Icon: Briefcase },
-                    { id: 'location',      label: 'Location',      Icon: MapPin },
-                    { id: 'pms_grade',     label: 'PMS Grade',     Icon: Award },
-                    { id: 'level',         label: 'Level',         Icon: Layers },
-                  ] as const).map(({ id, label, Icon }) => (
+                    { id: 'division',      Icon: Network },
+                    { id: 'business_unit', Icon: Briefcase },
+                    { id: 'location',      Icon: MapPin },
+                    { id: 'pms_grade',     Icon: Award },
+                    { id: 'level',         Icon: Layers },
+                  ] as const).map(({ id, Icon }) => (
+
                     <DropdownMenuItem
                       key={id}
                       disabled
@@ -1079,7 +1084,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                       title="Target picker + cascade RPC ship in Step 5c/5d"
                     >
                       <Icon className="h-3.5 w-3.5 mr-2" />
-                      {label}
+                      {PLANNED_KPI_SCOPE_LABELS[id]}
                       <span className="ml-auto text-[10px] text-muted-foreground">Soon</span>
                     </DropdownMenuItem>
                   ))}

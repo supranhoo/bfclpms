@@ -6922,3 +6922,25 @@ Duplicate KPI titles are cleaned in bulk, never one pair at a time, and never au
    trail, and validation for a touched period becomes stale automatically.
 
 - **v2.66.316 (2026-08-26):** §KPI-LEDGER-PERIOD-OWNERSHIP introduced (ADR-318).
+
+## §KPI-SCOPE-SINGLE-VOCABULARY (ADR-319)
+
+A KPI has exactly one *scope*, and the system uses one set of words for it
+everywhere: **Individual**, **Organization**, **Department**, **Employee**
+(with Division, Business Unit, Location, PMS Grade and Level reserved for the
+cascade still to ship).
+
+1. **One vocabulary.** The console's older creation words — "Shared value" and
+   "Department event" — are retired as a user-facing language. They remain
+   readable as aliases (`shared` → organization, `department_event` →
+   department) so nothing in flight breaks.
+2. **One source of truth in code.** `src/lib/review/kpiScope.ts` owns the scope
+   list, labels, hints and the mapping to columns. Every surface that offers a
+   scope imports it; no surface may re-declare scope words.
+3. **Two columns only.** A scope is stored as `is_org_level` +
+   `org_level_scope`. `kpi_group_type` is deprecated and no longer written.
+4. **Individual means no scope.** New individual KPIs store
+   `org_level_scope = NULL`; existing rows are left untouched because reads
+   ignore the field when `is_org_level = false`.
+
+- **v2.66.319 (2026-08-26):** §KPI-SCOPE-SINGLE-VOCABULARY introduced (ADR-319).
