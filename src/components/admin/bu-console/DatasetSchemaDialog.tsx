@@ -22,9 +22,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { useUpsertLedgerDef } from '@/hooks/useOrgKpiDataset';
 import {
-  DATA_TYPE_LABELS, GRANULARITY_LABELS, ROLLUP_LABELS, defaultMonthlyColumns, isNumericColumn,
+  DATA_TYPE_LABELS, GRANULARITY_LABELS, ROLLUP_LABELS, TOTAL_RULE_LABELS,
+  defaultMonthlyColumns, defaultTotalRule, granularityForFrequency, isNumericColumn,
   type LedgerBundle, type LedgerColumn, type LedgerDataType, type LedgerGranularity,
-  type LedgerRollupRule,
+  type LedgerRollupRule, type LedgerTotalRule,
 } from '@/lib/review/kpiLedgerModel';
 
 interface Props {
@@ -34,17 +35,28 @@ interface Props {
   kraName: string;
   kpiName: string;
   kpiTitle?: string | null;
+  /** KPI's own frequency — seeds the default row rhythm for a brand-new table. */
+  frequency?: string | null;
   bundle: LedgerBundle | null;
 }
 
 const NONE = '__none__';
+const DEFAULT_TOTAL = '__default__';
 
 function slugify(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48);
 }
 
+/** Never leave a column key blank — Radix Select rejects empty option values. */
+function nextColumnKey(existing: LedgerColumn[]): string {
+  const taken = new Set(existing.map((c) => c.column_key));
+  let n = existing.length + 1;
+  while (taken.has(`column_${n}`)) n += 1;
+  return `column_${n}`;
+}
+
 export function DatasetSchemaDialog({
-  open, onOpenChange, categoryId, kraName, kpiName, kpiTitle, bundle,
+  open, onOpenChange, categoryId, kraName, kpiName, kpiTitle, frequency, bundle,
 }: Props) {
   const mut = useUpsertLedgerDef();
   const [title, setTitle] = useState('Data table');
@@ -69,7 +81,7 @@ export function DatasetSchemaDialog({
       setColumns(bundle.columns.map((c) => ({ ...c })));
     } else {
       setTitle(kpiTitle ? `${kpiTitle} — data table` : 'Data table');
-      setGranularity('monthly');
+      setGranularity(granularityForFrequency(frequency));
       setRollupRule('sum_ratio');
       const cols = defaultMonthlyColumns();
       setColumns(cols);
@@ -78,12 +90,15 @@ export function DatasetSchemaDialog({
       setWeightKey(NONE);
       setAllowOverride(true);
     }
-  }, [open, bundle, kpiTitle]);
+  }, [open, bundle, kpiTitle, frequency]);
 
   const numericKeys = useMemo(
-    () => columns.filter(isNumericColumn).map((c) => ({ key: c.column_key, label: c.label })),
+    () => columns
+      .filter((c) => isNumericColumn(c) && !!c.column_key)
+      .map((c) => ({ key: c.column_key, label: c.label || c.column_key })),
     [columns],
   );
+
 
   const errors = useMemo(() => {
     const list: string[] = [];
@@ -112,8 +127,8 @@ export function DatasetSchemaDialog({
     setColumns((prev) => [
       ...prev,
       {
-        column_key: '', label: '', data_type: 'number', is_required: false, is_key: false,
-        editable_by: 'provider', sort_order: (prev.length + 1) * 10,
+        column_key: nextColumnKey(prev), label: '', data_type: 'number', is_required: false, is_key: false,
+        editable_by: 'provider', sort_order: (prev.length + 1) * 10, total_rule: null,
       },
     ]);
 
@@ -203,6 +218,7 @@ export function DatasetSchemaDialog({
                     <TableHead className="w-[150px]">Type</TableHead>
                     <TableHead className="w-[110px]">Unit</TableHead>
                     <TableHead className="w-[200px]">Formula</TableHead>
+                    <TableHead className="w-[170px]">Bottom line</TableHead>
                     <TableHead className="w-[90px] text-center">Required</TableHead>
                     <TableHead className="w-[60px]" />
                   </TableRow>
@@ -216,11 +232,15 @@ export function DatasetSchemaDialog({
                           placeholder="Achieved"
                           onChange={(e) => {
                             const label = e.target.value;
-                            const autoKey = !col.column_key || col.column_key === slugify(col.label);
-                            updateColumn(i, autoKey ? { label, column_key: slugify(label) } : { label });
+                            const autoKey = !col.column_key
+                              || /^column_\d+$/.test(col.column_key)
+                              || col.column_key === slugify(col.label);
+                            const nextKey = slugify(label);
+                            updateColumn(i, autoKey && nextKey ? { label, column_key: nextKey } : { label });
                           }}
                         />
                       </TableCell>
+
                       <TableCell>
                         <Input
                           value={col.column_key}
@@ -260,6 +280,25 @@ export function DatasetSchemaDialog({
                           onChange={(e) => updateColumn(i, { formula: e.target.value || null })}
                         />
                       </TableCell>
+                      <TableCell>
+                        <Select
+                          value={col.total_rule ?? DEFAULT_TOTAL}
+                          onValueChange={(v) => updateColumn(i, {
+                            total_rule: v === DEFAULT_TOTAL ? null : (v as LedgerTotalRule),
+                          })}
+                        >
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={DEFAULT_TOTAL}>
+                              Default ({TOTAL_RULE_LABELS[defaultTotalRule(col)]})
+                            </SelectItem>
+                            {Object.entries(TOTAL_RULE_LABELS).map(([k, v]) => (
+                              <SelectItem key={k} value={k}>{v}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+
                       <TableCell className="text-center">
                         <Checkbox
                           checked={col.is_required}
@@ -281,7 +320,7 @@ export function DatasetSchemaDialog({
                   ))}
                   {columns.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
                         No columns yet — add the ones this KPI needs.
                       </TableCell>
                     </TableRow>

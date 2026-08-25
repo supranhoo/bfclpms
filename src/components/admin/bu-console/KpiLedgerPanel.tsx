@@ -32,9 +32,14 @@ import {
   useLedgerRows, useLedgerValidation, useValidateLedgerPeriod,
 } from '@/hooks/useOrgKpiDataset';
 import {
-  detectExceptions, formatCell, isValidationLive, scopeLabelOf,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  computeTotalsRow, detectExceptions, effectiveTotalRule, formatCell, isValidationLive,
+  scopeLabelOf, sortRowsFiscal,
   type LedgerRow,
 } from '@/lib/review/kpiLedgerModel';
+import { fiscalStartYearOfKpi, isFiscalTuple } from '@/lib/fiscalWindow';
 import { DatasetSchemaDialog } from './DatasetSchemaDialog';
 import { LedgerRowDialog } from './LedgerRowDialog';
 
@@ -43,13 +48,20 @@ interface Props {
   kraName: string;
   kpiName: string;
   kpiTitle?: string | null;
+  /** KPI's own frequency — seeds the row rhythm when the table is first designed. */
+  frequency?: string | null;
   period: string;
   year: number;
 }
 
 const PAGE_SIZE = 100;
+/** A fiscal cycle is 12 months, so one page always covers it. */
+const FISCAL_PAGE_SIZE = 500;
 
-export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, period, year }: Props) {
+/** What slice of history the table is showing (ADR-316). */
+type LedgerScope = 'period' | 'year' | 'fiscal';
+
+export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, frequency, period, year }: Props) {
   const { hasRole, isAdmin } = useAuth();
   const { canWrite } = useBuConsoleCapability();
   const { toast } = useToast();
@@ -58,29 +70,56 @@ export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, period,
   const datasetId = bundle?.def.id;
 
   const [page, setPage] = useState(0);
-  const [showAllPeriods, setShowAllPeriods] = useState(false);
+  const [scope, setScope] = useState<LedgerScope>('period');
   const [schemaOpen, setSchemaOpen] = useState(false);
   const [rowDialog, setRowDialog] = useState<{ open: boolean; row: LedgerRow | null }>({ open: false, row: null });
   const [deleteRow, setDeleteRow] = useState<LedgerRow | null>(null);
   const [validateOpen, setValidateOpen] = useState(false);
   const [validateNote, setValidateNote] = useState('');
 
+  const fiscalStart = fiscalStartYearOfKpi(period, year) ?? year;
+  const isFiscal = scope === 'fiscal';
+
   const rowsQuery = useLedgerRows({
     datasetId,
-    reviewYear: year,
-    reviewPeriod: showAllPeriods ? null : period,
-    page,
-    pageSize: PAGE_SIZE,
+    reviewYear: isFiscal ? fiscalStart : year,
+    reviewPeriod: scope === 'period' ? period : null,
+    page: isFiscal ? 0 : page,
+    pageSize: isFiscal ? FISCAL_PAGE_SIZE : PAGE_SIZE,
   });
-  const rollup = useLedgerRollup({ datasetId, reviewYear: year, reviewPeriod: showAllPeriods ? null : period });
+  // A Jul–Jun cycle spans two calendar years, so the second half is fetched alongside.
+  const fiscalTailQuery = useLedgerRows({
+    datasetId,
+    reviewYear: fiscalStart + 1,
+    reviewPeriod: null,
+    page: 0,
+    pageSize: FISCAL_PAGE_SIZE,
+    enabled: isFiscal,
+  });
+  const rollup = useLedgerRollup({ datasetId, reviewYear: year, reviewPeriod: scope === 'period' ? period : null });
   const validation = useLedgerValidation({ datasetId, reviewYear: year, reviewPeriod: period });
   const del = useDeleteLedgerRow();
   const validate = useValidateLedgerPeriod();
   const bulk = useBulkImportLedger();
 
-  const rows = rowsQuery.data?.rows ?? [];
-  const total = rowsQuery.data?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rows = useMemo(() => {
+    const base = rowsQuery.data?.rows ?? [];
+    if (!isFiscal) return base;
+    const merged = [...base, ...(fiscalTailQuery.data?.rows ?? [])]
+      .filter((r) => isFiscalTuple(r.review_period, r.review_year, fiscalStart));
+    return sortRowsFiscal(merged);
+  }, [rowsQuery.data, fiscalTailQuery.data, isFiscal, fiscalStart]);
+  const total = isFiscal ? rows.length : (rowsQuery.data?.total ?? 0);
+  const totalPages = isFiscal ? 1 : Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const totalsRow = useMemo(
+    () => (bundle ? computeTotalsRow(bundle.columns, rows) : {}),
+    [bundle, rows],
+  );
+  const hasTotals = useMemo(
+    () => !!bundle && rows.length > 0 && bundle.columns.some((c) => effectiveTotalRule(c) !== 'none'),
+    [bundle, rows],
+  );
 
   const exceptions = useMemo(
     () => (bundle ? detectExceptions(bundle.def, bundle.columns, rows) : []),
@@ -188,6 +227,7 @@ export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, period,
           kraName={kraName}
           kpiName={kpiName}
           kpiTitle={kpiTitle}
+          frequency={frequency}
           bundle={null}
         />
       </section>
@@ -211,9 +251,19 @@ export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, period,
           <Badge variant="destructive" className="text-[10px]">Validation stale</Badge>
         )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="ghost" onClick={() => { setShowAllPeriods((v) => !v); setPage(0); }}>
-            {showAllPeriods ? `Show ${period} only` : `Show all of ${year}`}
-          </Button>
+          <Select
+            value={scope}
+            onValueChange={(v) => { setScope(v as LedgerScope); setPage(0); }}
+          >
+            <SelectTrigger className="h-8 w-[190px] text-xs" aria-label="Rows shown">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="period">{period} {year} only</SelectItem>
+              <SelectItem value="year">All of {year}</SelectItem>
+              <SelectItem value="fiscal">Fiscal year {fiscalStart}–{fiscalStart + 1} (Jul–Jun)</SelectItem>
+            </SelectContent>
+          </Select>
           <Button size="sm" variant="ghost" onClick={exportCsv} disabled={rows.length === 0}>
             <Download className="mr-1 h-3.5 w-3.5" aria-hidden /> Export
           </Button>
@@ -299,6 +349,9 @@ export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, period,
                   </TableCell>
                   <TableCell className="truncate">
                     {scopeLabelOf(r)}
+                    {r.source && r.source !== 'entry' && (
+                      <Badge variant="secondary" className="ml-1 text-[10px] capitalize">{r.source}</Badge>
+                    )}
                     {flags.length > 0 && (
                       <span className="ml-1 inline-flex items-center" title={flags.join(' · ')}>
                         <AlertTriangle className="h-3.5 w-3.5 text-destructive" aria-hidden />
@@ -334,6 +387,21 @@ export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, period,
                 </TableRow>
               );
             })}
+            {!rowsQuery.isLoading && hasTotals && bundle && (
+              <TableRow className="border-t-2 bg-muted/40 font-semibold">
+                <TableCell className="whitespace-nowrap">Total</TableCell>
+                <TableCell className="truncate text-xs text-muted-foreground">
+                  {rows.length} row(s)
+                </TableCell>
+                {bundle.columns.map((c) => (
+                  <TableCell key={c.column_key} className="text-right tabular-nums">
+                    {effectiveTotalRule(c) === 'none' ? '' : formatCell(c, totalsRow[c.column_key])}
+                  </TableCell>
+                ))}
+                <TableCell />
+                {canWrite && <TableCell />}
+              </TableRow>
+            )}
             {!rowsQuery.isLoading && rows.length === 0 && (
               <TableRow>
                 <TableCell
@@ -374,6 +442,7 @@ export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, period,
         kraName={kraName}
         kpiName={kpiName}
         kpiTitle={kpiTitle}
+        frequency={frequency}
         bundle={bundle}
       />
 

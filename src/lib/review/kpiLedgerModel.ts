@@ -13,7 +13,14 @@ export type LedgerDataType =
   | 'number' | 'percent' | 'currency' | 'text' | 'date'
   | 'select' | 'org_ref' | 'employee_ref' | 'formula';
 
-export type LedgerGranularity = 'monthly' | 'quarterly' | 'weekly' | 'event';
+export type LedgerGranularity =
+  | 'weekly' | 'monthly' | 'bi_monthly' | 'quarterly' | 'half_yearly' | 'yearly' | 'event';
+
+/** How a column's bottom-line figure is produced (ADR-316). */
+export type LedgerTotalRule = 'sum' | 'avg' | 'derived' | 'none';
+
+/** Where a row came from — normal entry, a sheet import, or carried-over history. */
+export type LedgerRowSource = 'entry' | 'import' | 'legacy';
 
 export type LedgerRollupRule =
   | 'sum_ratio' | 'sum' | 'avg' | 'weighted' | 'last' | 'max' | 'min' | 'none';
@@ -35,6 +42,8 @@ export interface LedgerColumn {
   display_format?: string | null;
   options?: unknown[];
   sort_order: number;
+  /** Bottom-line rule; when null a type-based default is used. */
+  total_rule?: LedgerTotalRule | null;
 }
 
 export interface LedgerDef {
@@ -70,6 +79,7 @@ export interface LedgerRow {
   impact_scope: Record<string, unknown>;
   values: Record<string, unknown>;
   revision: number;
+  source?: LedgerRowSource | null;
   entered_by?: string | null;
   updated_by?: string | null;
   created_at?: string;
@@ -107,10 +117,20 @@ export const ROLLUP_LABELS: Record<LedgerRollupRule, string> = {
 };
 
 export const GRANULARITY_LABELS: Record<LedgerGranularity, string> = {
-  monthly: 'One row per month',
-  quarterly: 'One row per quarter',
   weekly: 'One row per week',
+  monthly: 'One row per month',
+  bi_monthly: 'One row every two months',
+  quarterly: 'One row per quarter',
+  half_yearly: 'One row per half year',
+  yearly: 'One row per year',
   event: 'One row per event',
+};
+
+export const TOTAL_RULE_LABELS: Record<LedgerTotalRule, string> = {
+  sum: 'Add up',
+  avg: 'Average',
+  derived: 'Recalculate from totals',
+  none: 'No total',
 };
 
 export const DATA_TYPE_LABELS: Record<LedgerDataType, string> = {
@@ -360,4 +380,93 @@ export function defaultMonthlyColumns(): LedgerColumn[] {
     { column_key: 'achievement_pct', label: 'Achievement %', data_type: 'formula', formula: 'achieved / target * 100', is_required: false, is_key: false, editable_by: 'system', sort_order: 30 },
     { column_key: 'remarks', label: 'Remarks', data_type: 'text', is_required: false, is_key: false, editable_by: 'provider', sort_order: 40 },
   ];
+}
+
+/* ------------------------------------------------------------------ *
+ * ADR-316 — per-KPI rhythm, fiscal ordering and bottom-line totals
+ * ------------------------------------------------------------------ */
+
+/** Fiscal (Jul–Jun) month order used for ledger row sorting. */
+export const FISCAL_MONTH_ORDER = [
+  'July', 'August', 'September', 'October', 'November', 'December',
+  'January', 'February', 'March', 'April', 'May', 'June',
+] as const;
+
+function normaliseToken(v: string): string {
+  return v.toLowerCase().replace(/[^a-z]/g, '');
+}
+
+/**
+ * Default row rhythm for a data table, derived from the KPI's own frequency.
+ * Unknown or absent frequencies fall back to monthly.
+ */
+export function granularityForFrequency(frequency?: string | null): LedgerGranularity {
+  const t = normaliseToken(frequency ?? '');
+  if (!t) return 'monthly';
+  if (t.startsWith('week') || t === 'daily') return t === 'daily' ? 'monthly' : 'weekly';
+  if (t.startsWith('bimonth') || t === 'everytwomonths') return 'bi_monthly';
+  if (t.startsWith('quarter')) return 'quarterly';
+  if (t.startsWith('half') || t.startsWith('semiannual')) return 'half_yearly';
+  if (t.startsWith('year') || t.startsWith('annual')) return 'yearly';
+  if (t.startsWith('month')) return 'monthly';
+  if (t.startsWith('event') || t.startsWith('adhoc')) return 'event';
+  return 'monthly';
+}
+
+/** Index of a period label inside the fiscal year; unknown labels sort last. */
+export function fiscalPeriodIndex(period: string): number {
+  const idx = FISCAL_MONTH_ORDER.findIndex(m => normaliseToken(m) === normaliseToken(period));
+  return idx === -1 ? 99 : idx;
+}
+
+/** Rows ordered the way a fiscal-year sheet reads: Jul → Jun, then scope. */
+export function sortRowsFiscal<T extends Pick<LedgerRow, 'review_period' | 'review_year' | 'scope_label'>>(
+  rows: T[],
+): T[] {
+  return [...rows].sort((a, b) => {
+    const ai = fiscalPeriodIndex(a.review_period);
+    const bi = fiscalPeriodIndex(b.review_period);
+    if (ai !== bi) return ai - bi;
+    if (a.review_year !== b.review_year) return a.review_year - b.review_year;
+    return (a.scope_label ?? '').localeCompare(b.scope_label ?? '');
+  });
+}
+
+/** Bottom-line rule for a column when the admin has not chosen one. */
+export function defaultTotalRule(col: LedgerColumn): LedgerTotalRule {
+  if (col.data_type === 'formula') return 'derived';
+  if (col.data_type === 'percent') return 'avg';
+  if (col.data_type === 'number' || col.data_type === 'currency') return 'sum';
+  return 'none';
+}
+
+export function effectiveTotalRule(col: LedgerColumn): LedgerTotalRule {
+  return col.total_rule ?? defaultTotalRule(col);
+}
+
+/**
+ * The pinned bottom-line row of a data table.
+ * Sums and averages come from the entered rows; derived columns are
+ * recalculated from those totals so a ratio stays a ratio (not a sum of ratios).
+ */
+export function computeTotalsRow(
+  columns: LedgerColumn[],
+  rows: Pick<LedgerRow, 'values'>[],
+): Record<string, number | null> {
+  const totals: Record<string, number | null> = {};
+  for (const col of columns) {
+    const rule = effectiveTotalRule(col);
+    if (rule === 'none' || rule === 'derived') { totals[col.column_key] = null; continue; }
+    const nums = rows
+      .map(r => toNumber(r.values?.[col.column_key]))
+      .filter((n): n is number => n !== null && Number.isFinite(n));
+    if (nums.length === 0) { totals[col.column_key] = null; continue; }
+    const sum = nums.reduce((a, b) => a + b, 0);
+    totals[col.column_key] = rule === 'avg' ? Number((sum / nums.length).toFixed(4)) : Number(sum.toFixed(4));
+  }
+  for (const col of columns) {
+    if (effectiveTotalRule(col) !== 'derived') continue;
+    totals[col.column_key] = col.formula ? evaluateFormula(col.formula, totals) : null;
+  }
+  return totals;
 }

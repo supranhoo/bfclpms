@@ -6838,3 +6838,25 @@ Duplicate KPI titles are cleaned in bulk, never one pair at a time, and never au
 - **v2.66.314 (2026-08-25):** §KPI-BULK-DEDUPLICATION amended — duplicate-merge workbench
   enlarged and made wrap-safe so high-volume grouped decisions do not require horizontal
   scrolling. Presentation only; no proposal, decision, score or historical KPI data changed.
+
+## §KPI-LEDGER-RHYTHM-AND-HISTORY — each KPI's data table keeps its own shape and its history (ADR-316)
+
+1. **Per-KPI shape.** Every KPI's data table is defined on its own: its columns,
+   keys, formulas and row rhythm. Nothing is shared or fixed across KPIs.
+2. **Rhythm follows the KPI.** A table may carry one row per week, month, two
+   months, quarter, half year, year or event. A new table defaults to the rhythm
+   implied by the KPI's own frequency; an admin may change it at any time.
+3. **Bottom line is configurable, never guessed.** Each column states how its
+   total is produced: add up, average, recalculate from the totals, or no total.
+   When unset, numbers and amounts add up, percentages average, and derived
+   columns are recalculated from the totals — so a ratio stays a ratio and is
+   never a sum of monthly percentages.
+4. **History is kept, not overwritten.** Every row records where it came from:
+   normal entry, sheet import, or legacy history carried over from an earlier
+   year. Legacy rows sit alongside current rows and are never silently replaced.
+5. **Fiscal reading.** The table can be read for a single period, a calendar
+   year, or the fiscal cycle Jul–Jun, which spans two calendar years. Fiscal
+   reading always orders rows July first and June last.
+6. **Change trail unchanged.** Every save, import and removal continues to write
+   to the row change trail, and any audit validation for the period becomes
+   stale when data changes afterwards.

@@ -92,6 +92,7 @@ export async function upsertLedgerDef(input: UpsertDefInput): Promise<LedgerBund
       display_format: c.display_format ?? null,
       options: c.options ?? [],
       sort_order: c.sort_order ?? (i + 1) * 10,
+      total_rule: c.total_rule ?? null,
     })),
   };
   const { data, error } = await supabase.rpc('org_kpi_dataset_upsert_def' as any, { p_payload: payload });
