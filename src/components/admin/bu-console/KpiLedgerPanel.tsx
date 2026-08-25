@@ -22,7 +22,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  AlertTriangle, Download, Loader2, Pencil, Plus, ShieldCheck, Table2, Trash2, Upload,
+  AlertTriangle, CalendarRange, Download, Loader2, Pencil, Plus, ShieldCheck, Table2, Trash2,
+  Upload,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -36,12 +37,13 @@ import {
 } from '@/components/ui/select';
 import {
   computeTotalsRow, detectExceptions, effectiveTotalRule, formatCell, isValidationLive,
-  scopeLabelOf, sortRowsFiscal,
+  parsePeriodToken, scopeLabelOf, shortPeriodLabel, sortRowsFiscal,
   type LedgerRow,
 } from '@/lib/review/kpiLedgerModel';
 import { fiscalStartYearOfKpi, isFiscalTuple } from '@/lib/fiscalWindow';
 import { DatasetSchemaDialog } from './DatasetSchemaDialog';
 import { LedgerRowDialog } from './LedgerRowDialog';
+import { LedgerHistoryDialog } from './LedgerHistoryDialog';
 import { ExceptionKpiPanel } from './ExceptionKpiPanel';
 import type { ExceptionConfig } from '@/lib/review/exceptionKpiModel';
 
@@ -76,6 +78,7 @@ export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, frequen
   const [schemaOpen, setSchemaOpen] = useState(false);
   const [rowDialog, setRowDialog] = useState<{ open: boolean; row: LedgerRow | null }>({ open: false, row: null });
   const [deleteRow, setDeleteRow] = useState<LedgerRow | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [validateOpen, setValidateOpen] = useState(false);
   const [validateNote, setValidateNote] = useState('');
 
@@ -96,7 +99,17 @@ export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, frequen
     reviewPeriod: null,
     page: 0,
     pageSize: FISCAL_PAGE_SIZE,
-    enabled: isFiscal,
+    enabled: isFiscal || historyOpen,
+  });
+  // The history grid always works on the whole Jul–Jun cycle, whatever the
+  // table is currently showing (ADR-318).
+  const fiscalHeadQuery = useLedgerRows({
+    datasetId,
+    reviewYear: fiscalStart,
+    reviewPeriod: null,
+    page: 0,
+    pageSize: FISCAL_PAGE_SIZE,
+    enabled: historyOpen,
   });
   const rollup = useLedgerRollup({ datasetId, reviewYear: year, reviewPeriod: scope === 'period' ? period : null });
   const validation = useLedgerValidation({ datasetId, reviewYear: year, reviewPeriod: period });
@@ -113,6 +126,15 @@ export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, frequen
   }, [rowsQuery.data, fiscalTailQuery.data, isFiscal, fiscalStart]);
   const total = isFiscal ? rows.length : (rowsQuery.data?.total ?? 0);
   const totalPages = isFiscal ? 1 : Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  /** Whole Jul–Jun cycle, used by the history grid (ADR-318). */
+  const historyRows = useMemo(() => {
+    const merged = [
+      ...(fiscalHeadQuery.data?.rows ?? []),
+      ...(fiscalTailQuery.data?.rows ?? []),
+    ].filter((r) => isFiscalTuple(r.review_period, r.review_year, fiscalStart));
+    return sortRowsFiscal(merged);
+  }, [fiscalHeadQuery.data, fiscalTailQuery.data, fiscalStart]);
 
   const totalsRow = useMemo(
     () => (bundle ? computeTotalsRow(bundle.columns, rows) : {}),
@@ -176,14 +198,25 @@ export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, frequen
       const cells = line.split(',');
       const values: Record<string, unknown> = {};
       let scopeLabel: string | null = null;
+      let monthToken: string | null = null;
+      let yearToken: string | null = null;
       headers.forEach((h, i) => {
-        const key = byLabel.get(h.toLowerCase());
-        if (key) values[key] = cells[i]?.trim() ?? '';
-        else if (h.toLowerCase() === 'scope') scopeLabel = cells[i]?.trim() ?? null;
+        const cell = cells[i]?.trim() ?? '';
+        const head = h.toLowerCase();
+        if (head === 'month' || head === 'period' || head === 'review_period') monthToken = cell;
+        else if (head === 'year' || head === 'review_year') yearToken = cell;
+        else if (head === 'scope') scopeLabel = cell || null;
+        else {
+          const key = byLabel.get(head);
+          if (key) values[key] = cell;
+        }
       });
+      // ADR-318 — a row owns its period; the header month is only a fallback.
+      const stamp = parsePeriodToken(monthToken);
+      const parsedYear = yearToken ? Number(yearToken) : null;
       return {
-        reviewPeriod: period,
-        reviewYear: year,
+        reviewPeriod: stamp?.period ?? period,
+        reviewYear: stamp?.year ?? (Number.isFinite(parsedYear) ? (parsedYear as number) : year),
         scopeLabel,
         values,
         reason: `CSV import ${file.name}`,
@@ -286,6 +319,9 @@ export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, frequen
                   />
                 </label>
               </Button>
+              <Button size="sm" variant="outline" onClick={() => setHistoryOpen(true)}>
+                <CalendarRange className="mr-1 h-3.5 w-3.5" aria-hidden /> Enter history
+              </Button>
               <Button size="sm" variant="outline" onClick={() => setRowDialog({ open: true, row: null })}>
                 <Plus className="mr-1 h-3.5 w-3.5" aria-hidden /> Add row
               </Button>
@@ -364,7 +400,7 @@ export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, frequen
               return (
                 <TableRow key={r.id}>
                   <TableCell className="whitespace-nowrap">
-                    {r.review_period} {r.review_year}
+                    {shortPeriodLabel(r.review_period, r.review_year)}
                   </TableCell>
                   <TableCell className="truncate">
                     {scopeLabelOf(r)}
@@ -473,6 +509,18 @@ export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, frequen
           period={period}
           year={year}
           row={rowDialog.row}
+          frequency={frequency}
+        />
+      )}
+
+      {historyOpen && (
+        <LedgerHistoryDialog
+          open={historyOpen}
+          onOpenChange={setHistoryOpen}
+          bundle={bundle}
+          existingRows={historyRows}
+          fiscalStartYear={fiscalStart}
+          frequency={frequency}
         />
       )}
 

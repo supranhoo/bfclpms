@@ -9218,3 +9218,27 @@ exceptions.
 - Tests: `src/lib/review/__tests__/exceptionKpiModel.test.ts` (12 cases).
 
 See POLICY §KPI-EXCEPTION-SCOPED-RELEASE.
+
+## ADR-318 — A KPI data-table row owns its period
+
+- What: the Performance Console data table (KPI ledger) no longer stamps rows
+  with the console header's month. Row dialogs carry their own Month + Year, a
+  new "Enter history" grid captures a whole fiscal year (Jul → Jun) in one
+  paste-friendly screen, and CSV uploads honour a per-line Month/Year column.
+- Why: providers could not load or correct historical months. Editing a past
+  row silently moved it to the header's month, which read as "unable to update"
+  and quietly corrupted history.
+- How: `LedgerRowDialog` gains period selectors (default = header for new rows,
+  the row's own period on edit). `LedgerHistoryDialog` renders twelve fiscal
+  slots from the dataset's column design, shows a live new / updated /
+  unchanged count, dry-runs the bulk-import RPC, then commits — blank months are
+  never written. `parsePeriodToken` reads `Jul-25`, `July 2025`, `2025-07` and
+  `07/2025`. Multi-month KPIs display their cycle months and anchor month via
+  `buildCycleScopeLabel`, shading non-anchor rows.
+- Where: Performance Console → KPI → data table → **Enter history**, or the
+  pencil on any existing row.
+- Guards: fiscal pairing via `isFiscalTuple`; all writes keep reason capture,
+  the change trail, and automatic stale-validation marking.
+- Tests: `src/lib/review/__tests__/ledgerPeriodOwnership.test.ts` (9 cases).
+
+See POLICY §KPI-LEDGER-PERIOD-OWNERSHIP and ADR-318.
