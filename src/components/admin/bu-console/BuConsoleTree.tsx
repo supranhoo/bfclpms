@@ -155,7 +155,10 @@ function KpiRow({
   const [open, setOpen] = useState(false);
   const weights = kpi.weightage_values ?? [];
   const variantCount = kpi.variant_count ?? 1;
-  const hasVariance = variantCount > 1 || weights.length > 1;
+  // ADR-315a — the amber badge means "this KPI has more than one definition".
+  // Weightage spread is a legitimate per-employee number and is already shown
+  // in the Weightage column, so it must not raise a "1 variant" warning.
+  const hasVariance = variantCount > 1;
   const isLookalike = (lookalikeCount ?? 0) > 1;
   const panelId = `kpi-people-${kpi.kpi_key.replace(/[^\w-]/g, '_')}`;
 
