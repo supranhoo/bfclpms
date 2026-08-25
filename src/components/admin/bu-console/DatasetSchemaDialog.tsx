@@ -55,7 +55,7 @@ function nextColumnKey(existing: LedgerColumn[]): string {
 }
 
 export function DatasetSchemaDialog({
-  open, onOpenChange, categoryId, kraName, kpiName, kpiTitle, bundle,
+  open, onOpenChange, categoryId, kraName, kpiName, kpiTitle, frequency, bundle,
 }: Props) {
   const mut = useUpsertLedgerDef();
   const [title, setTitle] = useState('Data table');
@@ -80,7 +80,7 @@ export function DatasetSchemaDialog({
       setColumns(bundle.columns.map((c) => ({ ...c })));
     } else {
       setTitle(kpiTitle ? `${kpiTitle} — data table` : 'Data table');
-      setGranularity('monthly');
+      setGranularity(granularityForFrequency(frequency));
       setRollupRule('sum_ratio');
       const cols = defaultMonthlyColumns();
       setColumns(cols);
@@ -89,12 +89,15 @@ export function DatasetSchemaDialog({
       setWeightKey(NONE);
       setAllowOverride(true);
     }
-  }, [open, bundle, kpiTitle]);
+  }, [open, bundle, kpiTitle, frequency]);
 
   const numericKeys = useMemo(
-    () => columns.filter(isNumericColumn).map((c) => ({ key: c.column_key, label: c.label })),
+    () => columns
+      .filter((c) => isNumericColumn(c) && !!c.column_key)
+      .map((c) => ({ key: c.column_key, label: c.label || c.column_key })),
     [columns],
   );
+
 
   const errors = useMemo(() => {
     const list: string[] = [];
