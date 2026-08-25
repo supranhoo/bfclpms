@@ -27,8 +27,10 @@ import {
   type BuConsoleScope, type ConsoleKpiCreateResult,
 } from '@/hooks/useBuConsole';
 import {
-  KPI_SCOPES, KPI_SCOPE_COPY, PLANNED_KPI_SCOPES, PLANNED_KPI_SCOPE_LABELS, type KpiScope,
+  KPI_SCOPES, KPI_SCOPE_COPY, PLANNED_KPI_SCOPES, PLANNED_KPI_SCOPE_LABELS,
+  scopeNeedsTarget, type KpiScope,
 } from '@/lib/review/kpiScope';
+import { ScopeTargetPicker } from '@/components/admin/kpi-scope/ScopeTargetPicker';
 import { Loader2, Users } from 'lucide-react';
 import { coreTitle } from './mergeTriage';
 
