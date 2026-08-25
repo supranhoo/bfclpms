@@ -321,6 +321,23 @@ export function KpiLedgerPanel({ categoryId, kraName, kpiName, kpiTitle, frequen
         )}
       </div>
 
+      {/* ADR-317 — one entry per scope, released to everyone mapped to it. */}
+      <ExceptionKpiPanel
+        datasetId={bundle.def.id}
+        config={{
+          entry_mode: (bundle.def as unknown as ExceptionConfig).entry_mode ?? 'row_entry',
+          scope_dimension: (bundle.def as unknown as ExceptionConfig).scope_dimension ?? null,
+          clean_value: (bundle.def as unknown as ExceptionConfig).clean_value ?? null,
+          exception_direction:
+            (bundle.def as unknown as ExceptionConfig).exception_direction ?? 'lower_better',
+        }}
+        period={period}
+        year={year}
+        canWrite={canWrite || isAdmin}
+      />
+
+
+
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
