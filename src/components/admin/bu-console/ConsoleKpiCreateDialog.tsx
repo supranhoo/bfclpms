@@ -185,6 +185,14 @@ export function ConsoleKpiCreateDialog({
                   </Badge>
                 ))}
               </div>
+
+              {/* ADR-320 — the grouped scopes ask which one, with live reach. */}
+              <ScopeTargetPicker
+                scope={kpiScope}
+                value={scopeTargetId}
+                onChange={(v) => { setScopeTargetId(v); setPreview(null); }}
+                id="new-kpi-scope-target"
+              />
             </fieldset>
 
 
