@@ -9083,3 +9083,16 @@ be matched` whenever the affected employee had approved, rated KPIs in the targe
 Workflow Configuration page surfaces the real backend message instead of "Failed to assign
 workflow.". Guard test: `src/tests/workflowStepBackRatingCast.test.ts`.
 See POLICY §WF-CHANGE-NO-RATING-LOSS and docs/adr/ADR-311.md.
+
+### v2.66.312 — ADR-312 PIP employee prefill confirmation
+
+`/admin/pip/new?employee=<id>` already carries the employee, but the Create PIP screen rendered
+an empty `<Select>` (custom `SelectValue` child suppressed both the label and the placeholder
+until the bulk employee list resolved — and forever if the id was not in that list), forcing the
+user to pick the employee again. The field now resolves the id with a single-row lookup and
+renders a confirmed employee card (name, code, designation/department) with a "Change employee"
+button; unresolved ids show an inline `text-destructive` message and the searchable
+`EmployeePickerCombobox` instead of a blank control. Pure resolver:
+`src/lib/pip/pipEmployeeField.ts`; UI: `src/components/pip/PipEmployeeField.tsx`;
+tests: `src/tests/pipEmployeeField.test.ts`.
+See POLICY §PIP-EMPLOYEE-PREFILL-CONFIRMATION and docs/adr/ADR-312.md.

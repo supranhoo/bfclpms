@@ -6785,3 +6785,10 @@ TEXT and `final_rating` is the `rating_level` enum: any expression combining the
 explicitly (`final_rating::text` when snapshotting, `prior_final_rating::rating_level` when
 restoring). Admin screens performing workflow mapping writes MUST display the backend error
 message verbatim; a generic "Failed to ..." string that discards the cause is a defect.
+
+## §PIP-EMPLOYEE-PREFILL-CONFIRMATION (added 2026-08-25, ADR-312)
+
+When a screen is entered with a subject already chosen (PIP creation from a suggestion or from
+the Monthly Trend grid), the subject MUST be presented as a confirmed, human-readable selection —
+never as an empty control the user has to fill again. A prefilled identifier that cannot be
+resolved MUST be reported inline; it must never render as a blank field that still submits.
