@@ -7,7 +7,7 @@
  *      renders on first paint (previously `defaultValue` swallowed prefills);
  *   2. improvement areas can be picked from the employee's low-scoring KPIs.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -16,7 +16,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +30,7 @@ import { getPipPolicySettings, DEFAULT_PIP_POLICY } from '@/lib/pip/pipPolicySet
 import { validatePipDuration, validateMilestoneCadence, LIVE_PIP_STATUSES } from '@/lib/pip/pipTriggerRules';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LowScoringKpiPicker } from '@/components/pip/LowScoringKpiPicker';
+import { PipEmployeeField } from '@/components/pip/PipEmployeeField';
 import type { MonthKey } from '@/hooks/useMonthlyTrend';
 
 const milestoneSchema = z.object({
@@ -87,20 +88,8 @@ export function PIPCreateForm({
   const createPIP = useCreatePIP();
   const [policyError, setPolicyError] = useState<string | null>(null);
 
-  /** Active employees only — a PIP is never raised against a deactivated user. */
-  const { data: employees } = useQuery({
-    queryKey: ['employees-for-pip'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, employee_code, designation')
-        .eq('is_active', true)
-        .order('full_name')
-        .limit(2000);
-      if (error) throw error;
-      return data;
-    },
-  });
+
+
 
   /** POLICY §15.7 — duration bounds are admin-configurable, never hardcoded. */
   const { data: policy } = useQuery({
@@ -154,10 +143,7 @@ export function PIPCreateForm({
   const employeeId = form.watch('employee_id');
   const selectedAreas = form.watch('improvement_areas');
 
-  const selectedEmployee = useMemo(
-    () => employees?.find(e => e.id === employeeId),
-    [employees, employeeId],
-  );
+
 
   const toggleArea = (area: string) => {
     const current = form.getValues('improvement_areas');
@@ -236,34 +222,16 @@ export function PIPCreateForm({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Employee</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <FormControl>
-                          <SelectTrigger className="h-10">
-                            <SelectValue placeholder="Select employee">
-                              {selectedEmployee
-                                ? `${selectedEmployee.full_name} (${selectedEmployee.employee_code})`
-                                : undefined}
-                            </SelectValue>
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent className="max-h-72">
-                          {employees?.map(emp => (
-                            <SelectItem key={emp.id} value={emp.id}>
-                              {emp.full_name} ({emp.employee_code})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {preselectedEmployeeId && (
-                        <FormDescription>
-                          Prefilled from a PIP suggestion. Changing the employee also changes who the
-                          recorded trigger evidence applies to.
-                        </FormDescription>
-                      )}
+                      <PipEmployeeField
+                        value={field.value}
+                        onChange={field.onChange}
+                        preselectedEmployeeId={preselectedEmployeeId}
+                      />
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <FormField
