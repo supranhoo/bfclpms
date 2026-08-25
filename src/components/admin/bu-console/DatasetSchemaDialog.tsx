@@ -279,6 +279,25 @@ export function DatasetSchemaDialog({
                           onChange={(e) => updateColumn(i, { formula: e.target.value || null })}
                         />
                       </TableCell>
+                      <TableCell>
+                        <Select
+                          value={col.total_rule ?? DEFAULT_TOTAL}
+                          onValueChange={(v) => updateColumn(i, {
+                            total_rule: v === DEFAULT_TOTAL ? null : (v as LedgerTotalRule),
+                          })}
+                        >
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={DEFAULT_TOTAL}>
+                              Default ({TOTAL_RULE_LABELS[defaultTotalRule(col)]})
+                            </SelectItem>
+                            {Object.entries(TOTAL_RULE_LABELS).map(([k, v]) => (
+                              <SelectItem key={k} value={k}>{v}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+
                       <TableCell className="text-center">
                         <Checkbox
                           checked={col.is_required}
