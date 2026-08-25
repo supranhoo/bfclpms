@@ -22,9 +22,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 import { useUpsertLedgerDef } from '@/hooks/useOrgKpiDataset';
 import {
-  DATA_TYPE_LABELS, GRANULARITY_LABELS, ROLLUP_LABELS, defaultMonthlyColumns, isNumericColumn,
+  DATA_TYPE_LABELS, GRANULARITY_LABELS, ROLLUP_LABELS, TOTAL_RULE_LABELS,
+  defaultMonthlyColumns, defaultTotalRule, granularityForFrequency, isNumericColumn,
   type LedgerBundle, type LedgerColumn, type LedgerDataType, type LedgerGranularity,
-  type LedgerRollupRule,
+  type LedgerRollupRule, type LedgerTotalRule,
 } from '@/lib/review/kpiLedgerModel';
 
 interface Props {
@@ -34,6 +35,8 @@ interface Props {
   kraName: string;
   kpiName: string;
   kpiTitle?: string | null;
+  /** KPI's own frequency — seeds the default row rhythm for a brand-new table. */
+  frequency?: string | null;
   bundle: LedgerBundle | null;
 }
 
@@ -41,6 +44,14 @@ const NONE = '__none__';
 
 function slugify(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48);
+}
+
+/** Never leave a column key blank — Radix Select rejects empty option values. */
+function nextColumnKey(existing: LedgerColumn[]): string {
+  const taken = new Set(existing.map((c) => c.column_key));
+  let n = existing.length + 1;
+  while (taken.has(`column_${n}`)) n += 1;
+  return `column_${n}`;
 }
 
 export function DatasetSchemaDialog({

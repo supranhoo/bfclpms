@@ -10769,6 +10769,7 @@ export type Database = {
           label: string
           options: Json
           sort_order: number
+          total_rule: string | null
           unit: string | null
         }
         Insert: {
@@ -10785,6 +10786,7 @@ export type Database = {
           label: string
           options?: Json
           sort_order?: number
+          total_rule?: string | null
           unit?: string | null
         }
         Update: {
@@ -10801,6 +10803,7 @@ export type Database = {
           label?: string
           options?: Json
           sort_order?: number
+          total_rule?: string | null
           unit?: string | null
         }
         Relationships: [
@@ -10928,6 +10931,7 @@ export type Database = {
           review_year: number
           revision: number
           scope_label: string | null
+          source: string
           updated_at: string
           updated_by: string | null
           values: Json
@@ -10950,6 +10954,7 @@ export type Database = {
           review_year: number
           revision?: number
           scope_label?: string | null
+          source?: string
           updated_at?: string
           updated_by?: string | null
           values?: Json
@@ -10972,6 +10977,7 @@ export type Database = {
           review_year?: number
           revision?: number
           scope_label?: string | null
+          source?: string
           updated_at?: string
           updated_by?: string | null
           values?: Json
