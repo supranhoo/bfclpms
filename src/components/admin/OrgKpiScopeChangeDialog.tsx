@@ -91,7 +91,7 @@ export function OrgKpiScopeChangeDialog({
             <span className="block font-medium text-foreground">{identifier.kraName} → {identifier.kpiName}</span>
             <span className="block">
               From <Badge variant="outline" className="mx-1">{currentScope}</Badge>
-              to <Badge className="mx-1">{newScope}</Badge>
+              to <Badge className="mx-1">{kpiScopeLabel(newScope)}</Badge>
             </span>
           </DialogDescription>
         </DialogHeader>
@@ -130,6 +130,15 @@ export function OrgKpiScopeChangeDialog({
               )}
             </div>
           </div>
+        )}
+
+        {/* ADR-320 — grouped scopes ask which one before anything is previewed. */}
+        {needsTarget && (
+          <ScopeTargetPicker
+            scope={newScope}
+            value={newTarget}
+            onChange={setNewTarget}
+          />
         )}
 
         {/* Cascade option */}
@@ -190,6 +199,10 @@ export function OrgKpiScopeChangeDialog({
                 </div>
               ))}
             </div>
+          ) : needsTarget && !newTarget ? (
+            <div className="p-4 text-sm text-muted-foreground">
+              Choose a {kpiScopeLabel(newScope).toLowerCase()} above to see which periods change.
+            </div>
           ) : (
             <div className="p-4 text-sm text-muted-foreground">Toggle the cascade option to refresh preview.</div>
           )}
@@ -201,7 +214,12 @@ export function OrgKpiScopeChangeDialog({
           </Button>
           <Button
             onClick={handleApply}
-            disabled={applyMutation.isPending || !preview || preview.periods.length === 0}
+            disabled={
+              applyMutation.isPending ||
+              !preview ||
+              preview.periods.length === 0 ||
+              (needsTarget && !newTarget)
+            }
           >
             {applyMutation.isPending ? (
               <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Applying…</>
