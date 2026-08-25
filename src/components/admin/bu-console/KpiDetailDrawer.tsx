@@ -185,6 +185,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
             kraName={args.kraName}
             kpiName={args.kpiName}
             kpiTitle={args.kpiTitle ?? def.kpi_title ?? null}
+            frequency={def.frequency ?? null}
             period={args.period}
             year={args.year}
           />
