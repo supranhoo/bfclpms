@@ -126,8 +126,8 @@ export function DatasetSchemaDialog({
     setColumns((prev) => [
       ...prev,
       {
-        column_key: '', label: '', data_type: 'number', is_required: false, is_key: false,
-        editable_by: 'provider', sort_order: (prev.length + 1) * 10,
+        column_key: nextColumnKey(prev), label: '', data_type: 'number', is_required: false, is_key: false,
+        editable_by: 'provider', sort_order: (prev.length + 1) * 10, total_rule: null,
       },
     ]);
 
