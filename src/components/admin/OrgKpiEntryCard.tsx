@@ -1081,7 +1081,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                       title="Target picker + cascade RPC ship in Step 5c/5d"
                     >
                       <Icon className="h-3.5 w-3.5 mr-2" />
-                      {label}
+                      {PLANNED_KPI_SCOPE_LABELS[id]}
                       <span className="ml-auto text-[10px] text-muted-foreground">Soon</span>
                     </DropdownMenuItem>
                   ))}
