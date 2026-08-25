@@ -9072,3 +9072,14 @@ literals to the constraint. See POLICY §AUDIT-ACTION-VOCABULARY and docs/adr/AD
 ### v2.66.8 — ADR-301 Central Data Approval → Score Propagation (server layer)
 
 Org-level KPIs can be registered as centrally sourced (`org_kpi_central_registry`) with a per-KPI, effective-dated approval ladder (`org_kpi_approval_chains`) and an append-only decision trail (`org_kpi_approvals`). `org_kpi_values` carries `workflow_stage`, `current_step`, `submitted_at`, `propagation_mode`. RPCs: `org_kpi_chain_upsert`, `org_kpi_chain_list`, `org_kpi_submit_value`, `org_kpi_decide`, `org_kpi_finalise` — all SECURITY DEFINER, dry-run first. Final approval copies the approved value and recomputes each mapped employee's score from their own bands; `central_approved` mode also fills their empty resolved stages. Final-score-locked rows are skipped. See POLICY §CONSOLE-CENTRAL-APPROVAL-SSOT and docs/adr/ADR-301.md. No UI yet (Step 2).
+
+### v2.66.311 — ADR-311 Workflow mapping change unblocked (rating type drift)
+
+Assigning a period-specific workflow failed with `COALESCE types text and rating_level cannot
+be matched` whenever the affected employee had approved, rated KPIs in the target period:
+`workflow_change_step_back()` mixed `prior_final_rating` (TEXT) with `final_rating`
+(`rating_level` enum) inside COALESCE. The trigger now casts explicitly
+(`rs.final_rating::text` on snapshot, `rs.prior_final_rating::rating_level` on restore) and the
+Workflow Configuration page surfaces the real backend message instead of "Failed to assign
+workflow.". Guard test: `src/tests/workflowStepBackRatingCast.test.ts`.
+See POLICY §WF-CHANGE-NO-RATING-LOSS and docs/adr/ADR-311.md.
