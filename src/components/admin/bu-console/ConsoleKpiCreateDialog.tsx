@@ -60,6 +60,8 @@ export function ConsoleKpiCreateDialog({
   open, onOpenChange, scope, scopeLabel, categories, kraNames, existingKpiNames = [],
 }: ConsoleKpiCreateDialogProps) {
   const [kpiScope, setKpiScope] = useState<KpiScope>('individual');
+  // ADR-320 — a grouped scope owns exactly one target id.
+  const [scopeTargetId, setScopeTargetId] = useState<string | null>(null);
   const [categoryId, setCategoryId] = useState('');
   const [kraName, setKraName] = useState('');
   const [kpiName, setKpiName] = useState('');
@@ -75,6 +77,7 @@ export function ConsoleKpiCreateDialog({
   const payload = useMemo(
     () => ({
       scope: kpiScope,
+      scope_target_id: scopeTargetId,
       category_id: categoryId,
       kra_name: kraName.trim(),
       kpi_name: kpiName.trim(),
@@ -83,8 +86,10 @@ export function ConsoleKpiCreateDialog({
       target_value: targetValue.trim() || null,
       weightage: weightage.trim() || null,
     }),
-    [kpiScope, categoryId, kraName, kpiName, criteria, uom, targetValue, weightage],
+    [kpiScope, scopeTargetId, categoryId, kraName, kpiName, criteria, uom, targetValue, weightage],
   );
+
+
 
 
   // ADR-313 — look-alike detection uses the same cleaning as the merge queue.
