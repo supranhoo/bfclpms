@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   KPI_SCOPES, toKpiScope, toKpiColumns, fromKpiColumns, kpiScopeLabel, KPI_SCOPE_COPY,
+  scopeNeedsTarget, KPI_SCOPE_TARGET_COLUMNS,
 } from './kpiScope';
 
 describe('kpiScope (ADR-319)', () => {
