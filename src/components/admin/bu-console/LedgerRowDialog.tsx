@@ -19,22 +19,26 @@ import { Loader2 } from 'lucide-react';
 import { useBusinessUnits, useDepartments, useDivisions } from '@/hooks/useOrganization';
 import { useSaveLedgerRow } from '@/hooks/useOrgKpiDataset';
 import {
-  formatCell, withDerivedValues,
+  CALENDAR_MONTH_ORDER, formatCell, withDerivedValues,
   type LedgerBundle, type LedgerRow,
 } from '@/lib/review/kpiLedgerModel';
+import { buildCycleScopeLabel } from '@/lib/frequencyUtils';
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   bundle: LedgerBundle;
+  /** Console header month — a default only; the row owns its period (ADR-318). */
   period: string;
   year: number;
   row: LedgerRow | null;
+  /** KPI frequency, used to explain the review anchor for multi-month cycles. */
+  frequency?: string | null;
 }
 
 const NONE = '__none__';
 
-export function LedgerRowDialog({ open, onOpenChange, bundle, period, year, row }: Props) {
+export function LedgerRowDialog({ open, onOpenChange, bundle, period, year, row, frequency }: Props) {
   const save = useSaveLedgerRow();
   const { data: divisions = [] } = useDivisions();
   const { data: businessUnits = [] } = useBusinessUnits();
@@ -47,6 +51,8 @@ export function LedgerRowDialog({ open, onOpenChange, bundle, period, year, row 
   const [scopeLabel, setScopeLabel] = useState('');
   const [wholeOrg, setWholeOrg] = useState(false);
   const [reason, setReason] = useState('');
+  const [rowPeriod, setRowPeriod] = useState(period);
+  const [rowYear, setRowYear] = useState(year);
 
   useEffect(() => {
     if (!open) return;
@@ -57,7 +63,22 @@ export function LedgerRowDialog({ open, onOpenChange, bundle, period, year, row 
     setScopeLabel(row?.scope_label ?? '');
     setWholeOrg(String((row?.impact_scope as any)?.whole_org ?? 'false') === 'true');
     setReason('');
-  }, [open, row]);
+    // ADR-318: editing keeps the row where it is; only new rows take the header.
+    setRowPeriod(row?.review_period ?? period);
+    setRowYear(row?.review_year ?? year);
+  }, [open, row, period, year]);
+
+  const yearOptions = useMemo(() => {
+    const base = year;
+    const set = new Set<number>([base - 2, base - 1, base, base + 1, rowYear]);
+    return [...set].sort((a, b) => a - b);
+  }, [year, rowYear]);
+
+  const cycle = useMemo(
+    () => buildCycleScopeLabel(frequency ?? null, rowPeriod, rowYear),
+    [frequency, rowPeriod, rowYear],
+  );
+  const isAnchorMonth = !cycle.isMultiMonth || cycle.anchorMonth === rowPeriod;
 
   const derived = useMemo(
     () => withDerivedValues(bundle.columns, values),
@@ -81,8 +102,8 @@ export function LedgerRowDialog({ open, onOpenChange, bundle, period, year, row 
       {
         id: row?.id ?? null,
         datasetId: bundle.def.id,
-        reviewPeriod: period,
-        reviewYear: year,
+        reviewPeriod: rowPeriod,
+        reviewYear: rowYear,
         divisionId: divisionId === NONE ? null : divisionId,
         businessUnitId: buId === NONE ? null : buId,
         departmentId: deptId === NONE ? null : deptId,
@@ -103,13 +124,49 @@ export function LedgerRowDialog({ open, onOpenChange, bundle, period, year, row 
             {row ? 'Edit data row' : 'Add data row'}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            {bundle.def.title} · {period} {year}
+            {bundle.def.title} · {rowPeriod} {rowYear}
             {row ? ` · revision ${row.revision}` : ''}
           </DialogDescription>
         </DialogHeader>
 
         <div className="min-w-0 flex-1 space-y-5 overflow-y-auto overflow-x-hidden px-6 py-4">
           <section className="grid gap-4 sm:grid-cols-2">
+            <div className="min-w-0 space-y-1.5">
+              <Label htmlFor="ledger-row-month">Month this data belongs to</Label>
+              <Select value={rowPeriod} onValueChange={setRowPeriod}>
+                <SelectTrigger id="ledger-row-month"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {CALENDAR_MONTH_ORDER.map((m) => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-w-0 space-y-1.5">
+              <Label htmlFor="ledger-row-year">Year</Label>
+              <Select value={String(rowYear)} onValueChange={(v) => setRowYear(Number(v))}>
+                <SelectTrigger id="ledger-row-year"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {yearOptions.map((y) => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {cycle.isMultiMonth && (
+              <p
+                className={`sm:col-span-2 rounded-md border p-3 text-xs ${
+                  isAnchorMonth
+                    ? 'border-border bg-muted/40 text-muted-foreground'
+                    : 'border-amber-300 bg-amber-50 text-amber-900'
+                }`}
+              >
+                This KPI is reviewed once per cycle. The cycle covers{' '}
+                <strong>{cycle.cycleMonths.join(', ')}</strong> and is anchored on{' '}
+                <strong>{cycle.anchorMonth} {cycle.anchorYear}</strong>.
+                {!isAnchorMonth && ' You are entering a non-anchor month — normally left blank.'}
+              </p>
+            )}
             <ScopeSelect label="Division" value={divisionId} onChange={setDivisionId} options={divisions as any} />
             <ScopeSelect label="Business unit" value={buId} onChange={setBuId} options={businessUnits as any} />
             <ScopeSelect label="Department" value={deptId} onChange={setDeptId} options={departments as any} />

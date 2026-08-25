@@ -470,3 +470,134 @@ export function computeTotalsRow(
   }
   return totals;
 }
+
+/* ------------------------------------------------------------------ *
+ * ADR-318 — a ledger row owns its period
+ *
+ * The console header only seeds a default. Every write carries the period the
+ * row itself belongs to, so history can be entered and corrected without
+ * flipping the header month, and editing a row never moves it.
+ * ------------------------------------------------------------------ */
+
+export interface PeriodStamp {
+  period: string;
+  year: number | null;
+}
+
+/** Calendar-order months as stored in `review_period`. */
+export const CALENDAR_MONTH_ORDER = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+] as const;
+
+const MONTH_TOKENS: Record<string, string> = (() => {
+  const map: Record<string, string> = {};
+  for (const m of CALENDAR_MONTH_ORDER) {
+    map[normaliseToken(m)] = m;
+    map[normaliseToken(m).slice(0, 3)] = m;
+  }
+  return map;
+})();
+
+/**
+ * Parse a human month token into a canonical period (and year when present).
+ * Accepts `Jul-25`, `Jul 2025`, `July 2025`, `07/2025`, `2025-07`, `July`.
+ * Two-digit years are read as 20xx.
+ */
+export function parsePeriodToken(raw: string | null | undefined): PeriodStamp | null {
+  if (!raw) return null;
+  const text = String(raw).trim();
+  if (!text) return null;
+
+  const isoish = text.match(/^(\d{4})[-/](\d{1,2})$/);
+  if (isoish) {
+    const m = Number(isoish[2]);
+    if (m >= 1 && m <= 12) return { period: CALENDAR_MONTH_ORDER[m - 1], year: Number(isoish[1]) };
+    return null;
+  }
+
+  const numeric = text.match(/^(\d{1,2})[-/](\d{2,4})$/);
+  if (numeric) {
+    const m = Number(numeric[1]);
+    if (m < 1 || m > 12) return null;
+    return { period: CALENDAR_MONTH_ORDER[m - 1], year: expandYear(numeric[2]) };
+  }
+
+  const named = text.match(/^([A-Za-z]+)[\s\-/,]*(\d{2,4})?$/);
+  if (!named) return null;
+  const month = MONTH_TOKENS[normaliseToken(named[1])];
+  if (!month) return null;
+  return { period: month, year: named[2] ? expandYear(named[2]) : null };
+}
+
+function expandYear(raw: string): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return NaN;
+  return raw.length <= 2 ? 2000 + n : n;
+}
+
+/** The twelve (period, year) slots of a Jul–Jun fiscal cycle, in sheet order. */
+export function fiscalMonthSlots(fiscalStartYear: number): Array<{ period: string; year: number }> {
+  return FISCAL_MONTH_ORDER.map((period, i) => ({
+    period,
+    year: i < 6 ? fiscalStartYear : fiscalStartYear + 1,
+  }));
+}
+
+/** Short sheet-style label, e.g. `Jul-25`. */
+export function shortPeriodLabel(period: string, year: number): string {
+  return `${period.slice(0, 3)}-${String(year).slice(-2)}`;
+}
+
+export type HistoryChangeKind = 'new' | 'updated' | 'unchanged' | 'empty';
+
+export interface HistoryDiffLine {
+  period: string;
+  year: number;
+  rowId: string | null;
+  kind: HistoryChangeKind;
+  values: Record<string, unknown>;
+}
+
+/**
+ * Compare a 12-month grid against the rows already stored and classify each
+ * line. Only `new` and `updated` lines are ever written.
+ */
+export function diffHistoryGrid(
+  columns: LedgerColumn[],
+  existing: Array<Pick<LedgerRow, 'id' | 'review_period' | 'review_year' | 'values'>>,
+  grid: Record<string, Record<string, unknown>>,
+  fiscalStartYear: number,
+): HistoryDiffLine[] {
+  const editable = columns.filter((c) => c.data_type !== 'formula');
+  const byKey = new Map(existing.map((r) => [`${r.review_period}|${r.review_year}`, r]));
+
+  return fiscalMonthSlots(fiscalStartYear).map(({ period, year }) => {
+    const key = `${period}|${year}`;
+    const current = byKey.get(key) ?? null;
+    const entered = grid[key] ?? {};
+
+    const values = withDerivedValues(columns, Object.fromEntries(
+      editable.map((c) => [c.column_key, normaliseCell(entered[c.column_key])]),
+    ));
+
+    const filled = editable.some((c) => {
+      const v = values[c.column_key];
+      return v !== null && v !== undefined && v !== '';
+    });
+
+    if (!current) {
+      return { period, year, rowId: null, kind: filled ? 'new' : 'empty', values };
+    }
+    const changed = editable.some((c) =>
+      String(normaliseCell(current.values?.[c.column_key]) ?? '') !==
+      String(values[c.column_key] ?? ''));
+    return { period, year, rowId: current.id, kind: changed ? 'updated' : 'unchanged', values };
+  });
+}
+
+function normaliseCell(v: unknown): unknown {
+  if (v === null || v === undefined) return null;
+  const text = String(v).trim();
+  return text === '' ? null : (toNumber(text) ?? text);
+}

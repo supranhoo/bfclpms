@@ -6890,3 +6890,29 @@ Duplicate KPI titles are cleaned in bulk, never one pair at a time, and never au
    the rows continues to follow the existing data-table read rules.
 
 - **v2.66.315 (2026-08-25):** §KPI-EXCEPTION-SCOPED-RELEASE introduced (ADR-317).
+
+## §KPI-LEDGER-PERIOD-OWNERSHIP — a data-table line belongs to its own month (ADR-318)
+
+1. **The line owns its period.** Every row in a KPI data table carries the
+   month and year it describes. The Performance Console header only supplies a
+   default when a new line is created; it never re-stamps a line that already
+   exists.
+2. **Editing history is safe.** Opening a past month's line and saving it keeps
+   that line on its original month, even when the console is parked on the
+   current month.
+3. **A year at a time.** Providers may enter or correct a whole fiscal cycle
+   (July to June) in one grid, pasting straight from a spreadsheet. The grid
+   shows, before anything is saved, how many months are new, changed, or
+   untouched, and months left blank are never written.
+4. **Uploads carry their own dates.** A CSV upload that includes a Month (and
+   optional Year) column is honoured line by line; only lines without a date
+   fall back to the console header.
+5. **Cycle honesty.** For KPIs reviewed once per cycle (bi-monthly, quarterly,
+   half-yearly, yearly) the console names the months the cycle covers and the
+   month the review is anchored on, and marks non-anchor months clearly so
+   nobody fills them by accident.
+6. **Nothing silently overwritten.** History entry reuses the audited bulk
+   import path: each written line records a reason and appears in the change
+   trail, and validation for a touched period becomes stale automatically.
+
+- **v2.66.316 (2026-08-26):** §KPI-LEDGER-PERIOD-OWNERSHIP introduced (ADR-318).
