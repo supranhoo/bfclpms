@@ -9183,3 +9183,38 @@ a Radix `Select`) also blocked table design.
 - Tests: `src/components/admin/bu-console/kpiLedgerRhythm.test.ts` (16 cases).
 
 See POLICY §KPI-LEDGER-RHYTHM-AND-HISTORY.
+
+## ADR-317 — Exception KPIs: one entry per department, everyone in it is scored
+
+**What.** LTI/STI-style safety KPIs are now recorded once per organisational
+scope instead of per employee. The officer fills a department roster, edits only
+the departments with an incident, previews the employee impact, and releases the
+period in a single action; clean departments score full marks automatically.
+
+**Why.** These KPIs apply to the whole organisation, so cell-by-cell entry for
+thousands of employees is both unworkable and a data-loss risk. The signal is
+sparse — almost every scope is clean — so the system should only ask for the
+exceptions.
+
+**How.**
+- DB: `org_kpi_dataset_defs` gains `entry_mode`, `scope_dimension`, `clean_value`
+  and `exception_direction`; new `org_kpi_dataset_release_runs` table gives
+  single-flight locking plus an audit of each release.
+  RPCs: `org_kpi_dataset_set_exception_config`, `org_kpi_dataset_seed_scope_rows`
+  (dry-run capable), `org_kpi_dataset_exception_summary`,
+  `org_kpi_dataset_release_scoped` (preview or apply, delegating writes to the
+  existing `propagate_org_kpi_value` with the `pre_review_only` policy so locked
+  scores are skipped) and `org_kpi_dataset_release_state`.
+- Model: `src/lib/review/exceptionKpiModel.ts` (classification, readiness,
+  labels — pure, no KPI hardcoded).
+- Service/hooks: `src/services/orgKpiDataset/exceptionKpiService.ts`,
+  `src/hooks/useExceptionKpi.ts`.
+- UI: `src/components/admin/bu-console/ExceptionKpiPanel.tsx`, rendered inside
+  `KpiLedgerPanel` — settings dialog, "Fill department roster", and a
+  "Preview & release" dialog showing targeted / penalised / clean counts with a
+  sample of employee values and scores.
+- Scale: release is server-side and batched through the existing propagation
+  RPC; the preview sample is capped and the release accepts an employee ceiling.
+- Tests: `src/lib/review/__tests__/exceptionKpiModel.test.ts` (12 cases).
+
+See POLICY §KPI-EXCEPTION-SCOPED-RELEASE.

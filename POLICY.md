@@ -6860,3 +6860,33 @@ Duplicate KPI titles are cleaned in bulk, never one pair at a time, and never au
 6. **Change trail unchanged.** Every save, import and removal continues to write
    to the row change trail, and any audit validation for the period becomes
    stale when data changes afterwards.
+
+## §KPI-EXCEPTION-SCOPED-RELEASE — incident KPIs are recorded once per scope, then released to everyone in it (ADR-317)
+
+1. **Exception style is master data.** A KPI's data table states how it is
+   filled: row by row, or as an *exception* table. An exception table also
+   states which organisational level it is kept by (department, business unit or
+   location), what the *clean value* is (normally 0) and whether a value above
+   or below that clean value counts as an incident. None of this is fixed in
+   code and none of it is specific to any one KPI.
+2. **Roster first, incidents only.** The data entry officer fills the roster in
+   one action — one row per scope at the clean value — and then edits only the
+   scopes where an incident occurred. Nobody enters data for an employee.
+3. **Clean scopes are scored, not skipped.** On release, every employee mapped
+   to the KPI for the period receives a value: the recorded value for their
+   scope, or the clean value where their scope had no incident or was never
+   filled. Employees in a flagged scope carry that scope's penalty.
+4. **Preview before impact.** Release is preview-first. The officer sees how
+   many employees are affected, how many are penalised and a sample of the exact
+   values and scores before anything is written.
+5. **Locked scores are never overwritten.** Release reuses the existing
+   organisation-KPI propagation rules; a score already taken forward by a
+   reviewer is skipped and reported as skipped, never silently changed.
+6. **One release at a time, always recorded.** A period can only have one
+   release running; every release records who ran it, what it changed and what
+   it skipped, and a failed release is recorded as failed.
+7. **Authorisation unchanged.** Only admins, Performance Console writers and the
+   KPI's own data owners may fill a roster or release a period. Visibility of
+   the rows continues to follow the existing data-table read rules.
+
+- **v2.66.315 (2026-08-25):** §KPI-EXCEPTION-SCOPED-RELEASE introduced (ADR-317).
