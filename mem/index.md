@@ -195,3 +195,4 @@ Fiscal-window: any code fetching time-series data across two calendar years for 
 - [Central Org KPI Approval](mem://features/admin/central-org-kpi-approval) — Per-KPI approval ladder on org_kpi_values, RPC-only writes, per-employee band recompute (ADR-301)
 - [Org Master Delete Guard](mem://features/admin/org-master-delete-guard) — Dependency-aware guarded deletion of org master records: blocking vs cleanable config refs, confirmation, audit (ADR-308)
 - [Console Variant Normaliser](mem://features/admin/console-variant-normalise) — "Make this one" collapses KPI definition variants; never writes weightage (ADR-315)
+- [KPI Ledger Period Ownership](mem://features/admin/kpi-ledger-period-ownership) — Ledger rows own their (period, year); header is a default only; fiscal history grid + CSV date columns (ADR-318)
