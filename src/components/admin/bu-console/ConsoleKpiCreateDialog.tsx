@@ -142,27 +142,41 @@ export function ConsoleKpiCreateDialog({
           </Alert>
         ) : (
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              {(Object.keys(KIND_COPY) as ConsoleKpiKind[]).map((k) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => { setKind(k); setPreview(null); }}
-                  aria-pressed={kind === k}
-                  className={
-                    'min-h-10 rounded-lg border p-3 text-left transition-colors ' +
-                    (kind === k
-                      ? 'border-primary bg-primary/5'
-                      : 'hover:bg-muted/50 focus-visible:bg-muted/50')
-                  }
-                >
-                  <span className="block text-sm font-medium">{KIND_COPY[k].label}</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {KIND_COPY[k].hint}
-                  </span>
-                </button>
-              ))}
-            </div>
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Scope
+              </legend>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {KPI_SCOPES.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => { setKpiScope(s); setPreview(null); }}
+                    aria-pressed={kpiScope === s}
+                    className={
+                      'min-h-10 rounded-lg border p-3 text-left transition-colors min-w-0 ' +
+                      (kpiScope === s
+                        ? 'border-primary bg-primary/5'
+                        : 'hover:bg-muted/50 focus-visible:bg-muted/50')
+                    }
+                  >
+                    <span className="block text-sm font-medium">{KPI_SCOPE_COPY[s].label}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground break-words">
+                      {KPI_SCOPE_COPY[s].hint}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>Coming soon:</span>
+                {PLANNED_KPI_SCOPES.map((s) => (
+                  <Badge key={s} variant="outline" className="opacity-60 font-normal">
+                    {PLANNED_KPI_SCOPE_LABELS[s]}
+                  </Badge>
+                ))}
+              </div>
+            </fieldset>
+
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
