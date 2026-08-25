@@ -154,10 +154,7 @@ export function PIPCreateForm({
   const employeeId = form.watch('employee_id');
   const selectedAreas = form.watch('improvement_areas');
 
-  const selectedEmployee = useMemo(
-    () => employees?.find(e => e.id === employeeId),
-    [employees, employeeId],
-  );
+
 
   const toggleArea = (area: string) => {
     const current = form.getValues('improvement_areas');
