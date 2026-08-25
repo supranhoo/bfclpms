@@ -236,34 +236,16 @@ export function PIPCreateForm({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Employee</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <FormControl>
-                          <SelectTrigger className="h-10">
-                            <SelectValue placeholder="Select employee">
-                              {selectedEmployee
-                                ? `${selectedEmployee.full_name} (${selectedEmployee.employee_code})`
-                                : undefined}
-                            </SelectValue>
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent className="max-h-72">
-                          {employees?.map(emp => (
-                            <SelectItem key={emp.id} value={emp.id}>
-                              {emp.full_name} ({emp.employee_code})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {preselectedEmployeeId && (
-                        <FormDescription>
-                          Prefilled from a PIP suggestion. Changing the employee also changes who the
-                          recorded trigger evidence applies to.
-                        </FormDescription>
-                      )}
+                      <PipEmployeeField
+                        value={field.value}
+                        onChange={field.onChange}
+                        preselectedEmployeeId={preselectedEmployeeId}
+                      />
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <FormField
