@@ -161,7 +161,7 @@ export function ConsoleKpiCreateDialog({
                   <button
                     key={s}
                     type="button"
-                    onClick={() => { setKpiScope(s); setPreview(null); }}
+                    onClick={() => { setKpiScope(s); setScopeTargetId(null); setPreview(null); }}
                     aria-pressed={kpiScope === s}
                     className={
                       'min-h-10 rounded-lg border p-3 text-left transition-colors min-w-0 ' +
