@@ -42,6 +42,8 @@ import {
 import { fiscalStartYearOfKpi, isFiscalTuple } from '@/lib/fiscalWindow';
 import { DatasetSchemaDialog } from './DatasetSchemaDialog';
 import { LedgerRowDialog } from './LedgerRowDialog';
+import { ExceptionKpiPanel } from './ExceptionKpiPanel';
+import type { ExceptionConfig } from '@/lib/review/exceptionKpiModel';
 
 interface Props {
   categoryId: string;
