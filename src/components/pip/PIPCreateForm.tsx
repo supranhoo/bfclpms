@@ -16,7 +16,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +30,7 @@ import { getPipPolicySettings, DEFAULT_PIP_POLICY } from '@/lib/pip/pipPolicySet
 import { validatePipDuration, validateMilestoneCadence, LIVE_PIP_STATUSES } from '@/lib/pip/pipTriggerRules';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LowScoringKpiPicker } from '@/components/pip/LowScoringKpiPicker';
+import { PipEmployeeField } from '@/components/pip/PipEmployeeField';
 import type { MonthKey } from '@/hooks/useMonthlyTrend';
 
 const milestoneSchema = z.object({
