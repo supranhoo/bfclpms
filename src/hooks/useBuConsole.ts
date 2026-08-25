@@ -1202,6 +1202,105 @@ export function useGroupEditCommit() {
   });
 }
 
+/* ------------------------------------------------------------------ */
+/* ADR-315 — variance normaliser (collapse N variants into one)         */
+/* ------------------------------------------------------------------ */
+
+export interface VariantNormaliseStepArg {
+  variantKey: string;
+  changes: Record<string, string | null>;
+}
+
+export interface VariantNormaliseArgs
+  extends Omit<GroupEditArgs, 'dryRun' | 'period' | 'year' | 'changes' | 'variantKey'> {
+  /** One entry per variant that must be rewritten. */
+  steps: VariantNormaliseStepArg[];
+  /** Ordered target periods; each step runs once per period. */
+  targets: Array<{ month: string; year: number }>;
+}
+
+export interface VariantNormaliseEntry {
+  variantKey: string;
+  target: { month: string; year: number };
+  result: GroupEditResult | null;
+  error?: string | null;
+}
+
+export interface VariantNormaliseResult {
+  entries: VariantNormaliseEntry[];
+  /** Shared id so the whole normalisation can be traced as one action. */
+  runGroupId: string;
+}
+
+async function runNormalise(
+  a: VariantNormaliseArgs,
+  dryRun: boolean,
+  runGroupId: string,
+): Promise<VariantNormaliseResult> {
+  const { steps, targets, ...rest } = a;
+  const entries: VariantNormaliseEntry[] = [];
+  for (const t of targets) {
+    for (const s of steps) {
+      try {
+        const result = await callGroupEdit({
+          ...rest,
+          period: t.month,
+          year: t.year,
+          variantKey: s.variantKey,
+          changes: s.changes,
+          dryRun,
+        });
+        entries.push({ variantKey: s.variantKey, target: t, result });
+      } catch (e: any) {
+        entries.push({
+          variantKey: s.variantKey, target: t, result: null,
+          error: e?.message ?? 'Failed',
+        });
+        // A commit must never silently continue past a hard failure.
+        if (!dryRun) return { entries, runGroupId };
+      }
+    }
+  }
+  return { entries, runGroupId };
+}
+
+/** Dry-run every variant in every target month. Writes nothing. */
+export function useVariantNormalisePreview() {
+  return useMutation<VariantNormaliseResult, Error, VariantNormaliseArgs>({
+    mutationFn: (a) => runNormalise(a, true, crypto.randomUUID()),
+    onError: (e: any) => toast.error(e?.message ?? 'Could not build the normalisation preview.'),
+  });
+}
+
+/** Commits variant by variant; each call writes its own undoable run. */
+export function useVariantNormaliseCommit() {
+  const qc = useQueryClient();
+  return useMutation<VariantNormaliseResult, Error, VariantNormaliseArgs>({
+    mutationFn: (a) => runNormalise(a, false, crypto.randomUUID()),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['bu-console-kpi-detail'] });
+      qc.invalidateQueries({ queryKey: ['bu-console-tree'] });
+      qc.invalidateQueries({ queryKey: ['bu-console-edit-runs'] });
+      const ok = res.entries.filter((e) => !e.error);
+      const failed = res.entries.filter((e) => e.error);
+      const rows = ok.reduce((n, e) => n + Number(e.result?.updated ?? 0), 0);
+      if (failed.length) {
+        toast.warning(
+          `${rows} row${rows === 1 ? '' : 's'} aligned before the run stopped`,
+          { description: failed[0].error ?? undefined },
+        );
+        return;
+      }
+      toast.success(
+        `${rows} row${rows === 1 ? '' : 's'} aligned to one definition`,
+        { description: 'Each variant wrote its own undoable run.' },
+      );
+    },
+    onError: (e: any) => toast.error(e?.message ?? 'Could not normalise the variants.'),
+  });
+}
+
+
 export interface RowOverrideResult {
   authorized: boolean;
   updated?: number;

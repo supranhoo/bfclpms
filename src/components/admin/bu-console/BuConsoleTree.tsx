@@ -17,6 +17,8 @@ import {
   AlertTriangle,
   Wrench,
   Sparkles,
+  Wand2,
+
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -90,6 +92,8 @@ interface Props {
   ) => void;
   /** ADR-273 — opens the Text Split screen filtered to this KPI's raw text. */
   onFixTextSplit?: (kpi: BuConsoleKpiNode) => void;
+  /** ADR-315 — collapse several definition variants of one KPI into a single definition. */
+  onNormaliseVariants?: (categoryId: string, kraName: string, kpi: BuConsoleKpiNode) => void;
   /** ADR-283 — scope / drill path shown on the category strip row. */
   breadcrumb?: ReactNode;
   /**
@@ -127,6 +131,7 @@ function KpiRow({
   onOpen,
   lookalikeCount,
   onFixTextSplit,
+  onNormaliseVariants,
   dueState,
   panel,
   expanded,
@@ -138,6 +143,7 @@ function KpiRow({
   onOpen: (variantKey?: string | null) => void;
   lookalikeCount?: number;
   onFixTextSplit?: (kpi: BuConsoleKpiNode) => void;
+  onNormaliseVariants?: (kpi: BuConsoleKpiNode) => void;
   dueState?: { due: boolean; frequency: string | null; cycleLabel: string | null };
   /** ADR-297 — the people cells for this KPI, rendered inline when expanded. */
   panel?: ReactNode;
@@ -259,6 +265,21 @@ function KpiRow({
               >
                 <Layers className="h-3 w-3" />
                 {variantCount} variant{variantCount === 1 ? '' : 's'}
+              </span>
+            )}
+            {onNormaliseVariants && variantCount > 1 && (
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label={`Make one definition for ${kpi.kpi_title || kpi.kpi_name}`}
+                onClick={(e) => { e.stopPropagation(); onNormaliseVariants(kpi); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onNormaliseVariants(kpi); }
+                }}
+                className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+              >
+                <Wand2 className="h-3 w-3" />
+                Make this one
               </span>
             )}
             <span className="flex items-center gap-1 text-xs font-medium text-primary opacity-60 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
@@ -518,6 +539,7 @@ export function BuConsoleTree({
   onSelectKra,
   onSelectKpi,
   onFixTextSplit,
+  onNormaliseVariants,
   breadcrumb,
   renderKraSummary,
   renderKpiPanel,
@@ -680,6 +702,11 @@ export function BuConsoleTree({
                                   lookalikeCount={lookalikes.get(kpi.kpi_key)}
                                   dueState={dueStates.get(kpi.kpi_key)}
                                   onFixTextSplit={onFixTextSplit}
+                                  onNormaliseVariants={
+                                    onNormaliseVariants
+                                      ? (node) => onNormaliseVariants(category.category_id, k.kra_name, node)
+                                      : undefined
+                                  }
                                   expandable={!!renderKpiPanel}
                                   expanded={openKpiKey === kpi.kpi_key}
                                   onToggle={() =>
