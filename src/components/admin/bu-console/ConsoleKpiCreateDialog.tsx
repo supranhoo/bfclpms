@@ -99,8 +99,10 @@ export function ConsoleKpiCreateDialog({
     return existingKpiNames.filter((n) => coreTitle(n) === typed).slice(0, 5);
   }, [kpiName, existingKpiNames]);
 
+  // ADR-320 — a grouped scope cannot be previewed until it names its target.
   const canPreview =
-    !!scope && !!categoryId && kraName.trim().length > 0 && kpiName.trim().length > 0;
+    !!scope && !!categoryId && kraName.trim().length > 0 && kpiName.trim().length > 0
+    && (!scopeNeedsTarget(kpiScope) || !!scopeTargetId);
 
   const reset = () => {
     setPreview(null);
@@ -109,6 +111,7 @@ export function ConsoleKpiCreateDialog({
     setUom('');
     setTargetValue('');
     setWeightage('');
+    setScopeTargetId(null);
   };
 
   const runPreview = async () => {
