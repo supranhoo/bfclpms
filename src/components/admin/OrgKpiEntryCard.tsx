@@ -1053,14 +1053,15 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
                       key={s}
                       disabled={data.scope === s}
                       onClick={() => setScopeChangeTarget(s)}
-                      className="capitalize"
                     >
                       {s === 'organization' && <Building2 className="h-3.5 w-3.5 mr-2" />}
                       {s === 'department' && <Users className="h-3.5 w-3.5 mr-2" />}
                       {s === 'employee' && <User className="h-3.5 w-3.5 mr-2" />}
-                      {s}{data.scope === s ? ' (current)' : ''}
+                      {/* ADR-319 — labels come from the one scope vocabulary. */}
+                      {KPI_SCOPE_COPY[s].label}{data.scope === s ? ' (current)' : ''}
                     </DropdownMenuItem>
                   ))}
+
                   <DropdownMenuSeparator />
                   <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
                     New scopes (coming soon)
