@@ -41,6 +41,7 @@ interface Props {
 }
 
 const NONE = '__none__';
+const DEFAULT_TOTAL = '__default__';
 
 function slugify(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48);
@@ -319,7 +320,7 @@ export function DatasetSchemaDialog({
                   ))}
                   {columns.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
                         No columns yet — add the ones this KPI needs.
                       </TableCell>
                     </TableRow>
