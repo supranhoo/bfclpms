@@ -87,20 +87,8 @@ export function PIPCreateForm({
   const createPIP = useCreatePIP();
   const [policyError, setPolicyError] = useState<string | null>(null);
 
-  /** Active employees only — a PIP is never raised against a deactivated user. */
-  const { data: employees } = useQuery({
-    queryKey: ['employees-for-pip'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, employee_code, designation')
-        .eq('is_active', true)
-        .order('full_name')
-        .limit(2000);
-      if (error) throw error;
-      return data;
-    },
-  });
+
+
 
   /** POLICY §15.7 — duration bounds are admin-configurable, never hardcoded. */
   const { data: policy } = useQuery({
