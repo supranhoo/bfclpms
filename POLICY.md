@@ -6637,6 +6637,25 @@ A higher stage supersedes the lower ones in the Performance Console, exactly as 
 
 A Performance Console group definition edit may be applied to the selected month only, to the selected month and every later month of the same fiscal year (July–June), or to the next N months (2–12, inclusive). Past months are never written: if the selected period is already past, only the single-month option is available. Every target month is dry-run before commit and shown in a per-month preview; the commit runs sequentially and stops at the first failure, reporting the months already written. Each month produces its own audited, individually undoable edit run.
 
+## §CONSOLE-VARIANT-NORMALISE — collapsing definition variants of one KPI (ADR-315)
+
+A Performance Console KPI row may declare several *variants* of the same metric when its rows
+disagree on description, formula, scoring logic or target. Variants are never merged implicitly.
+An admin may collapse them with the **Make this one** action, subject to:
+
+1. One canonical definition is chosen explicitly and may be corrected before it is applied — this
+   is the sanctioned fix for rows where description and formula were written into swapped columns.
+2. Only the four definition fields are written. **Weightage is never written by a normalisation**:
+   it is a legitimate per-employee number and is not part of the variant identity.
+3. Only fields whose whitespace- and case-insensitive value actually differs are written. Variants
+   already matching the canonical definition are reported and skipped, never rewritten.
+4. Every variant and every target month is dry-run and shown per row before commit, and the commit
+   requires the typed `APPLY` confirmation.
+5. The month span follows §CONSOLE-GROUP-EDIT-SPAN — past months are never written.
+6. §88 immutability holds: rows in review are skipped unless the admin explicitly includes them,
+   approved final scores are never altered, and individually overridden rows stay exempt unless the
+   admin opts in. Each variant/month writes its own individually undoable edit run.
+
 ## §CONSOLE-KPI-CREATE — creating a KPI from the Performance Console (ADR-297)
 
 1. A KPI name is printed once per screen. The Performance Console shows one KPI list per KRA; the

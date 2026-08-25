@@ -9131,3 +9131,27 @@ No merge proposal data, approval logic, scoring, RLS, RPC, backup or historical 
 Regression: `src/components/admin/bu-console/consoleLayout.test.tsx`.
 
 See POLICY §KPI-BULK-DEDUPLICATION and docs/adr/ADR-314.md.
+
+### v2.66.315 — ADR-315 KPI variance normaliser ("Make this one")
+
+**What.** Any Performance Console KPI row showing the amber "N variants" badge now also offers a
+**Make this one** action. The dialog lists every variant with its employee count and definition,
+lets the admin pick and edit one canonical definition (description, formula, scoring logic,
+target), previews per variant and per month how many employee rows will be written or skipped, and
+then commits behind a typed `APPLY` confirmation.
+
+**Why.** The badge only reported the split. In the July 2026 "Power generation from 45 MWh/AFBC"
+case, 4 variants of one metric existed purely because description and formula had been written into
+swapped columns and the scoring text differed in whitespace. Fixing that previously meant a manual
+group edit per variant with no visibility of the blast radius.
+
+**How.** `src/components/admin/bu-console/variantNormalise.ts` is pure: it picks the canonical
+variant (most employees, then most rows, then most complete definition), and emits one change set
+per variant containing only fields whose normalised value differs. Weightage is never emitted.
+`VariantNormaliseDialog.tsx` composes that with the ADR-291 span control (`groupEditSpan.ts`), and
+`useVariantNormalisePreview` / `useVariantNormaliseCommit` in `src/hooks/useBuConsole.ts` call the
+unchanged `bu_console_group_edit_definition` RPC once per variant per month — one undoable run each,
+stopping at the first hard error. No schema, RPC, RLS or backup change.
+Regression: `src/components/admin/bu-console/variantNormalise.test.ts` (17 tests).
+
+See POLICY §CONSOLE-VARIANT-NORMALISE and docs/adr/ADR-315.md.
