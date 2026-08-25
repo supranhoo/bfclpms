@@ -50,17 +50,32 @@ export const SAFE_SIMILARITY = 0.92;
 const num = (v: number | string | null | undefined): number =>
   v == null ? 0 : typeof v === 'number' ? v : Number(v) || 0;
 
+/** Marker where an appended description / formula / scoring tail begins. */
+const TAIL_MARKER = /(\s*[-–:]\s*)?\b(description|formula|scoring\s*logic|scoring)\b\s*:?/i;
+
+/**
+ * Cleaned "core" title: the metric name with any appended description,
+ * formula, scoring ladder, incentive note or month bracket removed.
+ */
+export function coreTitle(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const text = String(raw);
+  const cut = text.search(TAIL_MARKER);
+  return normalizeConsoleTitle(cut > 0 ? text.slice(0, cut) : text);
+}
+
 /**
  * A pair is safe to batch when the two names collapse to the same cleaned
  * title, or when the scanner reported an exact / near-exact match.
  */
 export function isSafePair(p: MergeProposalLike): boolean {
-  const a = normalizeConsoleTitle(p.canonical_kpi_name);
-  const b = normalizeConsoleTitle(p.variant_kpi_name);
+  const a = coreTitle(p.canonical_kpi_name);
+  const b = coreTitle(p.variant_kpi_name);
   if (a && b && a === b) return true;
   if (p.match_type === 'exact') return true;
   return num(p.similarity) >= SAFE_SIMILARITY;
 }
+
 
 const groupKey = (p: MergeProposalLike) =>
   `${p.category_id ?? '-'}::${normalizeConsoleTitle(p.canonical_kra_name)}::${normalizeConsoleTitle(
