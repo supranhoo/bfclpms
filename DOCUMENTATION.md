@@ -9156,6 +9156,21 @@ Regression: `src/components/admin/bu-console/variantNormalise.test.ts` (17 tests
 
 See POLICY §CONSOLE-VARIANT-NORMALISE and docs/adr/ADR-315.md.
 
+### v2.66.319 — ADR-319 One scope vocabulary for KPIs
+
+**What.** The console's "Individual / Shared value / Department event" chooser is replaced by the
+scope vocabulary used everywhere else: Individual, Organization, Department, Employee, with the
+planned scopes (Division, Business Unit, Location, PMS Grade, Level) shown as disabled chips.
+
+**Why.** The three cards were a second name for the existing scope: the create RPC translated them
+straight back into `is_org_level` / `org_level_scope`, and also wrote a third column
+(`kpi_group_type`) nothing reads. Two names for one idea invites drift as more scopes ship.
+
+**How.** `src/lib/review/kpiScope.ts` is the single source of truth (labels, hints, column mapping);
+`ConsoleKpiCreateDialog` and `OrgKpiEntryCard` import it. `bu_console_kpi_create` now takes `scope`
+(legacy `kind` still accepted), writes only the two scope columns, and stores `NULL` scope for
+individual KPIs. No historical data changed. POLICY §KPI-SCOPE-SINGLE-VOCABULARY.
+
 ### v2.66.315a — ADR-315a Variant badge only for real definition splits
 
 **What.** The amber "N variants" badge on a Performance Console KPI row is now shown only when the
