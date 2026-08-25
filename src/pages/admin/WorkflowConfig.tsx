@@ -268,10 +268,12 @@ export default function WorkflowConfig() {
           ? `Workflow assigned from ${selectedMonth} ${selectedYear} onward.`
           : `Workflow assigned for ${selectedMonth} ${selectedYear}.`,
       });
-    } catch {
+    } catch (err: any) {
+      // ADR-311: never swallow the backend message — a trigger/RLS rejection
+      // must be readable on screen, not reduced to a generic string.
       toast({
         title: 'Error',
-        description: 'Failed to assign workflow.',
+        description: err?.message || err?.details || 'Failed to assign workflow.',
         variant: 'destructive',
       });
     }
@@ -285,13 +287,14 @@ export default function WorkflowConfig() {
         title: 'Configuration removed',
         description: 'The workflow will now inherit from a higher level.',
       });
-    } catch {
+    } catch (err: any) {
       toast({
         title: 'Error',
-        description: 'Failed to remove configuration.',
+        description: err?.message || err?.details || 'Failed to remove configuration.',
         variant: 'destructive',
       });
     }
+
   };
   
   if (templatesLoading || configsLoading) {
