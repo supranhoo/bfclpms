@@ -217,6 +217,7 @@ export function DatasetSchemaDialog({
                     <TableHead className="w-[150px]">Type</TableHead>
                     <TableHead className="w-[110px]">Unit</TableHead>
                     <TableHead className="w-[200px]">Formula</TableHead>
+                    <TableHead className="w-[170px]">Bottom line</TableHead>
                     <TableHead className="w-[90px] text-center">Required</TableHead>
                     <TableHead className="w-[60px]" />
                   </TableRow>
@@ -230,11 +231,15 @@ export function DatasetSchemaDialog({
                           placeholder="Achieved"
                           onChange={(e) => {
                             const label = e.target.value;
-                            const autoKey = !col.column_key || col.column_key === slugify(col.label);
-                            updateColumn(i, autoKey ? { label, column_key: slugify(label) } : { label });
+                            const autoKey = !col.column_key
+                              || /^column_\d+$/.test(col.column_key)
+                              || col.column_key === slugify(col.label);
+                            const nextKey = slugify(label);
+                            updateColumn(i, autoKey && nextKey ? { label, column_key: nextKey } : { label });
                           }}
                         />
                       </TableCell>
+
                       <TableCell>
                         <Input
                           value={col.column_key}
