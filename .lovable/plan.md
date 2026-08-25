@@ -12,16 +12,21 @@ Fix:
 - Wrap the dialog in the existing error boundary so a future field error shows an inline message instead of blanking the page.
 - Regression test: add a column, assert no empty-valued option and no crash.
 
-## 2. Excel-parity table
+## 2. Per-KPI shape and period rhythm
 
-The Excel sheet is one row per month across a **fiscal year (Jul → Jun)**; today the panel's toggle shows a *calendar* year, so Jul-25…Jun-26 cannot appear together.
+Each KPI already keeps its own table definition — its own columns, keys, units, formulas, roll-up rule and period granularity. Nothing is shared or fixed across KPIs: Production can be Target / Achieved / Ach % / Incentive / Rating, while another KPI can be a completely different set of columns with a different roll-up.
+
+What is missing is the period rhythm. Today the choices are month, quarter, week or event, so a **bi-monthly**, **half-yearly** or **yearly** KPI cannot be expressed.
 
 Changes:
-- Period scope selector on the panel: **This month · This fiscal year (Jul–Jun) · A past fiscal year · All history**, using the project's existing fiscal-window helpers.
-- Rows always sorted Jul → Jun.
+- Extend the row rhythm to: weekly · monthly · bi-monthly · quarterly · half-yearly · yearly · per event.
+- Default it from the KPI's own frequency and cycle anchor, so a bi-monthly KPI opens with bi-monthly rows already selected; the admin can still override.
+- Row labels follow the rhythm (e.g. `Jul–Aug 26`, `Q2 FY26`), and entry is only offered for periods that are due — matching the existing not-due read-only rule.
+- The Excel sheet is one row per period across a **fiscal year (Jul → Jun)**; today the panel's toggle shows a *calendar* year, so Jul-25…Jun-26 cannot appear together. Add a scope selector: **This period · This fiscal year (Jul–Jun) · A past fiscal year · All history**, using the existing fiscal-window helpers, sorted Jul → Jun.
 - A pinned **totals row** at the bottom: sum of Target, sum of Achieved, overall Achievement % (sum ÷ sum) and the averaged Rating — matching your yellow/green summary cells.
-- Show BU / KPI / Month as fixed leading columns so you don't have to configure them as data columns.
-- Rating column: a derived column type driven by the KPI's existing scoring slabs, so 104% → 2.33 style ratings come from configuration, not hand entry.
+- Show BU / KPI / Period as fixed leading columns so you don't have to configure them as data columns.
+- Rating column: a derived column driven by the KPI's existing scoring bands, so 104% → 2.33 style ratings come from configuration, not hand entry.
+
 
 ## 3. Historical / legacy data
 
