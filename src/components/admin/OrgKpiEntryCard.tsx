@@ -40,7 +40,7 @@ import { OrgKpiParityBadge } from '@/components/admin/OrgKpiParityBadge';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { Save } from 'lucide-react';
 // ADR-319 — one scope vocabulary shared with the console create dialog.
-import { KPI_SCOPE_COPY, PLANNED_KPI_SCOPE_LABELS } from '@/lib/review/kpiScope';
+import { KPI_SCOPE_COPY, PLANNED_KPI_SCOPE_LABELS, type AnyKpiScope } from '@/lib/review/kpiScope';
 
 
 export interface OrgKpiCardData {
