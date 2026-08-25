@@ -477,6 +477,13 @@ export default function BuConsole() {
         kraNames={Array.from(
           new Set((tree?.categories ?? []).flatMap(c => c.kras.map(k => k.kra_name))),
         )}
+        existingKpiNames={Array.from(
+          new Set(
+            (tree?.categories ?? []).flatMap(c =>
+              c.kras.flatMap(k => (k.kpis ?? []).map(kp => kp.kpi_title).filter(Boolean) as string[]),
+            ),
+          ),
+        )}
       />
 
       <Dialog open={alignmentOpen} onOpenChange={setAlignmentOpen}>

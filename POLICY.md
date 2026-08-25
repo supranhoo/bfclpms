@@ -6792,3 +6792,23 @@ When a screen is entered with a subject already chosen (PIP creation from a sugg
 the Monthly Trend grid), the subject MUST be presented as a confirmed, human-readable selection —
 never as an empty control the user has to fill again. A prefilled identifier that cannot be
 resolved MUST be reported inline; it must never render as a blank field that still submits.
+
+## §KPI-BULK-DEDUPLICATION (added 2026-08-25, ADR-313)
+
+Duplicate KPI titles are cleaned in bulk, never one pair at a time, and never automatically.
+
+1. **Clean the text first.** A KPI title that carries its description, formula, scoring
+   ladder, incentive note or month list is a data defect. Pass 1 is always the text
+   splitter (`/admin/kpi-standardization?tab=split`) — merging uncleaned titles is
+   forbidden because the variants only look different.
+2. **Review by metric, not by pair.** The merge queue MUST group pairwise proposals by
+   the canonical KPI so an admin decides once per metric.
+3. **Two triage classes.** A group whose variants are identical after cleaning is
+   `safe` and may be batch-approved. Any group whose variants still differ once cleaned
+   is `judgement` and requires per-variant review — bulk approval of a judgement group
+   is allowed only after an admin has explicitly selected it.
+4. **Decisions are records, not rewrites.** Approving a merge proposal records the
+   decision and the canonical name; it never edits historical scores, weightages or
+   locked periods.
+5. **Stop making new duplicates.** Any KPI creation surface MUST warn, at typing time,
+   when the cleaned title already exists in the loaded scope.
