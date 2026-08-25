@@ -18366,20 +18366,36 @@ export type Database = {
         Returns: boolean
       }
       canonical_stage_order: { Args: { _stage: string }; Returns: number }
-      change_org_kpi_scope_cascading: {
-        Args: {
-          p_base_period: string
-          p_base_year: number
-          p_cascade_forward?: boolean
-          p_category_id: string
-          p_dry_run?: boolean
-          p_kpi_name: string
-          p_kra_name: string
-          p_new_scope: string
-          p_triggered_by?: string
-        }
-        Returns: Json
-      }
+      change_org_kpi_scope_cascading:
+        | {
+            Args: {
+              p_base_period: string
+              p_base_year: number
+              p_cascade_forward?: boolean
+              p_category_id: string
+              p_dry_run?: boolean
+              p_kpi_name: string
+              p_kra_name: string
+              p_new_scope: string
+              p_triggered_by?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_base_period: string
+              p_base_year: number
+              p_cascade_forward?: boolean
+              p_category_id: string
+              p_dry_run?: boolean
+              p_kpi_name: string
+              p_kra_name: string
+              p_new_scope: string
+              p_new_target?: string
+              p_triggered_by?: string
+            }
+            Returns: Json
+          }
       check_review_period_permission: {
         Args: {
           p_action: string
