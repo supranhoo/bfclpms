@@ -16,6 +16,8 @@ import {
   useScopeCascadePreview,
   type ScopeCascadeMode,
 } from '@/hooks/useOrgKpiManagement';
+import { ScopeTargetPicker } from '@/components/admin/kpi-scope/ScopeTargetPicker';
+import { scopeNeedsTarget, kpiScopeLabel, type AnyKpiScope } from '@/lib/review/kpiScope';
 
 interface Props {
   open: boolean;
@@ -28,7 +30,8 @@ interface Props {
     reviewYear: number;
   };
   currentScope: string;
-  newScope: 'organization' | 'department' | 'employee';
+  // ADR-320 — grouped scopes (business unit, location, …) are selectable too.
+  newScope: AnyKpiScope;
   /**
    * Optional: KPI frequency (e.g. 'Bi-Monthly', 'Quarterly'). When provided and
    * multi-month, the dialog surfaces a cycle-anchor warning so admins know the
@@ -46,22 +49,26 @@ export function OrgKpiScopeChangeDialog({
   frequency,
 }: Props) {
   const [cascadeForward, setCascadeForward] = useState(false);
+  // ADR-320 — a grouped scope must name the one target it moves to.
+  const [newTarget, setNewTarget] = useState<string | null>(null);
+  const needsTarget = scopeNeedsTarget(newScope) && newScope !== 'department' && newScope !== 'employee';
   const previewMutation = useScopeCascadePreview();
   const applyMutation = useChangeOrgKpiScope();
 
   // Re-run dry-run whenever the cascade option toggles
   useEffect(() => {
     if (!open) return;
-    previewMutation.mutate({ identifier, newScope, cascadeForward });
+    if (needsTarget && !newTarget) return;
+    previewMutation.mutate({ identifier, newScope, newTarget, cascadeForward });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, cascadeForward]);
+  }, [open, cascadeForward, newTarget]);
 
   const preview = previewMutation.data;
 
   const handleApply = () => {
     const mode: ScopeCascadeMode = cascadeForward ? 'current_and_future' : 'current_only';
     applyMutation.mutate(
-      { identifier, newScope, cascadeMode: mode },
+      { identifier, newScope, newTarget, cascadeMode: mode },
       { onSuccess: () => onClose() }
     );
   };
