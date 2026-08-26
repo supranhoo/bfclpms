@@ -40,7 +40,7 @@ import {
   resolveEditSpan, spanModesAvailable, spanSkipsPastMonths, describeSpan, aggregateSpan, periodLabel, toTarget,
   EDIT_SPAN_LABELS, MAX_ROLLOUT_PERIODS, type EditSpanMode,
 } from './groupEditSpan';
-import { isDescriptiveOnly } from './editFieldClass';
+import { isDescriptiveOnly, scoringFields } from './editFieldClass';
 import {
   diffChanges, hasChanges, weightageDeviations, uniqueByEmployee,
   isMultiMonthFrequency, validateCycleChange, type ChangeSet,
