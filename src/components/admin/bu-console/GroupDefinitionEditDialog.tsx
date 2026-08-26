@@ -46,7 +46,7 @@ import {
 import { isDescriptiveOnly, scoringFields } from './editFieldClass';
 import {
   diffChanges, hasChanges, weightageDeviations, uniqueByEmployee,
-  isMultiMonthFrequency, validateCycleChange, isScopeInert, type ChangeSet,
+  isMultiMonthFrequency, validateCycleChange, isScopeInert, ladderForType, type ChangeSet,
 } from './groupEditModel';
 
 import { getCycleOptionsForFrequency, deriveCycleOptionFromCycleStart } from '@/lib/frequencyCycleOptions';
