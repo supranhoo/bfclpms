@@ -30,16 +30,28 @@ export function isPastPeriod(target: RolloverTarget, today: Date = new Date()): 
 }
 
 /**
- * Multi-month spans are only offered when the selected month is current or
- * future — repeating an edit backwards would rewrite closed periods.
+ * ADR-321 — every mode is offered, including from a past anchor. The invariant
+ * is not "never write a past month" but "never write a past month the admin did
+ * not explicitly select": the anchor is always honoured, implicitly added months
+ * are filtered to the current month onwards.
  */
-export function spanModesAvailable(first: RolloverTarget, today: Date = new Date()): EditSpanMode[] {
-  return isPastPeriod(first, today) ? ['this'] : ['this', 'forward', 'next_n'];
+export function spanModesAvailable(_first: RolloverTarget, _today: Date = new Date()): EditSpanMode[] {
+  return ['this', 'forward', 'next_n'];
+}
+
+/** True when the span will silently skip past months between anchor and today. */
+export function spanSkipsPastMonths(
+  first: RolloverTarget,
+  mode: EditSpanMode,
+  today: Date = new Date(),
+): boolean {
+  return mode !== 'this' && isPastPeriod(first, today);
 }
 
 /**
- * Ordered target list for the chosen span, with past months removed and the
- * global 12-period cap applied.
+ * Ordered target list for the chosen span: the selected month always, plus the
+ * implicit months of the mode with past months removed and the 12-period cap
+ * applied.
  */
 export function resolveEditSpan(
   first: RolloverTarget,
@@ -47,13 +59,17 @@ export function resolveEditSpan(
   count = 2,
   today: Date = new Date(),
 ): RolloverTarget[] {
-  if (mode === 'this' || isPastPeriod(first, today)) return [first];
+  if (mode === 'this') return [first];
   const targets = mode === 'forward'
     ? resolveRolloutTargets(first, 'rest_of_fy')
     : resolveRolloutTargets(first, 'next_n', count);
-  const kept = targets.filter((t) => !isPastPeriod(t, today));
-  return kept.length ? kept : [first];
+  const key = (t: RolloverTarget) => `${t.month}-${t.year}`;
+  const kept = targets.filter((t) => key(t) === key(first) || !isPastPeriod(t, today));
+  if (!kept.length) return [first];
+  const withAnchor = kept.some((t) => key(t) === key(first)) ? kept : [first, ...kept];
+  return withAnchor.slice(0, MAX_ROLLOUT_PERIODS);
 }
+
 
 export function describeSpan(targets: RolloverTarget[]): string {
   if (targets.length <= 1) return describeTargets(targets);

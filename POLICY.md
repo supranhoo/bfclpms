@@ -6635,7 +6635,22 @@ A higher stage supersedes the lower ones in the Performance Console, exactly as 
 
 ## §CONSOLE-GROUP-EDIT-SPAN — Group definition edits may span future months (ADR-291)
 
-A Performance Console group definition edit may be applied to the selected month only, to the selected month and every later month of the same fiscal year (July–June), or to the next N months (2–12, inclusive). Past months are never written: if the selected period is already past, only the single-month option is available. Every target month is dry-run before commit and shown in a per-month preview; the commit runs sequentially and stops at the first failure, reporting the months already written. Each month produces its own audited, individually undoable edit run.
+A Performance Console group definition edit may be applied to the selected month only, to the selected month and every later month of the same fiscal year (July–June), or to the next N months (2–12, inclusive). Every target month is dry-run before commit and shown in a per-month preview; the commit runs sequentially and stops at the first failure, reporting the months already written. Each month produces its own audited, individually undoable edit run.
+
+**Past-month rule (amended, ADR-321).** The rule is *never write a past month the admin did not explicitly select*. The selected month is always written, even when it is past. All three span modes remain available from a past anchor; the implicit months of a forward or next-N span are filtered to the current calendar month onwards, so months between a past anchor and today are never written, and the dialog states this before preview.
+
+## §CONSOLE-TEXT-ONLY-STANDARDISATION — wording may be corrected on locked rows (ADR-321)
+
+§88 immutability protects **scoring data**, not spelling. A group definition edit whose change set consists entirely of descriptive fields — KPI title, description, criteria, source of data, formula text, scoring-logic text, unit of measure — may be applied to rows locked by an approved final score or already in review, subject to:
+
+1. The admin opts in explicitly per edit ("Standardise text on locked and in-review rows"). The option is not offered when the change set contains any scoring or structural field.
+2. The server is the authority: `bu_console_group_edit_definition` re-derives the classification from the change set against `public.bu_console_descriptive_fields()` and refuses the request if a single non-descriptive field is present. The client cannot widen the set.
+3. The action is admin-only.
+4. Scores, their inputs (weightage, target, frequency and cycle anchor, rating bands, threshold mode), KRA/category placement and workflow statuses are never written by this path.
+5. Individually overridden fields and cycle-anchor conflicts continue to be skipped on their own terms.
+6. The edit run records `text_only`, and every KPI audit entry carries the flag; the run remains individually undoable.
+
+
 
 ## §CONSOLE-VARIANT-NORMALISE — collapsing definition variants of one KPI (ADR-315)
 

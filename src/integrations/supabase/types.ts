@@ -3950,6 +3950,7 @@ export type Database = {
           review_year: number | null
           scope_kind: string
           skipped_rows: number
+          text_only: boolean
           title_key: string | null
           undone_at: string | null
           undone_by: string | null
@@ -3971,6 +3972,7 @@ export type Database = {
           review_year?: number | null
           scope_kind?: string
           skipped_rows?: number
+          text_only?: boolean
           title_key?: string | null
           undone_at?: string | null
           undone_by?: string | null
@@ -3992,6 +3994,7 @@ export type Database = {
           review_year?: number | null
           scope_kind?: string
           skipped_rows?: number
+          text_only?: boolean
           title_key?: string | null
           undone_at?: string | null
           undone_by?: string | null
@@ -17892,6 +17895,7 @@ export type Database = {
         Args: { p_limit?: number; p_search?: string }
         Returns: Json
       }
+      bu_console_descriptive_fields: { Args: never; Returns: string[] }
       bu_console_edit_runs_list: { Args: { p_limit?: number }; Returns: Json }
       bu_console_editable_fields: { Args: never; Returns: string[] }
       bu_console_employee_scorecard: {
@@ -17935,6 +17939,7 @@ export type Database = {
           p_manager_ids?: string[]
           p_period: string
           p_reset_overrides?: boolean
+          p_text_only?: boolean
           p_title_key?: string
           p_variant_key?: string
           p_year: number
