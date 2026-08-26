@@ -23,8 +23,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { KpiTextSplitFields } from '@/components/admin/kpi-form/KpiTextSplitFields';
 import { KpiScoringEditor } from '@/components/admin/kpi-form/KpiScoringEditor';
+import { UomTypeSelector } from '@/components/admin/UomTypeSelector';
+import { UOM_OPTIONS } from '@/lib/uomConstants';
 import {
   textStateFromRow, type KpiTextState, type KpiScoringState, type ThresholdMode,
+  validateScoringState, binaryOptionsFor,
 } from '@/components/admin/kpi-form/kpiFormModel';
 import type { UomType } from '@/lib/qualitativeUom';
 import { useKraCategories } from '@/hooks/useOrganization';
