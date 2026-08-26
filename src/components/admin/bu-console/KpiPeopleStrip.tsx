@@ -29,8 +29,11 @@ import {
 } from './reviewRunModel';
 import { EmployeeScorecardDrawer } from './EmployeeScorecardDrawer';
 import { TargetRulesDialog, type TargetRulesTarget } from './TargetRulesDialog';
+import { ScoringLadderDialog } from './ScoringLadderDialog';
+import type { LadderTarget } from '@/hooks/useScoringLadder';
 import { stageLabel } from './pipelineStages';
-import { ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ListTree, SlidersHorizontal } from 'lucide-react';
+
 
 const COL_W = 128;
 const PAGE_SIZE = 100;
