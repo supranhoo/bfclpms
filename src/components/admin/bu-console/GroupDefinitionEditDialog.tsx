@@ -659,14 +659,28 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
                             {e.error
                               ? <span className="text-destructive">{e.error}</span>
                               : (e.result?.will_write ?? 0) > 0
-                                ? `${e.result?.will_write} will update`
+                                ? (
+                                  <span>
+                                    {e.result?.will_write} will update
+                                    {(e.result?.partial_rows ?? 0) > 0 && (
+                                      <span className="text-muted-foreground">
+                                        {' '}({e.result?.partial_rows} wording only)
+                                      </span>
+                                    )}
+                                  </span>
+                                )
                                 : (e.result?.will_skip ?? 0) > 0
-                                  ? <span className="text-muted-foreground">protected rows skipped</span>
+                                  ? (
+                                    <span className="text-muted-foreground break-words">
+                                      {skipReasonLabel(e.result) ?? 'rows skipped'}
+                                    </span>
+                                  )
                                   : <span className="text-muted-foreground">no KPI assignments</span>}
                           </TableCell>
                           <TableCell className="text-right">{e.result?.will_skip ?? 0}</TableCell>
                         </TableRow>
                       ))}
+
                     </TableBody>
                   </Table>
                 </details>
