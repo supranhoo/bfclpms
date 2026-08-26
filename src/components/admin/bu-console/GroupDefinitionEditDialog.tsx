@@ -40,11 +40,12 @@ import {
   resolveEditSpan, spanModesAvailable, spanSkipsPastMonths, describeSpan, aggregateSpan, periodLabel, toTarget,
   EDIT_SPAN_LABELS, MAX_ROLLOUT_PERIODS, type EditSpanMode,
 } from './groupEditSpan';
-import { isDescriptiveOnly } from './editFieldClass';
+import { isDescriptiveOnly, scoringFields } from './editFieldClass';
 import {
   diffChanges, hasChanges, weightageDeviations, uniqueByEmployee,
-  isMultiMonthFrequency, validateCycleChange, type ChangeSet,
+  isMultiMonthFrequency, validateCycleChange, isScopeInert, type ChangeSet,
 } from './groupEditModel';
+
 import { getCycleOptionsForFrequency, deriveCycleOptionFromCycleStart } from '@/lib/frequencyCycleOptions';
 import { buildCycleScopeLabel } from '@/lib/frequencyUtils';
 import {
@@ -202,6 +203,10 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   }), [definition, args?.categoryId, args?.kraName]);
 
   const changes: ChangeSet = useMemo(() => {
+    // ADR-326 — scope is inert for a KPI that is not organisation-level and was
+    // not organisation-level before. Emitting a "clear the scope" change there is
+    // a phantom edit that would drop the whole run onto the protected path.
+    const scopeInert = isScopeInert(orgLevel, original.is_org_level as boolean | null | undefined);
     const next: Record<string, unknown> = {
       kpi_title: text.kpi_title,
       kpi_description: text.kpi_description,
@@ -222,27 +227,35 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
       frequency_cycle_start: isMultiMonthFrequency(frequency) ? cycleStart : '',
       day_count_type: frequency === 'Daily' ? dayCountType : original.day_count_type ?? '',
       is_org_level: orgLevel === null ? '' : String(orgLevel),
-      org_level_scope: orgLevel ? orgLevelScope : '',
       require_resubmit_reason: requireResubmitReason === null ? '' : String(requireResubmitReason),
       is_frequency_locked: frequencyLocked === null ? '' : String(frequencyLocked),
       criteria,
       source_of_data: sourceOfData,
-      // ADR-322 — exactly one target travels with the scope; the others clear.
-      ...Object.fromEntries(KPI_ROW_TARGET_COLUMNS.map((c) => [
-        c,
-        orgLevel && KPI_ROW_SCOPE_TARGET_COLUMNS[
-          orgLevelScope as keyof typeof KPI_ROW_SCOPE_TARGET_COLUMNS
-        ] === c
-          ? scopeTargetId
-          : '',
-      ])),
     };
+
+    if (!scopeInert) {
+      next.org_level_scope = orgLevel ? orgLevelScope : '';
+      // ADR-322 — exactly one target travels with the scope; the others clear.
+      Object.assign(
+        next,
+        Object.fromEntries(KPI_ROW_TARGET_COLUMNS.map((c) => [
+          c,
+          orgLevel && KPI_ROW_SCOPE_TARGET_COLUMNS[
+            orgLevelScope as keyof typeof KPI_ROW_SCOPE_TARGET_COLUMNS
+          ] === c
+            ? scopeTargetId
+            : '',
+        ])),
+      );
+    }
+
     return diffChanges(original, next, GROUP_EDIT_FIELDS as unknown as string[]);
   }, [
     text, scoring, uom, target, weightage, categoryId, kraName, frequency, cycleStart,
     dayCountType, orgLevel, orgLevelScope, scopeTargetId, requireResubmitReason, frequencyLocked,
     criteria, sourceOfData, original,
   ]);
+
 
   const changedFields = Object.keys(changes);
   const descriptiveOnly = isDescriptiveOnly(changes);
@@ -261,6 +274,20 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     : null;
   const cycleError = validateCycleChange(changes) || scopeError;
   const conflicts = preview?.anchor_conflicts ?? [];
+  // ADR-326 — which fields keep this run on the protected path, and how many rows
+  // get the wording slice only.
+  const blockingFields = scoringFields(changes);
+  const partialRows = spanPreview
+    ? spanPreview.entries.reduce((n, e) => n + (e.result?.partial_rows ?? 0), 0)
+    : 0;
+  const skipReasonLabel = (res?: { skip_summary?: { reason: string; count: number }[] } | null) => {
+    const rows = res?.skip_summary ?? [];
+    if (rows.length === 0) return null;
+    return rows
+      .map((r) => `${GROUP_EDIT_SKIP_LABELS[r.reason] ?? r.reason} (${r.count})`)
+      .join(' · ');
+  };
+
 
   const cycleOptions = useMemo(() => {
     const opts = getCycleOptionsForFrequency(frequency) ?? [];
@@ -607,12 +634,25 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
               <div className="flex flex-wrap gap-2 text-sm">
                 <Badge>{spanTotals.willWrite} rows will change</Badge>
                 <Badge variant="outline">{spanTotals.willSkip} skipped</Badge>
+                {partialRows > 0 && (
+                  <Badge variant="outline">{partialRows} wording only (protected rows)</Badge>
+                )}
                 {targets.length > 1 && (
                   <Badge variant="outline">
                     {spanTotals.monthsWithWork} of {targets.length} months affected
                   </Badge>
                 )}
               </div>
+
+              {partialRows > 0 && blockingFields.length > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  {partialRows} row{partialRows === 1 ? '' : 's'} are locked (approved final score or
+                  already in review). Their wording is updated, but{' '}
+                  {blockingFields.map((f) => GROUP_EDIT_FIELD_LABELS[f] ?? f).join(', ')} stay unchanged
+                  there, so no score can move (ADR-326).
+                </p>
+              )}
+
 
               {targets.length > 1 && (
                 <details className="rounded-md border p-3 text-sm" open>
@@ -633,14 +673,28 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
                             {e.error
                               ? <span className="text-destructive">{e.error}</span>
                               : (e.result?.will_write ?? 0) > 0
-                                ? `${e.result?.will_write} will update`
+                                ? (
+                                  <span>
+                                    {e.result?.will_write} will update
+                                    {(e.result?.partial_rows ?? 0) > 0 && (
+                                      <span className="text-muted-foreground">
+                                        {' '}({e.result?.partial_rows} wording only)
+                                      </span>
+                                    )}
+                                  </span>
+                                )
                                 : (e.result?.will_skip ?? 0) > 0
-                                  ? <span className="text-muted-foreground">protected rows skipped</span>
+                                  ? (
+                                    <span className="text-muted-foreground break-words">
+                                      {skipReasonLabel(e.result) ?? 'rows skipped'}
+                                    </span>
+                                  )
                                   : <span className="text-muted-foreground">no KPI assignments</span>}
                           </TableCell>
                           <TableCell className="text-right">{e.result?.will_skip ?? 0}</TableCell>
                         </TableRow>
                       ))}
+
                     </TableBody>
                   </Table>
                 </details>

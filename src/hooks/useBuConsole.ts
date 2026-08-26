@@ -1010,9 +1010,12 @@ export const GROUP_EDIT_SKIP_LABELS: Record<string, string> = {
   individual_override: 'Individually overridden — tick "reset overrides" to include',
   cycle_anchor_conflict: 'The new cycle overlaps an existing cycle for this KPI',
   scoring_model_locked: 'Scoring model is group-owned — edit it for all employees (ADR-282)',
+  kra_set_admin_only: 'Still in KRA Set — only an admin can edit it at this stage',
+  partially_applied: 'Wording updated; scoring fields withheld on this protected row (ADR-326)',
   no_change: 'Nothing changed',
   not_found: 'This KPI row no longer exists',
 };
+
 
 /** ADR-275 — one row per employee whose new cycle would clash with an existing one. */
 export interface CycleAnchorConflictRow {
@@ -1037,6 +1040,9 @@ export interface GroupEditPreviewRow {
   weightage: number | null;
   target_value: number | null;
   fields: string[];
+  /** ADR-326 — the row is locked, so only the wording fields are written. */
+  partial?: boolean;
+  withheld_fields?: string[];
 }
 
 export interface GroupEditWeightageRow {
@@ -1062,9 +1068,13 @@ export interface GroupEditResult {
   anchor_conflicts?: CycleAnchorConflictRow[];
   preview?: GroupEditPreviewRow[];
   skipped_details?: GroupWriteSkipRow[];
+  /** ADR-326 — rows that receive only the wording slice of a mixed change set. */
+  partial_rows?: number;
+  withheld_fields?: string[];
   /** ADR-323 — server-derived from the actual fields, never trusted from the client. */
-  edit_class?: 'none' | 'descriptive' | 'protected';
+  edit_class?: 'none' | 'descriptive' | 'protected' | 'partial_descriptive';
 }
+
 
 export interface GroupEditArgs {
   categoryId: string;
