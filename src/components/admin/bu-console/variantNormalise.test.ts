@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildNormalisePlan, changeSetFor, definitionOf, matchesDefinition,
-  pickCanonicalVariant, planIsNoOp, aggregateNormalise, normText,
+  pickCanonicalVariant, planIsNoOp, aggregateNormalise, normText, classifyVariance,
   type VariantLike,
 } from './variantNormalise';
 
@@ -141,5 +141,68 @@ describe('aggregateNormalise', () => {
     expect(totals.failed).toBe(1);
     expect(totals.updated).toBe(3);
     expect(totals.willWrite).toBe(0);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* ADR-325 — wording vs target variance                                */
+/* ------------------------------------------------------------------ */
+
+// Mirrors the SOP/SMP case: same metric, wording drift plus three real bars.
+const sop: VariantLike[] = [
+  v({ variant_key: 's1', description: 'SOP creation', formula: '(Number of SOPs created)', scoring_logic: '5 for 5', target_value: 5, employee_count: 3 }),
+  v({ variant_key: 's2', description: 'SOP creation', formula: 'Number of SOPs created', scoring_logic: '5 for 7', target_value: 7, employee_count: 2 }),
+  v({ variant_key: 's3', description: 'SOP creation', formula: '% of SOPs created', scoring_logic: '5 for 10', target_value: 10, employee_count: 1 }),
+];
+
+describe('classifyVariance', () => {
+  it('splits the SOP case into wording groups and target groups', () => {
+    const c = classifyVariance(sop);
+    expect(c.wordingGroups).toBe(3);
+    expect(c.targetGroups).toBe(3);
+    expect(c.targets).toEqual(['5', '7', '10']);
+    expect(c.hasWordingDrift).toBe(true);
+    expect(c.targetsOnly).toBe(false);
+  });
+
+  it('flags target-only variance as deliberate, not drift', () => {
+    const c = classifyVariance([
+      v({ variant_key: 'a', description: 'd', formula: 'f', scoring_logic: 's', target_value: 5 }),
+      v({ variant_key: 'b', description: 'd', formula: 'f', scoring_logic: 's', target_value: 9 }),
+    ]);
+    expect(c.wordingGroups).toBe(1);
+    expect(c.targetGroups).toBe(2);
+    expect(c.targetsOnly).toBe(true);
+    expect(c.hasWordingDrift).toBe(false);
+  });
+});
+
+describe('wording mode', () => {
+  const def = definitionOf(sop[0]);
+
+  it('never emits a target, even when the canonical target differs', () => {
+    const cs = changeSetFor(sop[2], def, 'wording');
+    expect(Object.keys(cs)).not.toContain('target_value');
+    expect(cs.kpi_formula).toBe('(Number of SOPs created)');
+  });
+
+  it('predicts one variant per remaining target after a wording run', () => {
+    const plan = buildNormalisePlan(sop, 's1', def, 'wording');
+    expect(plan.predictedVariantCount).toBe(3);
+    expect(plan.steps.every(s => !('target_value' in s.changes))).toBe(true);
+  });
+
+  it('never writes weightage', () => {
+    const plan = buildNormalisePlan(sop, 's1', def, 'wording');
+    expect(plan.steps.every(s => !('weightage' in s.changes))).toBe(true);
+  });
+});
+
+describe('targets mode', () => {
+  it('equalises the target only when explicitly requested', () => {
+    const def = { ...definitionOf(sop[0]), target_value: '10' };
+    const plan = buildNormalisePlan(sop, 's1', def, 'targets');
+    expect(plan.predictedVariantCount).toBe(1);
+    expect(plan.steps.some(s => s.changes.target_value === '10')).toBe(true);
   });
 });
