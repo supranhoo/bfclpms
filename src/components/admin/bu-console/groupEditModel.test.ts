@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   diffChanges, hasChanges, weightageDeviations, uniqueByEmployee,
-  isMultiMonthFrequency, validateCycleChange,
+  isMultiMonthFrequency, validateCycleChange, isScopeInert,
 } from './groupEditModel';
+import { isDescriptiveOnly } from './editFieldClass';
+
 import { directionConflictsWithLadder, buildScoringPayload } from '@/components/admin/kpi-form/kpiFormModel';
 
 const ALLOWED = ['kpi_title', 'weightage', 'target_value', 'r5'];
