@@ -9301,3 +9301,33 @@ See POLICY §KPI-EXCEPTION-SCOPED-RELEASE.
 - Tests: `src/lib/review/__tests__/ledgerPeriodOwnership.test.ts` (9 cases).
 
 See POLICY §KPI-LEDGER-PERIOD-OWNERSHIP and ADR-318.
+
+## ADR-324 — Scoring ladders (one KPI, different scoring per employee)
+
+- What: a KPI can now carry an ordered **scoring ladder**. Each tier matches
+  people by "manages people", level, designation, department, a named employee,
+  or a catch-all "everyone else", and supplies that group's target, R0–R5 rating
+  bands, weightage, formula text and scoring-logic text.
+- Why: shared measures like "Plant 100 trees" are one KPI by title, but the bar
+  differs by rung — the BU Head owns the whole number, four department heads own
+  25 each, their teams own a slice. Target rules (ADR-288) could only move the
+  target value; wording and rating bands still had to be tuned employee by
+  employee, which fragmented one KPI into near-duplicate variants.
+- How: `bu_console_kpi_ladder_config` holds the cascade choice (targets typed per
+  tier, or one parent number split across the tier's headcount) and how
+  achievement arrives (each person enters their own, or one central approved Org
+  KPI value). `bu_console_kpi_scoring_tiers` holds the tiers.
+  `bu_console_ladder_get` / `_upsert` / `_apply` are the only write paths;
+  `_apply` always previews first and records every committed row on the existing
+  `bu_console_edit_runs` / `_items` trail so it can be undone.
+- Where: Performance Console → open a KPI → the ladder icon beside the target
+  rules icon.
+- Guards: approved rows (`final_score` present) are never rewritten unless the
+  change is wording only, matching ADR-323's descriptive classification;
+  hand-tuned `bu_console_kpi_overrides` win unless "replace values tuned by hand"
+  is ticked; reads require console access, writes require admin.
+- Tests: `src/components/admin/bu-console/scoringLadderModel.test.ts` (13 cases)
+  covering matching, fallback ordering, auto-split cascade and descriptive-only
+  classification.
+
+See POLICY §KPI-SCORING-LADDER and ADR-324.
