@@ -11,13 +11,17 @@
  * the classification, so this module is UI guidance only.
  */
 
+/**
+ * ADR-327 — `kpi_scoring_logic` is deliberately absent: the scoring test is part
+ * of the employee scoring profile, so it stays on the protected path. This list
+ * is the exact mirror of `public.bu_console_descriptive_fields()`.
+ */
 export const DESCRIPTIVE_FIELDS = [
   'kpi_title',
   'kpi_description',
   'criteria',
   'source_of_data',
   'kpi_formula',
-  'kpi_scoring_logic',
   'uom',
 ] as const;
 

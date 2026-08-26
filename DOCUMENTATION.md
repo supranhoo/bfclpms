@@ -9392,3 +9392,11 @@ The backend descriptive-field allowlist excludes `kpi_scoring_logic`. A paginate
 ### Version History
 
 - **v2.67.1 (2026-08-26):** Added ADR-327 employee scoring profiles; removed scoring tests and target flattening from shared-definition alignment; added complete scoring-signature grouping and regression tests.
+
+## ADR-328 — Group KPI editor respects the UOM type
+
+The group definition editor now shows the KPI type (Numeric / Binary / Tiered) using the same selector as the Admin KPI editor, and the unit of measure is a controlled dropdown from the standard unit list (legacy values stay selectable). Binary and tiered KPIs hide the unit and the R0–R5 ladder and instead expose their polarity or tier options; the inert ladder and unit are blanked so they never travel in a group change set. Switching the type is treated as structural and requires the typed confirmation.
+
+The client descriptive-field list now mirrors `public.bu_console_descriptive_fields()` exactly: the scoring test is not descriptive (ADR-327), so touching it is reported as a protected-path edit rather than a text-only run that silently skips rows.
+
+- **v2.67.2 (2026-08-26):** Added ADR-328 UOM-type-aware group editing, controlled unit list, structural type-switch confirmation, `ladderForType` helper and regression tests; realigned the client descriptive-field allowlist with the server.

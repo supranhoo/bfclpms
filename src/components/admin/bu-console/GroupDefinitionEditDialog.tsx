@@ -23,8 +23,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import { KpiTextSplitFields } from '@/components/admin/kpi-form/KpiTextSplitFields';
 import { KpiScoringEditor } from '@/components/admin/kpi-form/KpiScoringEditor';
+import { UomTypeSelector } from '@/components/admin/UomTypeSelector';
+import { UOM_OPTIONS } from '@/lib/uomConstants';
 import {
   textStateFromRow, type KpiTextState, type KpiScoringState, type ThresholdMode,
+  validateScoringState, binaryOptionsFor,
 } from '@/components/admin/kpi-form/kpiFormModel';
 import type { UomType } from '@/lib/qualitativeUom';
 import { useKraCategories } from '@/hooks/useOrganization';
@@ -43,7 +46,7 @@ import {
 import { isDescriptiveOnly, scoringFields } from './editFieldClass';
 import {
   diffChanges, hasChanges, weightageDeviations, uniqueByEmployee,
-  isMultiMonthFrequency, validateCycleChange, isScopeInert, type ChangeSet,
+  isMultiMonthFrequency, validateCycleChange, isScopeInert, ladderForType, type ChangeSet,
 } from './groupEditModel';
 
 import { getCycleOptionsForFrequency, deriveCycleOptionFromCycleStart } from '@/lib/frequencyCycleOptions';
@@ -76,8 +79,12 @@ const TEXT_FIELDS = ['kpi_title', 'kpi_description', 'kpi_formula', 'kpi_scoring
 /** Same option sets as the Admin KPI Editor (POLICY §KPI-DEFINITION-FORM-PARITY). */
 const FREQUENCY_OPTIONS = ['Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
 
-/** Moving a group to another category / KRA is structural — always confirm. */
-const STRUCTURAL_FIELDS = ['category_id', 'kra_name'];
+/**
+ * Moving a group to another category / KRA is structural — always confirm.
+ * ADR-328 — so is switching the KPI type or its qualitative options: that
+ * rewrites how every mapped employee is scored.
+ */
+const STRUCTURAL_FIELDS = ['category_id', 'kra_name', 'uom_type', 'qualitative_options'];
 
 /** ADR-275 — a cycle move re-anchors which months the KPI covers: always confirm. */
 const CYCLE_FIELDS = ['frequency', 'frequency_cycle_start'];
@@ -202,6 +209,18 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     ...Object.fromEntries(KPI_ROW_TARGET_COLUMNS.map((c) => [c, definition?.[c] ?? null])),
   }), [definition, args?.categoryId, args?.kraName]);
 
+  /** ADR-328 — only a value-based KPI owns a unit and the R0–R5 ladder. */
+  const numericType = scoring.uom_type === 'numeric';
+
+  /** Standard units, plus any legacy value already stored so it is never lost. */
+  const uomOptions = useMemo(() => {
+    const base = UOM_OPTIONS.map((o) => ({ value: o.value as string, label: o.label as string }));
+    const current = (definition?.uom ?? '').trim();
+    return current && !base.some((o) => o.value === current)
+      ? [{ value: current, label: `${current} (current)` }, ...base]
+      : base;
+  }, [definition?.uom]);
+
   const changes: ChangeSet = useMemo(() => {
     // ADR-326 — scope is inert for a KPI that is not organisation-level and was
     // not organisation-level before. Emitting a "clear the scope" change there is
@@ -216,8 +235,12 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
       threshold_mode: scoring.uom_type === 'numeric' ? scoring.threshold_mode : null,
       qualitative_options:
         scoring.uom_type === 'tiered' || scoring.uom_type === 'binary' ? scoring.qualitative_options : null,
-      r5: scoring.r5, r4: scoring.r4, r3: scoring.r3, r2: scoring.r2, r1: scoring.r1, r0: scoring.r0,
-      uom,
+      // ADR-328 — a Yes/No or tiered KPI is scored from its options: the numeric
+      // ladder and the unit are inert there and must not travel in the run.
+      ...ladderForType(scoring.uom_type, {
+        r5: scoring.r5, r4: scoring.r4, r3: scoring.r3,
+        r2: scoring.r2, r1: scoring.r1, r0: scoring.r0, uom,
+      }),
       target_value: target,
       weightage,
       category_id: categoryId,
@@ -251,7 +274,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
 
     return diffChanges(original, next, GROUP_EDIT_FIELDS as unknown as string[]);
   }, [
-    text, scoring, uom, target, weightage, categoryId, kraName, frequency, cycleStart,
+    text, scoring, numericType, uom, target, weightage, categoryId, kraName, frequency, cycleStart,
     dayCountType, orgLevel, orgLevelScope, scopeTargetId, requireResubmitReason, frequencyLocked,
     criteria, sourceOfData, original,
   ]);
@@ -272,7 +295,13 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const scopeError = orgLevel && rowScopeNeedsTarget(orgLevelScope) && !scopeTargetId
     ? `Choose which ${kpiScopeLabel(orgLevelScope).toLowerCase()} this KPI applies to.`
     : null;
-  const cycleError = validateCycleChange(changes) || scopeError;
+  // ADR-328 — a type must be internally valid before anything is previewed:
+  // tiered needs options, binary needs a polarity, numeric needs its ladder.
+  const scoringError = validateScoringState(scoring)
+    || (numericType && !uom && !!original.uom
+      ? 'Pick a unit of measure for this value-based KPI.'
+      : null);
+  const cycleError = validateCycleChange(changes) || scopeError || scoringError;
   const conflicts = preview?.anchor_conflicts ?? [];
   // ADR-326 — which fields keep this run on the protected path, and how many rows
   // get the wording slice only.
@@ -356,7 +385,27 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          {/* ADR-328 — the KPI type is shared by the whole group and decides how
+              it is scored: value based, Yes/No or tiered options. */}
+          <UomTypeSelector
+            value={scoring.uom_type}
+            onChange={(t) => {
+              setScoring((prev) => ({
+                ...prev,
+                uom_type: t,
+                threshold_mode: t === 'numeric' ? prev.threshold_mode : 'absolute',
+                qualitative_options:
+                  t === 'binary'
+                    ? binaryOptionsFor(false)
+                    : t === 'tiered'
+                      ? (prev.qualitative_options?.length ? prev.qualitative_options : [])
+                      : [],
+              }));
+              setPreview(null);
+            }}
+          />
+
+          <div className={`grid gap-3 ${numericType ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
             <div className="space-y-1.5">
               <Label className="text-xs">Weightage (leave blank to keep each employee's own)</Label>
               <Input
@@ -370,11 +419,21 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
               <Label className="text-xs">Target</Label>
               <Input value={target} onChange={(e) => { setTarget(e.target.value); setPreview(null); }} inputMode="decimal" />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Unit</Label>
-              <Input value={uom} onChange={(e) => { setUom(e.target.value); setPreview(null); }} />
-            </div>
+            {numericType && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Unit</Label>
+                <Select value={uom || undefined} onValueChange={(v) => { setUom(v); setPreview(null); }}>
+                  <SelectTrigger><SelectValue placeholder="Select unit" /></SelectTrigger>
+                  <SelectContent>
+                    {uomOptions.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
+
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">

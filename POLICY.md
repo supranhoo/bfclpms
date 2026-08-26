@@ -7065,3 +7065,17 @@ people.
 ### Version History
 
 - **v2.67.1 (2026-08-26):** §CONSOLE-EMPLOYEE-SCORING-PROFILE added (ADR-327); scoring tests reclassified from shared wording to employee scoring data.
+
+## §KPI-UOM-TYPE-GROUP-OWNED — the KPI type is chosen once for the group (ADR-328)
+
+1. Every KPI has exactly one type: Numeric, Binary (Yes/No) or Tiered.
+2. The type and its qualitative options are group-owned. They are set from the group definition editor and never tuned per employee.
+3. A Binary or Tiered KPI has no unit of measure and no R0–R5 ladder; those fields MUST be blank and MUST NOT be written by a group edit.
+4. A Numeric KPI's unit MUST come from the standard unit list. An existing non-standard unit stays selectable until it is replaced.
+5. Changing the type of an existing KPI is structural: it requires the preview and the typed confirmation, and it never moves an approved final score.
+6. A type must be internally valid before preview: Tiered needs options, Binary needs a polarity, Numeric needs its ladder.
+
+### Version History
+
+- **v2.67.2 (2026-08-26):** §KPI-UOM-TYPE-GROUP-OWNED added (ADR-328); the group definition editor gained the type selector and a controlled unit list; the client descriptive-field allowlist realigned with the server (scoring test excluded).
+
