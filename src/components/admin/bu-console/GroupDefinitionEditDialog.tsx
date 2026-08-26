@@ -199,6 +199,8 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     is_frequency_locked: definition?.is_frequency_locked ?? false,
     criteria: definition?.criteria ?? null,
     source_of_data: definition?.source_of_data ?? null,
+    // ADR-322 — the grouped scope's target id.
+    ...Object.fromEntries(KPI_ROW_TARGET_COLUMNS.map((c) => [c, definition?.[c] ?? null])),
   }), [definition, args?.categoryId, args?.kraName]);
 
   const changes: ChangeSet = useMemo(() => {
