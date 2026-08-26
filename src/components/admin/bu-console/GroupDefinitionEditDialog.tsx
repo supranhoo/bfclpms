@@ -633,12 +633,25 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
               <div className="flex flex-wrap gap-2 text-sm">
                 <Badge>{spanTotals.willWrite} rows will change</Badge>
                 <Badge variant="outline">{spanTotals.willSkip} skipped</Badge>
+                {partialRows > 0 && (
+                  <Badge variant="outline">{partialRows} wording only (protected rows)</Badge>
+                )}
                 {targets.length > 1 && (
                   <Badge variant="outline">
                     {spanTotals.monthsWithWork} of {targets.length} months affected
                   </Badge>
                 )}
               </div>
+
+              {partialRows > 0 && blockingFields.length > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  {partialRows} row{partialRows === 1 ? '' : 's'} are locked (approved final score or
+                  already in review). Their wording is updated, but{' '}
+                  {blockingFields.map((f) => GROUP_EDIT_FIELD_LABELS[f] ?? f).join(', ')} stay unchanged
+                  there, so no score can move (ADR-326).
+                </p>
+              )}
+
 
               {targets.length > 1 && (
                 <details className="rounded-md border p-3 text-sm" open>
