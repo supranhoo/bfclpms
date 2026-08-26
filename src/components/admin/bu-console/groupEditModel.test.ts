@@ -176,3 +176,49 @@ describe('ADR-326 — no phantom scope changes', () => {
     expect(isDescriptiveOnly(changes)).toBe(false);
   });
 });
+
+// ADR-328 — UOM types (Numeric / Binary / Tiered) are respected by the group edit.
+describe('ADR-328 — type-aware group edit', () => {
+  const LADDER = { r5: '105', r4: '102.5', r3: '100', r2: '97.5', r1: '95', r0: '<95', uom: '%' };
+
+  it('keeps the ladder and unit for a value-based KPI', () => {
+    expect(ladderForType('numeric', LADDER)).toEqual(LADDER);
+  });
+
+  it('blanks the ladder and unit for Yes/No and tiered KPIs', () => {
+    for (const t of ['binary', 'tiered']) {
+      expect(ladderForType(t, LADDER)).toEqual({
+        r5: '', r4: '', r3: '', r2: '', r1: '', r0: '', uom: '',
+      });
+    }
+  });
+
+  it('emits no inert ladder change when the KPI was already tiered', () => {
+    const original = { uom_type: 'tiered', r5: null, r0: null, uom: null, kpi_title: 'A' };
+    const next = { uom_type: 'tiered', ...ladderForType('tiered', LADDER), kpi_title: 'B' };
+    const changes = diffChanges(original, next, ['uom_type', 'r5', 'r0', 'uom', 'kpi_title']);
+    expect(Object.keys(changes)).toEqual(['kpi_title']);
+  });
+
+  it('clears a stale numeric ladder when the type switches to Yes/No', () => {
+    const original = { uom_type: 'numeric', r5: '105', r0: '<95', uom: '%' };
+    const next = { uom_type: 'binary', ...ladderForType('binary', LADDER) };
+    const changes = diffChanges(original, next, ['uom_type', 'r5', 'r0', 'uom']);
+    expect(changes).toEqual({ uom_type: 'binary', r5: null, r0: null, uom: null });
+    // A type switch is never a wording-only run.
+    expect(isDescriptiveOnly(changes)).toBe(false);
+  });
+});
+
+// ADR-327 — the scoring test belongs to the employee scoring profile.
+describe('ADR-327 — descriptive allowlist mirrors the server', () => {
+  it('excludes the scoring test and the scoring model', () => {
+    expect(isDescriptiveField('kpi_scoring_logic')).toBe(false);
+    expect(isDescriptiveField('uom_type')).toBe(false);
+    expect(isDescriptiveField('target_value')).toBe(false);
+  });
+
+  it('still accepts the shared definition wording', () => {
+    expect(isDescriptiveOnly({ kpi_title: 'A', kpi_description: 'B', kpi_formula: 'C', uom: '%' })).toBe(true);
+  });
+});
