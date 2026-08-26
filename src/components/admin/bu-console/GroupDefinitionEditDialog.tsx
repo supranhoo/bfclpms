@@ -205,7 +205,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     // ADR-326 — scope is inert for a KPI that is not organisation-level and was
     // not organisation-level before. Emitting a "clear the scope" change there is
     // a phantom edit that would drop the whole run onto the protected path.
-    const scopeInert = orgLevel === false && (original.is_org_level ?? false) === false;
+    const scopeInert = isScopeInert(orgLevel, original.is_org_level as boolean | null | undefined);
     const next: Record<string, unknown> = {
       kpi_title: text.kpi_title,
       kpi_description: text.kpi_description,
