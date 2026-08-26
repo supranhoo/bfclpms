@@ -172,6 +172,16 @@ export function KpiPeopleStrip({
           >
             <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
           </Button>
+          <Button
+            variant="ghost" size="icon" className="h-8 w-8"
+            aria-label={`Scoring ladder for ${kpiName}`}
+            onClick={() => setLadderTarget({
+              categoryId: kpi.category_id, kraName: kpi.kra_name, kpiName: kpi.kpi_name,
+            })}
+          >
+            <ListTree className="h-4 w-4 text-muted-foreground" />
+          </Button>
+
           {totalPages > 1 && (
             <>
               <Button
