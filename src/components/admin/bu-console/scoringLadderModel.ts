@@ -188,3 +188,48 @@ export const DEFAULT_LADDER_CONFIG: LadderConfig = {
   parent_target: null,
   rollup_mode: 'independent',
 };
+
+/* ------------------------------------------------------------------ */
+/* ADR-325 — seed tiers from existing definition variants              */
+/* ------------------------------------------------------------------ */
+
+/** The variant facts needed to seed a ladder tier. */
+export interface VariantSeed {
+  variant_key: string;
+  target_value: number | null;
+  employee_count?: number | null;
+  employee_ids?: string[] | null;
+  formula?: string | null;
+  scoring_logic?: string | null;
+}
+
+/**
+ * Turn per-employee target variance into governed ladder tiers: one tier per
+ * distinct target, highest bar first, with single-employee variants pinned to
+ * the named person so the admin only has to re-point the broader tiers.
+ */
+export function seedTiersFromVariants(variants: VariantSeed[]): LadderTier[] {
+  const byTarget = new Map<string, VariantSeed[]>();
+  for (const v of variants) {
+    if (v.target_value === null || v.target_value === undefined) continue;
+    const key = String(v.target_value);
+    byTarget.set(key, [...(byTarget.get(key) ?? []), v]);
+  }
+
+  const groups = [...byTarget.entries()].sort((a, b) => Number(b[0]) - Number(a[0]));
+
+  return groups.map(([target, group], i) => {
+    const people = group.flatMap((g) => g.employee_ids ?? []);
+    const single = people.length === 1;
+    const source = group[0];
+    return {
+      ...emptyTier((groups.length - i) * 10),
+      tier_label: `Target ${target}`,
+      match_dimension: (single ? 'employee' : 'designation') as LadderMatchDimension,
+      match_value: single ? people[0] : null,
+      target_value: Number(target),
+      kpi_formula: source.formula ?? null,
+      kpi_scoring_logic: source.scoring_logic ?? null,
+    };
+  });
+}
