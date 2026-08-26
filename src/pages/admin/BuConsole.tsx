@@ -40,6 +40,8 @@ import { KpiPeopleStrip } from '@/components/admin/bu-console/KpiPeopleStrip';
 import { KraReviewBar } from '@/components/admin/bu-console/KraReviewBar';
 import { ConsoleKpiCreateDialog } from '@/components/admin/bu-console/ConsoleKpiCreateDialog';
 import { VariantNormaliseDialog } from '@/components/admin/bu-console/VariantNormaliseDialog';
+import { ScoringLadderDialog } from '@/components/admin/bu-console/ScoringLadderDialog';
+import type { LadderTier } from '@/components/admin/bu-console/scoringLadderModel';
 import { useBuConsoleCapability } from '@/hooks/useBuConsoleCapability';
 import {
   ConsoleStatBand,
@@ -70,6 +72,11 @@ export default function BuConsole() {
     args: KpiDetailArgs;
     variants: BuConsoleKpiVariant[];
     label: string;
+  } | null>(null);
+  // ADR-325 — target variance handed over to the scoring ladder editor.
+  const [ladderSeed, setLadderSeed] = useState<{
+    target: { categoryId: string | null; kraName: string; kpiName: string };
+    tiers: LadderTier[];
   } | null>(null);
 
   // ADR-294 — one console: configuration and review live on the same surface.
@@ -499,6 +506,25 @@ export default function BuConsole() {
         args={normalise?.args ?? null}
         variants={normalise?.variants ?? []}
         kpiLabel={normalise?.label ?? ''}
+        onBuildLadder={(tiers) => {
+          if (!normalise) return;
+          setLadderSeed({
+            target: {
+              categoryId: normalise.args.categoryId ?? null,
+              kraName: normalise.args.kraName,
+              kpiName: normalise.args.kpiName,
+            },
+            tiers,
+          });
+        }}
+      />
+
+      <ScoringLadderDialog
+        target={ladderSeed?.target ?? null}
+        scope={scope}
+        seedTiers={ladderSeed?.tiers ?? null}
+        open={!!ladderSeed}
+        onOpenChange={(o) => { if (!o) setLadderSeed(null); }}
       />
 
       <ConsoleKpiCreateDialog
