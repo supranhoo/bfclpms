@@ -994,9 +994,14 @@ export const GROUP_EDIT_FIELD_LABELS: Record<string, string> = {
   frequency_cycle_start: 'Cycle anchor',
   day_count_type: 'Day counting',
   is_org_level: 'Organisation-level KPI',
-  org_level_scope: 'Org-level scope',
+  org_level_scope: 'Scope',
   require_resubmit_reason: 'Reason on resubmission',
   is_frequency_locked: 'Lock frequency after submission',
+  business_unit_id: 'Business unit',
+  location_id: 'Location',
+  division_id: 'Division',
+  pms_grade_id: 'PMS grade',
+  level_id: 'Level',
 };
 
 export const GROUP_EDIT_SKIP_LABELS: Record<string, string> = {
