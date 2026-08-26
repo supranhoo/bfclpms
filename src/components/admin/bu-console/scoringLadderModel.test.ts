@@ -7,6 +7,7 @@ import {
   headcountForTier,
   isDescriptiveOnly,
   resolveTier,
+  seedTiersFromVariants,
   sortTiers,
   tierMatches,
   tierTarget,
@@ -106,5 +107,32 @@ describe('describeTier', () => {
     expect(describeTier(tier({ match_dimension: 'default' }))).toBe('Everyone else');
     expect(describeTier(tier({ match_dimension: 'is_manager', match_value: 'false' }))).toBe('No direct reports');
     expect(describeTier(tier({ match_dimension: 'level', match_value: 'L4' }))).toBe('Level: L4');
+  });
+});
+
+describe('seedTiersFromVariants (ADR-325)', () => {
+  const variants = [
+    { variant_key: 'a', target_value: 5, employee_count: 3, formula: 'f5', scoring_logic: 's5' },
+    { variant_key: 'b', target_value: 10, employee_count: 1, employee_ids: ['e9'], formula: 'f10', scoring_logic: 's10' },
+    { variant_key: 'c', target_value: null, employee_count: 2 },
+  ];
+
+  it('builds one tier per distinct target, highest bar first', () => {
+    const tiers = seedTiersFromVariants(variants);
+    expect(tiers.map((t) => t.target_value)).toEqual([10, 5]);
+    expect(tiers.map((t) => t.tier_label)).toEqual(['Target 10', 'Target 5']);
+    expect(tiers[0].priority).toBeGreaterThan(tiers[1].priority);
+  });
+
+  it('pins a single-person variant to that employee and keeps its wording', () => {
+    const [top] = seedTiersFromVariants(variants);
+    expect(top.match_dimension).toBe('employee');
+    expect(top.match_value).toBe('e9');
+    expect(top.kpi_formula).toBe('f10');
+    expect(top.kpi_scoring_logic).toBe('s10');
+  });
+
+  it('skips variants with no target', () => {
+    expect(seedTiersFromVariants(variants)).toHaveLength(2);
   });
 });

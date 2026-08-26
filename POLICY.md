@@ -1481,6 +1481,7 @@ When creating or importing KPIs with multi-month frequencies (Quarterly, Bi-Mont
 
 | Version | Date | Change |
 |---------|------|--------|
+| 2.67.0 | 2026-08-26 | §CONSOLE-VARIANT-NORMALISE amended (ADR-325) — variance split into wording vs the individual bar. "Make this one" becomes a two-tab **Align** dialog: standardising wording never writes `target_value`, target flattening is opt-in with a typed `APPLY`, the tree badge separates `N variants · M wording` (amber) from `N targets` (neutral), and target variance can be seeded into an ADR-324 scoring ladder. |
 | 2.66.172 | 2026-07-27 | §AR-REPAIR-NO-DOWNSTREAM-REWIND added (ADR-184) — the ADR-172 empty-stage sweep had rewound 30 instances to `pending_dept`, including 8 already Completed, ignoring locked BU Head responses. New `trg_ar_no_downstream_rewind` guard, `annual_review_repair_downstream_rewind` RPC and `annual_review_downstream_rewind_diagnostic`. Restored 5 instances (101029, 101230, 101323, 101361, 102011) to Completed with their original scores. |
 | 2.66.187 | 2026-07-28 | §AR-DEPT-TERMINAL-OVERRIDE applied to **EHS-Safety** (ADR-198 cohort 2) — `bu_head` stripped and `bu_head_id` cleared on 13 instances with `has_admin_workflow_override = true`; 100757 (77.00 / Good), 101279 (81.00 / Good) and 101292 (79.00 / Good) completed from their fully-rated dept-head responses; 11 blank drafts plus 100890 (narrative-only) remain with Firoz Ahmad. |
 | 2.66.186 | 2026-07-28 | §AR-DEPT-TERMINAL-OVERRIDE added (ADR-198) — EHS-Health chain contracted to `self → dept_head` (BU Head Amit Kumar Sharma excluded) across 9 instances; 101248 completed (82.00 / Good); 200449 re-opened at dept-head stage (2 of 10 criteria scored); BU-head cascade triggers now skip `has_admin_workflow_override` instances. |
@@ -6671,10 +6672,19 @@ An admin may collapse them with the **Make this one** action, subject to:
 6. §88 immutability holds: rows in review are skipped unless the admin explicitly includes them,
    approved final scores are never altered, and individually overridden rows stay exempt unless the
    admin opts in. Each variant/month writes its own individually undoable edit run.
-7. **The amber variant badge is a warning, not a counter (ADR-315a).** It is displayed only when a
-   KPI carries two or more definition variants. A single-definition KPI is never badged, whatever
-   weightage spread its employees have; weightage spread is legitimate per-employee data and is
-   reported in the Weightage column instead.
+7. **A normalisation never writes a target or a rating band unless the admin explicitly opts into a
+   target-flattening run (ADR-325).** Variance is two classes: *wording* (description, formula,
+   scoring-logic text) and the *individual bar* (target value). The default action standardises
+   wording only and reports the targets it left untouched; several variants remaining afterwards —
+   one per distinct target — is the correct outcome, not a failure. Equalising targets lives on its
+   own tab, is off by default, lists every affected row and requires the typed `APPLY` confirmation.
+   Deliberate per-person bars should instead be turned into scoring tiers (§KPI-SCORING-LADDER); the
+   dialog seeds a ladder from the existing targets on request.
+8. **The amber variant badge is a warning, not a counter (ADR-315a, amended by ADR-325).** It is displayed only when a
+   KPI carries two or more definition variants with **wording drift**. Target-only variance is
+   badged neutrally as `N targets`, because a different bar is deliberate configuration. A
+   single-definition KPI is never badged, whatever weightage spread its employees have; weightage
+   spread is legitimate per-employee data and is reported in the Weightage column instead.
 
 
 

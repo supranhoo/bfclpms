@@ -12,12 +12,26 @@
  * not part of the variant key (POLICY §CONSOLE-VARIANT-NORMALISE).
  */
 
-/** Fields the normaliser is allowed to write. Nothing else is ever emitted. */
-export const VARIANT_FIELDS = [
-  'kpi_description', 'kpi_formula', 'kpi_scoring_logic', 'target_value',
+/**
+ * ADR-325 — variance splits into two classes.
+ *
+ * Wording fields are pure text: standardising them cannot move a score.
+ * Scoring fields carry the individual bar and are NEVER written by a wording
+ * run; equalising them is a separate, explicitly confirmed action.
+ */
+export const WORDING_FIELDS = [
+  'kpi_description', 'kpi_formula', 'kpi_scoring_logic',
 ] as const;
 
+export const SCORING_FIELDS = ['target_value'] as const;
+
+/** Fields the normaliser is allowed to write. Nothing else is ever emitted. */
+export const VARIANT_FIELDS = [...WORDING_FIELDS, ...SCORING_FIELDS] as const;
+
 export type VariantField = (typeof VARIANT_FIELDS)[number];
+
+/** `wording` writes text only; `targets` additionally equalises the target. */
+export type NormaliseMode = 'wording' | 'targets';
 
 export interface VariantLike {
   variant_key: string;
@@ -79,10 +93,14 @@ export function matchesDefinition(v: VariantLike, def: CanonicalDefinition): boo
     && normText(d.target_value) === normText(def.target_value);
 }
 
-/** Change set for one variant — only fields whose value actually differs. */
+/**
+ * Change set for one variant — only fields whose value actually differs.
+ * In `wording` mode no scoring field is ever emitted, whatever the admin typed.
+ */
 export function changeSetFor(
   v: VariantLike,
   def: CanonicalDefinition,
+  mode: NormaliseMode = 'wording',
 ): Record<string, string | null> {
   const current = definitionOf(v);
   const out: Record<string, string | null> = {};
@@ -92,8 +110,45 @@ export function changeSetFor(
   put('kpi_description', def.description, current.description);
   put('kpi_formula', def.formula, current.formula);
   put('kpi_scoring_logic', def.scoring_logic, current.scoring_logic);
-  put('target_value', def.target_value, current.target_value);
+  if (mode === 'targets') put('target_value', def.target_value, current.target_value);
   return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* Variance classification (ADR-325)                                   */
+/* ------------------------------------------------------------------ */
+
+export interface VarianceClassification {
+  /** Distinct wording groups (description + formula + scoring text). */
+  wordingGroups: number;
+  /** Distinct target values across the variants. */
+  targetGroups: number;
+  /** Every distinct target, in the order first seen. */
+  targets: string[];
+  /** True when only the target differs — a deliberate bar, not drift. */
+  targetsOnly: boolean;
+  /** True when there is text drift worth standardising. */
+  hasWordingDrift: boolean;
+}
+
+export function classifyVariance(variants: VariantLike[]): VarianceClassification {
+  const wording = new Set<string>();
+  const targets: string[] = [];
+  for (const v of variants) {
+    const d = definitionOf(v);
+    wording.add([d.description, d.formula, d.scoring_logic].map(normText).join('|'));
+    const t = asText(d.target_value);
+    if (!targets.includes(t)) targets.push(t);
+  }
+  const wordingGroups = Math.max(wording.size, variants.length ? 1 : 0);
+  const targetGroups = Math.max(targets.length, variants.length ? 1 : 0);
+  return {
+    wordingGroups,
+    targetGroups,
+    targets,
+    targetsOnly: wordingGroups === 1 && targetGroups > 1,
+    hasWordingDrift: wordingGroups > 1,
+  };
 }
 
 export interface NormaliseStep {
@@ -104,6 +159,7 @@ export interface NormaliseStep {
 
 export interface NormalisePlan {
   canonicalKey: string;
+  mode?: NormaliseMode;
   definition: CanonicalDefinition;
   /** Variants that need writing — the canonical one and no-ops are excluded. */
   steps: NormaliseStep[];
@@ -122,6 +178,7 @@ export function buildNormalisePlan(
   variants: VariantLike[],
   canonicalKey: string,
   definition?: CanonicalDefinition,
+  mode: NormaliseMode = 'wording',
 ): NormalisePlan {
   const canonical = variants.find(v => v.variant_key === canonicalKey) ?? pickCanonicalVariant(variants);
   const def = definition ?? (canonical ? definitionOf(canonical) : {
@@ -131,7 +188,7 @@ export function buildNormalisePlan(
   const steps: NormaliseStep[] = [];
   const alreadyAligned: string[] = [];
   for (const v of variants) {
-    const changes = changeSetFor(v, def);
+    const changes = changeSetFor(v, def, mode);
     if (Object.keys(changes).length === 0) { alreadyAligned.push(v.variant_key); continue; }
     steps.push({
       variantKey: v.variant_key,
@@ -142,13 +199,16 @@ export function buildNormalisePlan(
 
   return {
     canonicalKey: canonical?.variant_key ?? canonicalKey,
+    mode,
     definition: def,
     steps,
     alreadyAligned,
     employeesAffected: steps.reduce((n, s) => n + s.employeeCount, 0),
-    predictedVariantCount: steps.length ? 1 : Math.max(1, new Set(variants.map(v => normText(
-      [definitionOf(v).description, definitionOf(v).formula, definitionOf(v).scoring_logic, definitionOf(v).target_value].join('|'),
-    ))).size),
+    // A wording run collapses text only: what remains afterwards is one variant
+    // per distinct target, which is deliberate differentiation, not a defect.
+    predictedVariantCount: mode === 'targets'
+      ? 1
+      : Math.max(1, classifyVariance(variants).targetGroups),
   };
 }
 

@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils';
 import { ConsoleMetricRow, ConsoleMetricHeader } from './ConsoleMetricRow';
 import { ScorePill } from './ScorePill';
 import { lookalikeCounts } from './lookalikeTitles';
+import { classifyVariance } from './variantNormalise';
 import { resolveKpiDueState } from '@/lib/review/kpiDueForPeriod';
 import type {
   BuConsoleCategoryNode,
@@ -159,6 +160,13 @@ function KpiRow({
   // Weightage spread is a legitimate per-employee number and is already shown
   // in the Weightage column, so it must not raise a "1 variant" warning.
   const hasVariance = variantCount > 1;
+  // ADR-325 — wording drift is a defect (amber, actionable); different targets
+  // are deliberate individual bars (neutral, informational).
+  const variance = classifyVariance(kpi.variants ?? []);
+  // When the payload carries no variant detail, fall back to the flat count.
+  const wordingDrift = (kpi.variants?.length ?? 0) > 0 ? variance.hasWordingDrift : hasVariance;
+  const wordingGroups = (kpi.variants?.length ?? 0) > 0 ? variance.wordingGroups : variantCount;
+
   const isLookalike = (lookalikeCount ?? 0) > 1;
   const panelId = `kpi-people-${kpi.kpi_key.replace(/[^\w-]/g, '_')}`;
 
@@ -255,7 +263,7 @@ function KpiRow({
                 Fix text split
               </span>
             )}
-            {hasVariance && (
+            {hasVariance && wordingDrift && (
               <span
                 role="button"
                 tabIndex={0}
@@ -267,14 +275,28 @@ function KpiRow({
                 className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400"
               >
                 <Layers className="h-3 w-3" />
-                {variantCount} variants
+                {variantCount} variants{wordingGroups < variantCount ? ` · ${wordingGroups} wording` : ''}
+              </span>
+            )}
+            {hasVariance && variance.targetGroups > 1 && (
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label={`Show the ${variance.targetGroups} targets used for ${kpi.kpi_title || kpi.kpi_name}`}
+                onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setOpen(o => !o); }
+                }}
+                className="inline-flex items-center gap-1 rounded-full border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+              >
+                {variance.targetGroups} targets
               </span>
             )}
             {onNormaliseVariants && variantCount > 1 && (
               <span
                 role="button"
                 tabIndex={0}
-                aria-label={`Make one definition for ${kpi.kpi_title || kpi.kpi_name}`}
+                aria-label={`Align the definition of ${kpi.kpi_title || kpi.kpi_name}`}
                 onClick={(e) => { e.stopPropagation(); onNormaliseVariants(kpi); }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onNormaliseVariants(kpi); }
@@ -282,9 +304,10 @@ function KpiRow({
                 className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium text-muted-foreground hover:text-foreground"
               >
                 <Wand2 className="h-3 w-3" />
-                Make this one
+                Align
               </span>
             )}
+
             <span className="flex items-center gap-1 text-xs font-medium text-primary opacity-60 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
               {expandable ? (
                 <span

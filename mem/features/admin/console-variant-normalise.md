@@ -1,19 +1,21 @@
 ---
 name: Console variant normaliser
-description: "Make this one" collapses KPI definition variants; weightage is never written (ADR-315)
+description: Align dialog — wording standardisation never writes targets; target flattening is opt-in; ladder handoff (ADR-315/325)
 type: feature
 ---
-Performance Console KPI rows with the amber "N variants" badge expose **Make this one**
+Performance Console KPI rows with the variance badge expose **Align**
 (`VariantNormaliseDialog` + pure `variantNormalise.ts`).
 
-- Variants come from drift in 4 fields only: description, formula, scoring logic, target
-  (`bu_console_variant_key`). Common real cause: description/formula written into swapped columns.
-- Canonical default = most employees → most rows → most complete definition. The admin may edit the
-  definition before applying, which also rewrites the canonical rows.
-- **Never write weightage in a normalisation** — per-employee number, not part of variant identity.
-- Only fields whose normalised (whitespace/case-insensitive) value differs are emitted; aligned
-  variants are reported, not rewritten.
-- Orchestration only: loops the unchanged `bu_console_group_edit_definition` RPC once per
-  variant per month, reusing the ADR-291 span control. One undoable run each; stops on first error;
-  typed `APPLY` confirmation. §88 immutability unchanged.
+- Variance is two classes (ADR-325): **wording** (`kpi_description`, `kpi_formula`,
+  `kpi_scoring_logic`) and the **individual bar** (`target_value`).
+- Default tab = *Standardise wording*: `changeSetFor(..., 'wording')` never emits a scoring field.
+  Several variants left afterwards (one per distinct target) is the correct outcome.
+- *Targets & bands* tab equalises targets — off by default, per-variant before/after, typed `APPLY`.
+- **Never write weightage** in any normalisation.
+- Badge: amber `N variants · M wording` for drift; neutral `N targets` for deliberate bars.
+  Falls back to the flat `variant_count` when the payload carries no variant detail.
+- `seedTiersFromVariants` (scoringLadderModel) turns target variance into ADR-324 ladder tiers:
+  one tier per distinct target, highest first, single-person variants pinned to that employee.
+- Orchestration only: loops `bu_console_group_edit_definition` per variant per month, ADR-291 span,
+  one undoable run each. §88 immutability unchanged; wording runs use the ADR-323 descriptive bypass.
 POLICY §CONSOLE-VARIANT-NORMALISE.
