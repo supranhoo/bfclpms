@@ -273,6 +273,20 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     : null;
   const cycleError = validateCycleChange(changes) || scopeError;
   const conflicts = preview?.anchor_conflicts ?? [];
+  // ADR-326 — which fields keep this run on the protected path, and how many rows
+  // get the wording slice only.
+  const blockingFields = scoringFields(changes);
+  const partialRows = spanPreview
+    ? spanPreview.entries.reduce((n, e) => n + (e.result?.partial_rows ?? 0), 0)
+    : 0;
+  const skipReasonLabel = (res?: { skip_summary?: { reason: string; count: number }[] } | null) => {
+    const rows = res?.skip_summary ?? [];
+    if (rows.length === 0) return null;
+    return rows
+      .map((r) => `${GROUP_EDIT_SKIP_LABELS[r.reason] ?? r.reason} (${r.count})`)
+      .join(' · ');
+  };
+
 
   const cycleOptions = useMemo(() => {
     const opts = getCycleOptionsForFrequency(frequency) ?? [];
