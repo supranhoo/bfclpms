@@ -375,7 +375,27 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          {/* ADR-328 — the KPI type is shared by the whole group and decides how
+              it is scored: value based, Yes/No or tiered options. */}
+          <UomTypeSelector
+            value={scoring.uom_type}
+            onChange={(t) => {
+              setScoring((prev) => ({
+                ...prev,
+                uom_type: t,
+                threshold_mode: t === 'numeric' ? prev.threshold_mode : 'absolute',
+                qualitative_options:
+                  t === 'binary'
+                    ? binaryOptionsFor(false)
+                    : t === 'tiered'
+                      ? (prev.qualitative_options?.length ? prev.qualitative_options : [])
+                      : [],
+              }));
+              setPreview(null);
+            }}
+          />
+
+          <div className={`grid gap-3 ${numericType ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
             <div className="space-y-1.5">
               <Label className="text-xs">Weightage (leave blank to keep each employee's own)</Label>
               <Input
@@ -389,11 +409,21 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
               <Label className="text-xs">Target</Label>
               <Input value={target} onChange={(e) => { setTarget(e.target.value); setPreview(null); }} inputMode="decimal" />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Unit</Label>
-              <Input value={uom} onChange={(e) => { setUom(e.target.value); setPreview(null); }} />
-            </div>
+            {numericType && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Unit</Label>
+                <Select value={uom || undefined} onValueChange={(v) => { setUom(v); setPreview(null); }}>
+                  <SelectTrigger><SelectValue placeholder="Select unit" /></SelectTrigger>
+                  <SelectContent>
+                    {uomOptions.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
+
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
