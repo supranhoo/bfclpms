@@ -106,3 +106,19 @@ export function isScopeInert(
 ): boolean {
   return orgLevel === false && (originalIsOrgLevel ?? false) === false;
 }
+
+/** Rating ladder + unit values a value-based KPI owns. */
+export interface LadderValues {
+  r5: string; r4: string; r3: string; r2: string; r1: string; r0: string; uom: string;
+}
+
+const BLANK_LADDER: LadderValues = { r5: '', r4: '', r3: '', r2: '', r1: '', r0: '', uom: '' };
+
+/**
+ * ADR-328 — a Yes/No or tiered KPI is scored from its options: the numeric R0–R5
+ * ladder and the unit of measure carry no meaning there, so they are blanked
+ * instead of travelling in the change set with stale values.
+ */
+export function ladderForType(uomType: string | null | undefined, values: LadderValues): LadderValues {
+  return uomType === 'numeric' ? values : { ...BLANK_LADDER };
+}
