@@ -169,7 +169,18 @@ export function VariantNormaliseDialog({
     (e.result?.skip_summary ?? []).map(s => ({ ...s, variantKey: e.variantKey })),
   );
 
+  /** Readable label per variant key — the preview table must not show raw hashes. */
+  const variantLabels = useMemo(() => {
+    const map = new Map<string, string>();
+    variants.forEach((v, i) => {
+      const target = v.target_value ?? null;
+      map.set(v.variant_key, `Variant ${i + 1}${target !== null && target !== undefined ? ` · target ${target}` : ''}`);
+    });
+    return map;
+  }, [variants]);
+
   const targetSummary = variance.targets.map(t => t || '—').join(' · ');
+
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!busy) onOpenChange(v); }}>
