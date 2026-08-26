@@ -93,3 +93,16 @@ export function uniqueByEmployee(rows: WeightageImpactRow[] | null | undefined):
   }
   return [...seen.values()];
 }
+
+/**
+ * ADR-326 — scope is inert for a KPI that is not organisation-level and was not
+ * organisation-level before the edit. The change set must not carry a scope or
+ * scope-target clear in that case: it is a change nobody typed, and it would
+ * drag a wording correction onto the protected path.
+ */
+export function isScopeInert(
+  orgLevel: boolean | null,
+  originalIsOrgLevel: boolean | null | undefined,
+): boolean {
+  return orgLevel === false && (originalIsOrgLevel ?? false) === false;
+}
