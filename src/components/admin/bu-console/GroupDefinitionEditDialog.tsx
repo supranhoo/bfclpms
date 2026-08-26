@@ -261,7 +261,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
 
     return diffChanges(original, next, GROUP_EDIT_FIELDS as unknown as string[]);
   }, [
-    text, scoring, uom, target, weightage, categoryId, kraName, frequency, cycleStart,
+    text, scoring, numericType, uom, target, weightage, categoryId, kraName, frequency, cycleStart,
     dayCountType, orgLevel, orgLevelScope, scopeTargetId, requireResubmitReason, frequencyLocked,
     criteria, sourceOfData, original,
   ]);
