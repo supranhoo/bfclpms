@@ -157,6 +157,11 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     setDayCountType(definition?.day_count_type ?? '');
     setOrgLevel(definition?.is_org_level ?? false);
     setOrgLevelScope(definition?.org_level_scope ?? '');
+    setScopeTargetId(
+      (definition?.[KPI_ROW_SCOPE_TARGET_COLUMNS[
+        (definition?.org_level_scope ?? 'organization') as keyof typeof KPI_ROW_SCOPE_TARGET_COLUMNS
+      ] ?? ''] as string) ?? '',
+    );
     setRequireResubmitReason(definition?.require_resubmit_reason ?? false);
     setFrequencyLocked(definition?.is_frequency_locked ?? false);
     setCriteria(definition?.criteria ?? '');
