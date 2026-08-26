@@ -156,8 +156,8 @@ export const LADDER_FIELDS = [
 
 export type LadderField = (typeof LADDER_FIELDS)[number];
 
-/** Wording-only ladders are safe on locked rows (ADR-323 parity). */
-const DESCRIPTIVE: LadderField[] = ['kpi_formula', 'kpi_scoring_logic'];
+/** Only the measurement formula is descriptive; scoring logic is protected. */
+const DESCRIPTIVE: LadderField[] = ['kpi_formula'];
 
 export function isDescriptiveOnly(fields: readonly string[]): boolean {
   return fields.length > 0 && fields.every((f) => (DESCRIPTIVE as string[]).includes(f));
@@ -201,33 +201,49 @@ export interface VariantSeed {
   employee_ids?: string[] | null;
   formula?: string | null;
   scoring_logic?: string | null;
+  weightage?: number | null;
+  r5?: string | null;
+  r4?: string | null;
+  r3?: string | null;
+  r2?: string | null;
+  r1?: string | null;
+  r0?: string | null;
 }
 
 /**
- * Turn per-employee target variance into governed ladder tiers: one tier per
- * distinct target, highest bar first, with single-employee variants pinned to
+ * Turn per-employee scoring variance into governed tiers: one tier per full
+ * scoring signature, with single-employee variants pinned to
  * the named person so the admin only has to re-point the broader tiers.
  */
 export function seedTiersFromVariants(variants: VariantSeed[]): LadderTier[] {
-  const byTarget = new Map<string, VariantSeed[]>();
+  const bySignature = new Map<string, VariantSeed[]>();
   for (const v of variants) {
-    if (v.target_value === null || v.target_value === undefined) continue;
-    const key = String(v.target_value);
-    byTarget.set(key, [...(byTarget.get(key) ?? []), v]);
+    const key = [v.target_value, v.weightage, v.r5, v.r4, v.r3, v.r2, v.r1, v.r0, v.scoring_logic]
+      .map(value => String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' '))
+      .join('|');
+    bySignature.set(key, [...(bySignature.get(key) ?? []), v]);
   }
 
-  const groups = [...byTarget.entries()].sort((a, b) => Number(b[0]) - Number(a[0]));
+  const groups = [...bySignature.values()].sort((a, b) =>
+    Number(b[0]?.target_value ?? 0) - Number(a[0]?.target_value ?? 0));
 
-  return groups.map(([target, group], i) => {
+  return groups.map((group, i) => {
     const people = group.flatMap((g) => g.employee_ids ?? []);
     const single = people.length === 1;
     const source = group[0];
     return {
       ...emptyTier((groups.length - i) * 10),
-      tier_label: `Target ${target}`,
+      tier_label: `Scoring profile ${i + 1}`,
       match_dimension: (single ? 'employee' : 'designation') as LadderMatchDimension,
       match_value: single ? people[0] : null,
-      target_value: Number(target),
+      target_value: source.target_value,
+      weightage: source.weightage ?? null,
+      r5: source.r5 ?? null,
+      r4: source.r4 ?? null,
+      r3: source.r3 ?? null,
+      r2: source.r2 ?? null,
+      r1: source.r1 ?? null,
+      r0: source.r0 ?? null,
       kpi_formula: source.formula ?? null,
       kpi_scoring_logic: source.scoring_logic ?? null,
     };
