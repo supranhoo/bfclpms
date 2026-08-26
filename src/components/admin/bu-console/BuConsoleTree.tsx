@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils';
 import { ConsoleMetricRow, ConsoleMetricHeader } from './ConsoleMetricRow';
 import { ScorePill } from './ScorePill';
 import { lookalikeCounts } from './lookalikeTitles';
+import { classifyVariance } from './variantNormalise';
 import { resolveKpiDueState } from '@/lib/review/kpiDueForPeriod';
 import type {
   BuConsoleCategoryNode,
