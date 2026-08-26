@@ -257,7 +257,11 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     : confirmationSatisfied(preview, confirmText);
   const weightRows = uniqueByEmployee(preview?.weightage_impact);
   const deviations = weightageDeviations(weightRows);
-  const cycleError = validateCycleChange(changes);
+  // ADR-322 — a grouped scope cannot be saved without naming its target.
+  const scopeError = orgLevel && rowScopeNeedsTarget(orgLevelScope) && !scopeTargetId
+    ? `Choose which ${kpiScopeLabel(orgLevelScope).toLowerCase()} this KPI applies to.`
+    : null;
+  const cycleError = validateCycleChange(changes) || scopeError;
   const conflicts = preview?.anchor_conflicts ?? [];
 
   const cycleOptions = useMemo(() => {
