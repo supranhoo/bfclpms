@@ -285,7 +285,13 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const scopeError = orgLevel && rowScopeNeedsTarget(orgLevelScope) && !scopeTargetId
     ? `Choose which ${kpiScopeLabel(orgLevelScope).toLowerCase()} this KPI applies to.`
     : null;
-  const cycleError = validateCycleChange(changes) || scopeError;
+  // ADR-328 — a type must be internally valid before anything is previewed:
+  // tiered needs options, binary needs a polarity, numeric needs its ladder.
+  const scoringError = validateScoringState(scoring)
+    || (numericType && !uom && !!original.uom
+      ? 'Pick a unit of measure for this value-based KPI.'
+      : null);
+  const cycleError = validateCycleChange(changes) || scopeError || scoringError;
   const conflicts = preview?.anchor_conflicts ?? [];
   // ADR-326 — which fields keep this run on the protected path, and how many rows
   // get the wording slice only.
