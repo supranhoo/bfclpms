@@ -59,6 +59,7 @@ export function KpiPeopleStrip({
   const [result, setResult] = useState<RunAdvanceResult | null>(null);
   const [drawerEmployee, setDrawerEmployee] = useState<{ id: string; name: string | null } | null>(null);
   const [ruleTarget, setRuleTarget] = useState<TargetRulesTarget | null>(null);
+  const [ladderTarget, setLadderTarget] = useState<LadderTarget | null>(null);
 
   useEffect(() => { setSelection(new Set()); setResult(null); setPage(1); }, [scope, stage, kraName, kpiKey]);
 
@@ -341,6 +342,12 @@ export function KpiPeopleStrip({
         scope={scope}
         open={!!ruleTarget}
         onOpenChange={o => !o && setRuleTarget(null)}
+      />
+      <ScoringLadderDialog
+        target={ladderTarget}
+        scope={scope}
+        open={!!ladderTarget}
+        onOpenChange={o => !o && setLadderTarget(null)}
       />
     </div>
   );
