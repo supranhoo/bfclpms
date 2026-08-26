@@ -9331,3 +9331,27 @@ See POLICY §KPI-LEDGER-PERIOD-OWNERSHIP and ADR-318.
   classification.
 
 See POLICY §KPI-SCORING-LADDER and ADR-324.
+
+## ADR-325 — Variance: wording drift vs the individual bar
+
+- What: the Performance Console "Make this one" action becomes **Align**, a
+  two-tab dialog. *Standardise wording* rewrites description, formula and
+  scoring text only and states which targets it left alone; *Targets & bands*
+  equalises the target, is off by default, shows a per-variant before/after
+  table and needs the typed `APPLY` confirmation.
+- Why: some KPIs legitimately carry a different target per person (SOP/SMP:
+  5, 7 and 10). The old action wrote the target with the wording, so aligning
+  the text destroyed the individual bar.
+- How: `variantNormalise.ts` splits `WORDING_FIELDS` from `SCORING_FIELDS` and
+  takes a mode; `classifyVariance` reports wording groups vs target groups and
+  drives both the dialog header and the tree badge
+  (`N variants · M wording` in amber, `N targets` in neutral grey);
+  `seedTiersFromVariants` hands the different bars to the ADR-324 scoring
+  ladder as pre-built tiers.
+- Where: Performance Console → KPI row → **Align**.
+- Guards: weightage is still never written; wording runs are descriptive-only
+  (ADR-323 bypass); target runs stay under the §88 immutability guards.
+- Tests: `variantNormalise.test.ts`, `scoringLadderModel.test.ts`,
+  `consoleLayout.test.tsx`.
+
+See POLICY §CONSOLE-VARIANT-NORMALISE and ADR-325.
