@@ -218,6 +218,7 @@ export interface VariantSeed {
 export function seedTiersFromVariants(variants: VariantSeed[]): LadderTier[] {
   const bySignature = new Map<string, VariantSeed[]>();
   for (const v of variants) {
+    if (v.target_value === null || v.target_value === undefined) continue;
     const key = [v.target_value, v.weightage, v.r5, v.r4, v.r3, v.r2, v.r1, v.r0, v.scoring_logic]
       .map(value => String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' '))
       .join('|');
