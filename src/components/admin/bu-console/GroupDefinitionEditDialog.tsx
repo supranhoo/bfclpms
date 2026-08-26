@@ -419,14 +419,44 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
               <Switch checked={!!orgLevel} onCheckedChange={(v) => { setOrgLevel(v); setPreview(null); }} />
             </div>
             {orgLevel && (
-              <div className="space-y-1.5">
-                <Label className="text-xs">Org-level scope</Label>
-                <Input
-                  value={orgLevelScope}
-                  onChange={(e) => { setOrgLevelScope(e.target.value); setPreview(null); }}
-                  placeholder="e.g. organization, business_unit, department"
+              <>
+                <div className="space-y-1.5 min-w-0">
+                  <Label className="text-xs">Scope</Label>
+                  <Select
+                    value={orgLevelScope || 'organization'}
+                    onValueChange={(v) => {
+                      setOrgLevelScope(v);
+                      setScopeTargetId('');
+                      setPreview(null);
+                    }}
+                  >
+                    <SelectTrigger className="h-10">
+                      <SelectValue placeholder="Select a scope" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SELECTABLE_SCOPES.map((s) => (
+                        <SelectItem key={s} value={s}>{kpiScopeLabel(s)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Who one central value reaches. Scoring and approvals are unchanged.
+                  </p>
+                </div>
+                {rowScopeNeedsTarget(orgLevelScope) && (
+                  <ScopeTargetPicker
+                    id="group-scope-target"
+                    scope={orgLevelScope}
+                    value={scopeTargetId || null}
+                    onChange={(v) => { setScopeTargetId(v ?? ''); setPreview(null); }}
+                  />
+                )}
+                <GroupDataOwnersField
+                  categoryId={categoryId}
+                  kraName={kraName}
+                  kpiName={definition?.kpi_name ?? ''}
                 />
-              </div>
+              </>
             )}
             <div className="flex items-center justify-between gap-3">
               <div>
