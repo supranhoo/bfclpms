@@ -159,6 +159,10 @@ function KpiRow({
   // Weightage spread is a legitimate per-employee number and is already shown
   // in the Weightage column, so it must not raise a "1 variant" warning.
   const hasVariance = variantCount > 1;
+  // ADR-325 — wording drift is a defect (amber, actionable); different targets
+  // are deliberate individual bars (neutral, informational).
+  const variance = classifyVariance(kpi.variants ?? []);
+
   const isLookalike = (lookalikeCount ?? 0) > 1;
   const panelId = `kpi-people-${kpi.kpi_key.replace(/[^\w-]/g, '_')}`;
 
