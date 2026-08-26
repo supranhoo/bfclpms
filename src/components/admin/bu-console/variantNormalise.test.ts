@@ -51,7 +51,7 @@ describe('pickCanonicalVariant', () => {
 });
 
 describe('matchesDefinition', () => {
-  it('ignores whitespace drift in the scoring text', () => {
+  it('ignores employee scoring text entirely', () => {
     const def = definitionOf(swapped[0]);
     expect(matchesDefinition(swapped[2], def)).toBe(true);
   });
@@ -82,10 +82,11 @@ describe('changeSetFor', () => {
     expect(changes.kpi_description).toBeNull();
   });
 
-  it('writes the target only in target mode (ADR-325)', () => {
+  it('never writes employee scoring fields (ADR-327)', () => {
     const def = { ...definitionOf(swapped[0]), target_value: '50' };
-    expect(changeSetFor(swapped[0], def, 'wording').target_value).toBeUndefined();
-    expect(changeSetFor(swapped[0], def, 'targets').target_value).toBe('50');
+    const changes = changeSetFor(swapped[0], { ...def, scoring_logic: 'different scoring test' });
+    expect(changes.target_value).toBeUndefined();
+    expect(changes.kpi_scoring_logic).toBeUndefined();
   });
 });
 
@@ -95,7 +96,7 @@ describe('buildNormalisePlan', () => {
     expect(plan.steps.map(s => s.variantKey).sort()).toEqual(['b', 'd']);
     expect(plan.alreadyAligned.sort()).toEqual(['a', 'c']);
     expect(plan.employeesAffected).toBe(3); // b(2) + d(1)
-    expect(plan.predictedVariantCount).toBe(1);
+    expect(plan.predictedVariantCount).toBe(2);
   });
 
   it('rewrites the canonical rows too when the definition is edited', () => {
@@ -161,6 +162,7 @@ describe('classifyVariance', () => {
     const c = classifyVariance(sop);
     expect(c.wordingGroups).toBe(3);
     expect(c.targetGroups).toBe(3);
+    expect(c.scoringGroups).toBe(3);
     expect(c.targets).toEqual(['5', '7', '10']);
     expect(c.hasWordingDrift).toBe(true);
     expect(c.targetsOnly).toBe(false);
@@ -178,32 +180,31 @@ describe('classifyVariance', () => {
   });
 });
 
-describe('wording mode', () => {
+describe('shared definition mode', () => {
   const def = definitionOf(sop[0]);
 
   it('never emits a target, even when the canonical target differs', () => {
-    const cs = changeSetFor(sop[2], def, 'wording');
+    const cs = changeSetFor(sop[2], def);
     expect(Object.keys(cs)).not.toContain('target_value');
     expect(cs.kpi_formula).toBe('(Number of SOPs created)');
   });
 
   it('predicts one variant per remaining target after a wording run', () => {
-    const plan = buildNormalisePlan(sop, 's1', def, 'wording');
+    const plan = buildNormalisePlan(sop, 's1', def);
     expect(plan.predictedVariantCount).toBe(3);
     expect(plan.steps.every(s => !('target_value' in s.changes))).toBe(true);
   });
 
   it('never writes weightage', () => {
-    const plan = buildNormalisePlan(sop, 's1', def, 'wording');
+    const plan = buildNormalisePlan(sop, 's1', def);
     expect(plan.steps.every(s => !('weightage' in s.changes))).toBe(true);
   });
 });
 
-describe('targets mode', () => {
-  it('equalises the target only when explicitly requested', () => {
-    const def = { ...definitionOf(sop[0]), target_value: '10' };
-    const plan = buildNormalisePlan(sop, 's1', def, 'targets');
-    expect(plan.predictedVariantCount).toBe(1);
-    expect(plan.steps.some(s => s.changes.target_value === '10')).toBe(true);
+describe('scoring protection', () => {
+  it('never writes the scoring test', () => {
+    const def = { ...definitionOf(sop[0]), scoring_logic: 'one test' };
+    const plan = buildNormalisePlan(sop, 's1', def);
+    expect(plan.steps.every(s => !('kpi_scoring_logic' in s.changes))).toBe(true);
   });
 });

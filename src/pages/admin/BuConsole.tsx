@@ -506,17 +506,6 @@ export default function BuConsole() {
         args={normalise?.args ?? null}
         variants={normalise?.variants ?? []}
         kpiLabel={normalise?.label ?? ''}
-        onBuildLadder={(tiers) => {
-          if (!normalise) return;
-          setLadderSeed({
-            target: {
-              categoryId: normalise.args.categoryId ?? null,
-              kraName: normalise.args.kraName,
-              kpiName: normalise.args.kpiName,
-            },
-            tiers,
-          });
-        }}
       />
 
       <ScoringLadderDialog

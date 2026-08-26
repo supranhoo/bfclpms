@@ -9375,3 +9375,20 @@ The per-month preview states the reason for each skipped month and a
 `N wording only` count.
 
 See POLICY §CONSOLE-MIXED-EDIT-PARTITIONING and ADR-326.
+
+## Performance Console — employee scoring profiles (ADR-327)
+
+The console now treats a KPI as two connected but independently governed layers:
+
+1. **Shared definition:** KPI title/identity, description and measurement formula. The standardisation dialog may align only these fields.
+2. **Employee scoring profile:** target, weightage, R0–R5 bands and scoring test/instructions. These values may differ for every employee and are never overwritten by shared-definition standardisation.
+
+The backend descriptive-field allowlist excludes `kpi_scoring_logic`. A paginated, console-authorised scoring-profile reader groups employees by their complete scoring signature and exposes lock/override counts without modifying historical results. Reusable scoring rules remain an optional assignment aid; they do not replace the employee-level resolved profile.
+
+**Rationale:** scoring instructions define how an employee earns a rating and therefore belong with targets and bands, not with wording. Separating the layers prevents a wording cleanup from changing an employee's scoring contract.
+
+**Use:** standardise common wording from the KPI action, then inspect or manage employee-specific scoring through the scoring workflow. Approved final scores remain immutable.
+
+### Version History
+
+- **v2.67.1 (2026-08-26):** Added ADR-327 employee scoring profiles; removed scoring tests and target flattening from shared-definition alignment; added complete scoring-signature grouping and regression tests.

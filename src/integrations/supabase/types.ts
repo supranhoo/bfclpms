@@ -18255,6 +18255,23 @@ export type Database = {
         Args: { p_changes: Json; p_kpi_id: string }
         Returns: string
       }
+      bu_console_scoring_profiles_page: {
+        Args: {
+          p_bu_ids?: string[]
+          p_category_id: string
+          p_dept_ids?: string[]
+          p_division_ids?: string[]
+          p_kpi_name: string
+          p_kra_name: string
+          p_manager_ids?: string[]
+          p_page?: number
+          p_page_size?: number
+          p_period: string
+          p_search?: string
+          p_year: number
+        }
+        Returns: Json
+      }
       bu_console_target_rules_apply: {
         Args: {
           p_bu_ids?: string[]

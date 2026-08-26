@@ -2,7 +2,7 @@
  * ADR-315 — Variance normaliser for the Performance Console.
  *
  * A console "variant" is not a different KPI: the variant key is derived from
- * four definition fields only — description, formula, scoring logic and target
+ * four legacy variant-key fields — description, formula, scoring logic and target
  * (`public.bu_console_variant_key`). When those drift (fields swapped, wording
  * differences, empty values) the same metric splits into several variants.
  *
@@ -13,25 +13,19 @@
  */
 
 /**
- * ADR-325 — variance splits into two classes.
- *
- * Wording fields are pure text: standardising them cannot move a score.
- * Scoring fields carry the individual bar and are NEVER written by a wording
- * run; equalising them is a separate, explicitly confirmed action.
+ * ADR-327 — shared definition and employee scoring are separate concepts.
+ * Only description and measurement formula are shared wording. Scoring logic,
+ * target, bands and weightage belong to the employee scoring profile and must
+ * never be emitted by this normaliser.
  */
 export const WORDING_FIELDS = [
-  'kpi_description', 'kpi_formula', 'kpi_scoring_logic',
+  'kpi_description', 'kpi_formula',
 ] as const;
 
-export const SCORING_FIELDS = ['target_value'] as const;
-
-/** Fields the normaliser is allowed to write. Nothing else is ever emitted. */
-export const VARIANT_FIELDS = [...WORDING_FIELDS, ...SCORING_FIELDS] as const;
+/** Fields the shared-definition normaliser is allowed to write. */
+export const VARIANT_FIELDS = [...WORDING_FIELDS] as const;
 
 export type VariantField = (typeof VARIANT_FIELDS)[number];
-
-/** `wording` writes text only; `targets` additionally equalises the target. */
-export type NormaliseMode = 'wording' | 'targets';
 
 export interface VariantLike {
   variant_key: string;
@@ -88,19 +82,16 @@ export function pickCanonicalVariant(variants: VariantLike[]): VariantLike | nul
 export function matchesDefinition(v: VariantLike, def: CanonicalDefinition): boolean {
   const d = definitionOf(v);
   return normText(d.description) === normText(def.description)
-    && normText(d.formula) === normText(def.formula)
-    && normText(d.scoring_logic) === normText(def.scoring_logic)
-    && normText(d.target_value) === normText(def.target_value);
+    && normText(d.formula) === normText(def.formula);
 }
 
 /**
  * Change set for one variant — only fields whose value actually differs.
- * In `wording` mode no scoring field is ever emitted, whatever the admin typed.
+ * Scoring fields are never emitted, whatever exists on the canonical variant.
  */
 export function changeSetFor(
   v: VariantLike,
   def: CanonicalDefinition,
-  mode: NormaliseMode = 'wording',
 ): Record<string, string | null> {
   const current = definitionOf(v);
   const out: Record<string, string | null> = {};
@@ -109,8 +100,6 @@ export function changeSetFor(
   };
   put('kpi_description', def.description, current.description);
   put('kpi_formula', def.formula, current.formula);
-  put('kpi_scoring_logic', def.scoring_logic, current.scoring_logic);
-  if (mode === 'targets') put('target_value', def.target_value, current.target_value);
   return out;
 }
 
@@ -119,13 +108,15 @@ export function changeSetFor(
 /* ------------------------------------------------------------------ */
 
 export interface VarianceClassification {
-  /** Distinct wording groups (description + formula + scoring text). */
+  /** Distinct shared-definition groups (description + formula). */
   wordingGroups: number;
   /** Distinct target values across the variants. */
   targetGroups: number;
   /** Every distinct target, in the order first seen. */
   targets: string[];
-  /** True when only the target differs — a deliberate bar, not drift. */
+  /** Distinct employee scoring signatures visible in the tree payload. */
+  scoringGroups: number;
+  /** True when only employee scoring differs — deliberate, not wording drift. */
   targetsOnly: boolean;
   /** True when there is text drift worth standardising. */
   hasWordingDrift: boolean;
@@ -133,20 +124,24 @@ export interface VarianceClassification {
 
 export function classifyVariance(variants: VariantLike[]): VarianceClassification {
   const wording = new Set<string>();
+  const scoring = new Set<string>();
   const targets: string[] = [];
   for (const v of variants) {
     const d = definitionOf(v);
-    wording.add([d.description, d.formula, d.scoring_logic].map(normText).join('|'));
+    wording.add([d.description, d.formula].map(normText).join('|'));
+    scoring.add([d.target_value, d.scoring_logic].map(normText).join('|'));
     const t = asText(d.target_value);
     if (!targets.includes(t)) targets.push(t);
   }
   const wordingGroups = Math.max(wording.size, variants.length ? 1 : 0);
   const targetGroups = Math.max(targets.length, variants.length ? 1 : 0);
+  const scoringGroups = Math.max(scoring.size, variants.length ? 1 : 0);
   return {
     wordingGroups,
     targetGroups,
+    scoringGroups,
     targets,
-    targetsOnly: wordingGroups === 1 && targetGroups > 1,
+    targetsOnly: wordingGroups === 1 && scoringGroups > 1,
     hasWordingDrift: wordingGroups > 1,
   };
 }
@@ -159,7 +154,6 @@ export interface NormaliseStep {
 
 export interface NormalisePlan {
   canonicalKey: string;
-  mode?: NormaliseMode;
   definition: CanonicalDefinition;
   /** Variants that need writing — the canonical one and no-ops are excluded. */
   steps: NormaliseStep[];
@@ -178,7 +172,6 @@ export function buildNormalisePlan(
   variants: VariantLike[],
   canonicalKey: string,
   definition?: CanonicalDefinition,
-  mode: NormaliseMode = 'wording',
 ): NormalisePlan {
   const canonical = variants.find(v => v.variant_key === canonicalKey) ?? pickCanonicalVariant(variants);
   const def = definition ?? (canonical ? definitionOf(canonical) : {
@@ -188,7 +181,7 @@ export function buildNormalisePlan(
   const steps: NormaliseStep[] = [];
   const alreadyAligned: string[] = [];
   for (const v of variants) {
-    const changes = changeSetFor(v, def, mode);
+    const changes = changeSetFor(v, def);
     if (Object.keys(changes).length === 0) { alreadyAligned.push(v.variant_key); continue; }
     steps.push({
       variantKey: v.variant_key,
@@ -199,16 +192,12 @@ export function buildNormalisePlan(
 
   return {
     canonicalKey: canonical?.variant_key ?? canonicalKey,
-    mode,
     definition: def,
     steps,
     alreadyAligned,
     employeesAffected: steps.reduce((n, s) => n + s.employeeCount, 0),
-    // A wording run collapses text only: what remains afterwards is one variant
-    // per distinct target, which is deliberate differentiation, not a defect.
-    predictedVariantCount: mode === 'targets'
-      ? 1
-      : Math.max(1, classifyVariance(variants).targetGroups),
+    // Shared wording alignment leaves every distinct employee scoring profile.
+    predictedVariantCount: Math.max(1, classifyVariance(variants).scoringGroups),
   };
 }
 

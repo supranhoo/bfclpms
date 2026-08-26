@@ -95,8 +95,9 @@ describe('cascade targets', () => {
 });
 
 describe('descriptive classification', () => {
-  it('treats formula and scoring-logic wording as text-only (ADR-323 parity)', () => {
-    expect(isDescriptiveOnly(['kpi_formula', 'kpi_scoring_logic'])).toBe(true);
+  it('protects scoring logic as employee scoring data (ADR-327)', () => {
+    expect(isDescriptiveOnly(['kpi_formula'])).toBe(true);
+    expect(isDescriptiveOnly(['kpi_formula', 'kpi_scoring_logic'])).toBe(false);
     expect(isDescriptiveOnly(['kpi_formula', 'target_value'])).toBe(false);
     expect(isDescriptiveOnly([])).toBe(false);
   });
@@ -110,17 +111,17 @@ describe('describeTier', () => {
   });
 });
 
-describe('seedTiersFromVariants (ADR-325)', () => {
+describe('seedTiersFromVariants (ADR-327)', () => {
   const variants = [
     { variant_key: 'a', target_value: 5, employee_count: 3, formula: 'f5', scoring_logic: 's5' },
     { variant_key: 'b', target_value: 10, employee_count: 1, employee_ids: ['e9'], formula: 'f10', scoring_logic: 's10' },
     { variant_key: 'c', target_value: null, employee_count: 2 },
   ];
 
-  it('builds one tier per distinct target, highest bar first', () => {
+  it('builds one tier per full scoring profile, highest target first', () => {
     const tiers = seedTiersFromVariants(variants);
     expect(tiers.map((t) => t.target_value)).toEqual([10, 5]);
-    expect(tiers.map((t) => t.tier_label)).toEqual(['Target 10', 'Target 5']);
+    expect(tiers.map((t) => t.tier_label)).toEqual(['Scoring profile 1', 'Scoring profile 2']);
     expect(tiers[0].priority).toBeGreaterThan(tiers[1].priority);
   });
 
