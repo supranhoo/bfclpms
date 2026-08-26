@@ -9355,3 +9355,23 @@ See POLICY §KPI-SCORING-LADDER and ADR-324.
   `consoleLayout.test.tsx`.
 
 See POLICY §CONSOLE-VARIANT-NORMALISE and ADR-325.
+
+## Performance Console — mixed group edits (ADR-326)
+
+A group definition edit is applied in two slices:
+
+- **Wording** (title, description, criteria, source of data, formula, scoring
+  logic, UOM label) reaches every matching row, including rows with an approved
+  final score or already in review.
+- **Protected** (target, weightage, rating bands, UOM type, threshold, options,
+  frequency/cycle, scope) is withheld on those locked rows. They are reported as
+  *partially applied* with the withheld fields named, not silently skipped.
+
+The editor no longer emits scope or scope-target changes for a KPI that is not
+organisation-level and was not organisation-level before, so a wording correction
+is never dragged onto the protected path by a stale value nobody typed.
+
+The per-month preview states the reason for each skipped month and a
+`N wording only` count.
+
+See POLICY §CONSOLE-MIXED-EDIT-PARTITIONING and ADR-326.
