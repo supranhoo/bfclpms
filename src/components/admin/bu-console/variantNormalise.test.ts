@@ -82,9 +82,10 @@ describe('changeSetFor', () => {
     expect(changes.kpi_description).toBeNull();
   });
 
-  it('includes the target when it differs', () => {
+  it('writes the target only in target mode (ADR-325)', () => {
     const def = { ...definitionOf(swapped[0]), target_value: '50' };
-    expect(changeSetFor(swapped[0], def).target_value).toBe('50');
+    expect(changeSetFor(swapped[0], def, 'wording').target_value).toBeUndefined();
+    expect(changeSetFor(swapped[0], def, 'targets').target_value).toBe('50');
   });
 });
 
