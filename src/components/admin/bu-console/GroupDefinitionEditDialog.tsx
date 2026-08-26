@@ -209,6 +209,9 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     ...Object.fromEntries(KPI_ROW_TARGET_COLUMNS.map((c) => [c, definition?.[c] ?? null])),
   }), [definition, args?.categoryId, args?.kraName]);
 
+  /** ADR-328 — only a value-based KPI owns a unit and the R0–R5 ladder. */
+  const numericType = scoring.uom_type === 'numeric';
+
   const changes: ChangeSet = useMemo(() => {
     // ADR-326 — scope is inert for a KPI that is not organisation-level and was
     // not organisation-level before. Emitting a "clear the scope" change there is
