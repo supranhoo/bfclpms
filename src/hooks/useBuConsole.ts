@@ -1010,9 +1010,12 @@ export const GROUP_EDIT_SKIP_LABELS: Record<string, string> = {
   individual_override: 'Individually overridden — tick "reset overrides" to include',
   cycle_anchor_conflict: 'The new cycle overlaps an existing cycle for this KPI',
   scoring_model_locked: 'Scoring model is group-owned — edit it for all employees (ADR-282)',
+  kra_set_admin_only: 'Still in KRA Set — only an admin can edit it at this stage',
+  partially_applied: 'Wording updated; scoring fields withheld on this protected row (ADR-326)',
   no_change: 'Nothing changed',
   not_found: 'This KPI row no longer exists',
 };
+
 
 /** ADR-275 — one row per employee whose new cycle would clash with an existing one. */
 export interface CycleAnchorConflictRow {
