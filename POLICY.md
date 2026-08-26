@@ -7034,3 +7034,20 @@ people.
    directly — only the ladder RPCs (§CONSOLE-WRITE-TIERS).
 
 - **v2.66.323 (2026-08-26):** §KPI-SCORING-LADDER added (ADR-324).
+
+## §CONSOLE-MIXED-EDIT-PARTITIONING — one edit, two slices (ADR-326)
+
+1. A group definition edit is partitioned by field class. Wording fields are
+   applied to every matching row, including rows locked by an approved final
+   score or already in review.
+2. Protected fields (target, weightage, rating bands, UOM type, threshold,
+   options, frequency/cycle, scope) are withheld on locked rows. Those rows are
+   reported as **partially applied**, never as a silent skip.
+3. A row is skipped outright only when nothing at all can be written to it.
+4. **No phantom changes.** A field the admin did not touch is never emitted. In
+   particular, scope and scope-target columns are excluded from the change set
+   when the KPI is not organisation-level and was not organisation-level before.
+5. The preview must state the reason per month and name the withheld fields. A
+   locked row can never have its score moved by this path.
+
+- **v2.66.324 (2026-08-26):** §CONSOLE-MIXED-EDIT-PARTITIONING added (ADR-326).
