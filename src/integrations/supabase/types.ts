@@ -18049,6 +18049,10 @@ export type Database = {
         }
         Returns: Json
       }
+      bu_console_scope_target_column: {
+        Args: { p_scope: string }
+        Returns: string
+      }
       bu_console_scoring_model_lock: {
         Args: { p_changes: Json; p_kpi_id: string }
         Returns: string
