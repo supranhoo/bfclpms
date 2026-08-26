@@ -37,9 +37,10 @@ import {
   useGroupEditSpanPreview, useGroupEditSpanCommit, type GroupEditSpanResult,
 } from '@/hooks/useBuConsole';
 import {
-  resolveEditSpan, spanModesAvailable, describeSpan, aggregateSpan, periodLabel, toTarget,
+  resolveEditSpan, spanModesAvailable, spanSkipsPastMonths, describeSpan, aggregateSpan, periodLabel, toTarget,
   EDIT_SPAN_LABELS, MAX_ROLLOUT_PERIODS, type EditSpanMode,
 } from './groupEditSpan';
+import { isDescriptiveOnly } from './editFieldClass';
 import {
   diffChanges, hasChanges, weightageDeviations, uniqueByEmployee,
   isMultiMonthFrequency, validateCycleChange, type ChangeSet,
@@ -93,10 +94,12 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const [sourceOfData, setSourceOfData] = useState('');
   const [allowLocked, setAllowLocked] = useState(false);
   const [resetOverrides, setResetOverrides] = useState(false);
+  const [textOnly, setTextOnly] = useState(false);
   const [spanMode, setSpanMode] = useState<EditSpanMode>('this');
   const [spanCount, setSpanCount] = useState(3);
   const [spanPreview, setSpanPreview] = useState<GroupEditSpanResult | null>(null);
   const [confirmText, setConfirmText] = useState('');
+
 
   const previewMut = useGroupEditSpanPreview();
   const commitMut = useGroupEditSpanCommit();
@@ -113,6 +116,12 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     () => (args ? resolveEditSpan(toTarget(args.period, args.year), spanMode, spanCount) : []),
     [args?.period, args?.year, spanMode, spanCount],
   );
+
+  const pastAnchorSpan = useMemo(
+    () => (args ? spanSkipsPastMonths(toTarget(args.period, args.year), spanMode) : false),
+    [args?.period, args?.year, spanMode],
+  );
+
 
   /** Detail lists (weightage, skips, clashes) always describe the selected month. */
   const preview: GroupEditResult | null = spanPreview?.entries[0]?.result ?? null;
@@ -143,6 +152,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     setPreview(null);
     setConfirmText('');
     setAllowLocked(false);
+    setTextOnly(false);
     setResetOverrides(false);
     setSpanMode('this');
     setSpanCount(3);
@@ -209,6 +219,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   ]);
 
   const changedFields = Object.keys(changes);
+  const descriptiveOnly = isDescriptiveOnly(changes);
   const affected = spanPreview ? spanTotals.willWrite : 0;
   const structural = changedFields.some((f) => STRUCTURAL_FIELDS.includes(f));
   const cycleMove = changedFields.some((f) => CYCLE_FIELDS.includes(f));
@@ -243,7 +254,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const runPreview = () => {
     if (!args || !hasChanges(changes) || cycleError) return;
     previewMut.mutate(
-      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides },
+      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly && textOnly },
       { onSuccess: (res) => { setPreview(res); setConfirmText(''); } },
     );
   };
@@ -251,7 +262,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const runCommit = () => {
     if (!args || !spanPreview) return;
     commitMut.mutate(
-      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides },
+      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly && textOnly },
       { onSuccess: () => onOpenChange(false) },
     );
   };
@@ -451,6 +462,18 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
               </div>
               <Switch checked={allowLocked} onCheckedChange={(v) => { setAllowLocked(v); setPreview(null); }} />
             </div>
+            {/* ADR-321 — wording may be standardised on locked rows; scoring data never is. */}
+            {descriptiveOnly && (
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label className="text-xs font-medium">Standardise text on locked and in-review rows</Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    You are changing wording only. Scores, targets, weightages, ratings and statuses stay untouched.
+                  </p>
+                </div>
+                <Switch checked={textOnly} onCheckedChange={(v) => { setTextOnly(v); setPreview(null); }} />
+              </div>
+            )}
             <div className="flex items-center justify-between gap-3">
               <div>
                 <Label className="text-xs font-medium">Reset individual overrides</Label>
@@ -461,6 +484,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
               <Switch checked={resetOverrides} onCheckedChange={(v) => { setResetOverrides(v); setPreview(null); }} />
             </div>
           </div>
+
 
           <div className="text-xs text-muted-foreground">
             {changedFields.length === 0
@@ -507,10 +531,11 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
               <Badge variant="secondary">{describeSpan(targets)}</Badge>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              {spanModes.length === 1
-                ? 'The selected month is in the past, so this edit can only be applied to that month.'
+              {pastAnchorSpan
+                ? `The selected month is in the past: it is written because you picked it, and the rollout then resumes from the current month. Months in between are never touched (max ${MAX_ROLLOUT_PERIODS} periods).`
                 : `Past months are never touched. Each month is previewed and written separately, and each one can be undone on its own (max ${MAX_ROLLOUT_PERIODS} periods).`}
             </p>
+
           </div>
 
           {spanPreview && (

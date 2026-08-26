@@ -1073,6 +1073,8 @@ export interface GroupEditArgs {
   changes: Record<string, string | null>;
   allowLocked: boolean;
   resetOverrides: boolean;
+  /** ADR-321 — descriptive-only edit allowed on locked / in-review rows. */
+  textOnly?: boolean;
   dryRun: boolean;
 }
 
@@ -1093,7 +1095,9 @@ async function callGroupEdit(a: GroupEditArgs): Promise<GroupEditResult> {
     p_allow_locked: a.allowLocked,
     p_reset_overrides: a.resetOverrides,
     p_dry_run: a.dryRun,
+    p_text_only: a.textOnly ?? false,
   });
+
   if (error) throw error;
   return (data ?? { authorized: false, dry_run: a.dryRun, run_id: null }) as unknown as GroupEditResult;
 }
