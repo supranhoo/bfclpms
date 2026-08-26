@@ -50,6 +50,17 @@ import { buildCycleScopeLabel } from '@/lib/frequencyUtils';
 import {
   needsTypedConfirmation, confirmationSatisfied, GROUP_ACTION_CONFIRM_WORD,
 } from '@/lib/review/groupPreviewSummary';
+import {
+  kpiScopeLabel, rowScopeNeedsTarget,
+  KPI_ROW_SCOPE_TARGET_COLUMNS, KPI_ROW_TARGET_COLUMNS,
+} from '@/lib/review/kpiScope';
+import { ScopeTargetPicker } from '@/components/admin/kpi-scope/ScopeTargetPicker';
+import { GroupDataOwnersField } from './GroupDataOwnersField';
+
+/** ADR-322 — scopes a KPI row can be moved to today (planned ones stay out). */
+const SELECTABLE_SCOPES = [
+  'organization', 'department', 'employee', 'business_unit', 'location',
+] as const;
 
 interface Props {
   args: KpiDetailArgs | null;
