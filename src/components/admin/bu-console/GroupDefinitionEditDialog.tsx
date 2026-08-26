@@ -223,8 +223,11 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
       threshold_mode: scoring.uom_type === 'numeric' ? scoring.threshold_mode : null,
       qualitative_options:
         scoring.uom_type === 'tiered' || scoring.uom_type === 'binary' ? scoring.qualitative_options : null,
-      r5: scoring.r5, r4: scoring.r4, r3: scoring.r3, r2: scoring.r2, r1: scoring.r1, r0: scoring.r0,
-      uom,
+      // ADR-328 — a Yes/No or tiered KPI is scored from its options: the numeric
+      // ladder and the unit are inert there and must not travel in the run.
+      ...(numericType
+        ? { r5: scoring.r5, r4: scoring.r4, r3: scoring.r3, r2: scoring.r2, r1: scoring.r1, r0: scoring.r0, uom }
+        : { r5: '', r4: '', r3: '', r2: '', r1: '', r0: '', uom: '' }),
       target_value: target,
       weightage,
       category_id: categoryId,
