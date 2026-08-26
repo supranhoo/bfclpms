@@ -212,6 +212,15 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   /** ADR-328 — only a value-based KPI owns a unit and the R0–R5 ladder. */
   const numericType = scoring.uom_type === 'numeric';
 
+  /** Standard units, plus any legacy value already stored so it is never lost. */
+  const uomOptions = useMemo(() => {
+    const base = UOM_OPTIONS.map((o) => ({ value: o.value as string, label: o.label as string }));
+    const current = (definition?.uom ?? '').trim();
+    return current && !base.some((o) => o.value === current)
+      ? [{ value: current, label: `${current} (current)` }, ...base]
+      : base;
+  }, [definition?.uom]);
+
   const changes: ChangeSet = useMemo(() => {
     // ADR-326 — scope is inert for a KPI that is not organisation-level and was
     // not organisation-level before. Emitting a "clear the scope" change there is
