@@ -169,7 +169,18 @@ export function VariantNormaliseDialog({
     (e.result?.skip_summary ?? []).map(s => ({ ...s, variantKey: e.variantKey })),
   );
 
+  /** Readable label per variant key — the preview table must not show raw hashes. */
+  const variantLabels = useMemo(() => {
+    const map = new Map<string, string>();
+    variants.forEach((v, i) => {
+      const target = v.target_value ?? null;
+      map.set(v.variant_key, `Variant ${i + 1}${target !== null && target !== undefined ? ` · target ${target}` : ''}`);
+    });
+    return map;
+  }, [variants]);
+
   const targetSummary = variance.targets.map(t => t || '—').join(' · ');
+
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!busy) onOpenChange(v); }}>
@@ -453,7 +464,10 @@ export function VariantNormaliseDialog({
                     {preview.entries.map((e, i) => (
                       <TableRow key={`${e.variantKey}-${i}`}>
                         <TableCell className="whitespace-nowrap">{periodLabel(e.target)}</TableCell>
-                        <TableCell className="font-mono text-[11px]">{e.variantKey.slice(0, 8)}</TableCell>
+                        <TableCell className="text-xs">
+                          {variantLabels.get(e.variantKey) ?? 'Variant'}
+                        </TableCell>
+
                         <TableCell className="text-right tabular-nums">
                           {e.error ? '—' : (e.result?.will_write ?? 0)}
                         </TableCell>
