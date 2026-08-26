@@ -1,0 +1,4 @@
+REVOKE ALL ON FUNCTION public.bu_console_group_edit_definition(uuid, text, text, text, integer, jsonb, uuid[], uuid[], uuid[], uuid[], text, text, boolean, boolean, boolean, boolean) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.bu_console_group_edit_definition(uuid, text, text, text, integer, jsonb, uuid[], uuid[], uuid[], uuid[], text, text, boolean, boolean, boolean, boolean) FROM anon;
+GRANT EXECUTE ON FUNCTION public.bu_console_group_edit_definition(uuid, text, text, text, integer, jsonb, uuid[], uuid[], uuid[], uuid[], text, text, boolean, boolean, boolean, boolean) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.bu_console_group_edit_definition(uuid, text, text, text, integer, jsonb, uuid[], uuid[], uuid[], uuid[], text, text, boolean, boolean, boolean, boolean) TO service_role;
