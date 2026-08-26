@@ -135,3 +135,42 @@ describe('ADR-274a direction + threshold mode', () => {
     expect(Object.keys(changes).sort()).toEqual(['category_id', 'criteria', 'source_of_data']);
   });
 });
+
+describe('ADR-326 — no phantom scope changes', () => {
+  it('treats scope as inert when the KPI is not and was not org-level', () => {
+    expect(isScopeInert(false, false)).toBe(true);
+    expect(isScopeInert(false, null)).toBe(true);
+    expect(isScopeInert(false, undefined)).toBe(true);
+  });
+
+  it('keeps scope live when org-level is on, or is being turned off', () => {
+    expect(isScopeInert(true, false)).toBe(false);
+    expect(isScopeInert(false, true)).toBe(false);
+    expect(isScopeInert(null, false)).toBe(false);
+  });
+
+  it('a wording edit stays descriptive-only when the stale scope is not emitted', () => {
+    const original = {
+      kpi_description: 'old text',
+      is_org_level: false,
+      org_level_scope: 'organization',
+    };
+    // scope omitted, per isScopeInert
+    const next = { kpi_description: 'new text' };
+    const changes = diffChanges(original, next, ['kpi_description', 'org_level_scope']);
+    expect(Object.keys(changes)).toEqual(['kpi_description']);
+    expect(isDescriptiveOnly(changes)).toBe(true);
+  });
+
+  it('a stale scope clear would have poisoned the same edit', () => {
+    const original = {
+      kpi_description: 'old text',
+      is_org_level: false,
+      org_level_scope: 'organization',
+    };
+    const next = { kpi_description: 'new text', org_level_scope: '' };
+    const changes = diffChanges(original, next, ['kpi_description', 'org_level_scope']);
+    expect(Object.keys(changes).sort()).toEqual(['kpi_description', 'org_level_scope']);
+    expect(isDescriptiveOnly(changes)).toBe(false);
+  });
+});
