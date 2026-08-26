@@ -967,6 +967,8 @@ export const GROUP_EDIT_FIELDS = [
   // ADR-275 — cycle anchor and operational flags.
   'frequency_cycle_start', 'day_count_type', 'is_org_level', 'org_level_scope',
   'require_resubmit_reason', 'is_frequency_locked',
+  // ADR-322 — a grouped scope owns exactly one target id.
+  'business_unit_id', 'location_id', 'division_id', 'pms_grade_id', 'level_id',
 ] as const;
 
 export type GroupEditField = (typeof GROUP_EDIT_FIELDS)[number];
