@@ -464,7 +464,10 @@ export function VariantNormaliseDialog({
                     {preview.entries.map((e, i) => (
                       <TableRow key={`${e.variantKey}-${i}`}>
                         <TableCell className="whitespace-nowrap">{periodLabel(e.target)}</TableCell>
-                        <TableCell className="font-mono text-[11px]">{e.variantKey.slice(0, 8)}</TableCell>
+                        <TableCell className="text-xs">
+                          {variantLabels.get(e.variantKey) ?? 'Variant'}
+                        </TableCell>
+
                         <TableCell className="text-right tabular-nums">
                           {e.error ? '—' : (e.result?.will_write ?? 0)}
                         </TableCell>
