@@ -202,6 +202,10 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   }), [definition, args?.categoryId, args?.kraName]);
 
   const changes: ChangeSet = useMemo(() => {
+    // ADR-326 — scope is inert for a KPI that is not organisation-level and was
+    // not organisation-level before. Emitting a "clear the scope" change there is
+    // a phantom edit that would drop the whole run onto the protected path.
+    const scopeInert = orgLevel === false && (original.is_org_level ?? false) === false;
     const next: Record<string, unknown> = {
       kpi_title: text.kpi_title,
       kpi_description: text.kpi_description,
@@ -222,27 +226,35 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
       frequency_cycle_start: isMultiMonthFrequency(frequency) ? cycleStart : '',
       day_count_type: frequency === 'Daily' ? dayCountType : original.day_count_type ?? '',
       is_org_level: orgLevel === null ? '' : String(orgLevel),
-      org_level_scope: orgLevel ? orgLevelScope : '',
       require_resubmit_reason: requireResubmitReason === null ? '' : String(requireResubmitReason),
       is_frequency_locked: frequencyLocked === null ? '' : String(frequencyLocked),
       criteria,
       source_of_data: sourceOfData,
-      // ADR-322 — exactly one target travels with the scope; the others clear.
-      ...Object.fromEntries(KPI_ROW_TARGET_COLUMNS.map((c) => [
-        c,
-        orgLevel && KPI_ROW_SCOPE_TARGET_COLUMNS[
-          orgLevelScope as keyof typeof KPI_ROW_SCOPE_TARGET_COLUMNS
-        ] === c
-          ? scopeTargetId
-          : '',
-      ])),
     };
+
+    if (!scopeInert) {
+      next.org_level_scope = orgLevel ? orgLevelScope : '';
+      // ADR-322 — exactly one target travels with the scope; the others clear.
+      Object.assign(
+        next,
+        Object.fromEntries(KPI_ROW_TARGET_COLUMNS.map((c) => [
+          c,
+          orgLevel && KPI_ROW_SCOPE_TARGET_COLUMNS[
+            orgLevelScope as keyof typeof KPI_ROW_SCOPE_TARGET_COLUMNS
+          ] === c
+            ? scopeTargetId
+            : '',
+        ])),
+      );
+    }
+
     return diffChanges(original, next, GROUP_EDIT_FIELDS as unknown as string[]);
   }, [
     text, scoring, uom, target, weightage, categoryId, kraName, frequency, cycleStart,
     dayCountType, orgLevel, orgLevelScope, scopeTargetId, requireResubmitReason, frequencyLocked,
     criteria, sourceOfData, original,
   ]);
+
 
   const changedFields = Object.keys(changes);
   const descriptiveOnly = isDescriptiveOnly(changes);
