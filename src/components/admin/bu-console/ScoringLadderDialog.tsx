@@ -41,12 +41,17 @@ interface Props {
   scope: BuConsoleScope | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * ADR-325 — tiers pre-built from existing definition variants. Used only when
+   * the KPI has no saved ladder yet; the admin still has to save them.
+   */
+  seedTiers?: LadderTier[] | null;
 }
 
 const num = (v: string): number | null => (v.trim() === '' ? null : Number(v));
 const str = (v: number | null | undefined) => (v === null || v === undefined ? '' : String(v));
 
-export function ScoringLadderDialog({ target, scope, open, onOpenChange }: Props) {
+export function ScoringLadderDialog({ target, scope, open, onOpenChange, seedTiers }: Props) {
   const { isAdmin } = useBuConsoleCapability();
   const { data, isLoading } = useKpiLadder(open ? target : null, scope?.period ?? '', scope?.year ?? 0);
   const save = useSaveKpiLadder();
@@ -62,8 +67,9 @@ export function ScoringLadderDialog({ target, scope, open, onOpenChange }: Props
   useEffect(() => {
     if (!data) return;
     setConfig(data.config ?? DEFAULT_LADDER_CONFIG);
-    setTiers(sortTiers(data.tiers ?? []));
-  }, [data]);
+    const saved = data.tiers ?? [];
+    setTiers(sortTiers(saved.length === 0 && seedTiers?.length ? seedTiers : saved));
+  }, [data, seedTiers]);
 
   const statsByLabel = useMemo(() => {
     const m = new Map<string, number>();
