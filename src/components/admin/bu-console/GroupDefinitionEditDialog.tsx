@@ -106,7 +106,6 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const [sourceOfData, setSourceOfData] = useState('');
   const [allowLocked, setAllowLocked] = useState(false);
   const [resetOverrides, setResetOverrides] = useState(false);
-  const [textOnly, setTextOnly] = useState(false);
   const [spanMode, setSpanMode] = useState<EditSpanMode>('this');
   const [spanCount, setSpanCount] = useState(3);
   const [spanPreview, setSpanPreview] = useState<GroupEditSpanResult | null>(null);
@@ -169,7 +168,6 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     setPreview(null);
     setConfirmText('');
     setAllowLocked(false);
-    setTextOnly(false);
     setResetOverrides(false);
     setSpanMode('this');
     setSpanCount(3);
@@ -286,7 +284,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const runPreview = () => {
     if (!args || !hasChanges(changes) || cycleError) return;
     previewMut.mutate(
-      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly && textOnly },
+      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly },
       { onSuccess: (res) => { setPreview(res); setConfirmText(''); } },
     );
   };
@@ -294,7 +292,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const runCommit = () => {
     if (!args || !spanPreview) return;
     commitMut.mutate(
-      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly && textOnly },
+      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly },
       { onSuccess: () => onOpenChange(false) },
     );
   };
@@ -529,17 +527,16 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
               </div>
               <Switch checked={allowLocked} onCheckedChange={(v) => { setAllowLocked(v); setPreview(null); }} />
             </div>
-            {/* ADR-321 — wording may be standardised on locked rows; scoring data never is. */}
+            {/* ADR-323 — descriptive-only standardisation is derived automatically. */}
             {descriptiveOnly && (
-              <div className="flex items-center justify-between gap-3">
+              <Alert>
                 <div>
-                  <Label className="text-xs font-medium">Standardise text on locked and in-review rows</Label>
-                  <p className="text-[11px] text-muted-foreground">
-                    You are changing wording only. Scores, targets, weightages, ratings and statuses stay untouched.
-                  </p>
+                  <AlertDescription>
+                    <strong>Definition text only.</strong> Matching rows at every review stage will update automatically;
+                    scores, targets, weightages, ratings and workflow statuses stay unchanged.
+                  </AlertDescription>
                 </div>
-                <Switch checked={textOnly} onCheckedChange={(v) => { setTextOnly(v); setPreview(null); }} />
-              </div>
+              </Alert>
             )}
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -635,9 +632,11 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
                           <TableCell className="text-right">
                             {e.error
                               ? <span className="text-destructive">{e.error}</span>
-                              : (e.result?.will_write ?? 0) === 0
-                                ? <span className="text-muted-foreground">no matching rows</span>
-                                : e.result?.will_write}
+                              : (e.result?.will_write ?? 0) > 0
+                                ? `${e.result?.will_write} will update`
+                                : (e.result?.will_skip ?? 0) > 0
+                                  ? <span className="text-muted-foreground">protected rows skipped</span>
+                                  : <span className="text-muted-foreground">no KPI assignments</span>}
                           </TableCell>
                           <TableCell className="text-right">{e.result?.will_skip ?? 0}</TableCell>
                         </TableRow>

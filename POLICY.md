@@ -6643,12 +6643,13 @@ A Performance Console group definition edit may be applied to the selected month
 
 §88 immutability protects **scoring data**, not spelling. A group definition edit whose change set consists entirely of descriptive fields — KPI title, description, criteria, source of data, formula text, scoring-logic text, unit of measure — may be applied to rows locked by an approved final score or already in review, subject to:
 
-1. The admin opts in explicitly per edit ("Standardise text on locked and in-review rows"). The option is not offered when the change set contains any scoring or structural field.
-2. The server is the authority: `bu_console_group_edit_definition` re-derives the classification from the change set against `public.bu_console_descriptive_fields()` and refuses the request if a single non-descriptive field is present. The client cannot widen the set.
+1. **Automatic field-aware processing (ADR-323).** The server derives the edit class from the actual change set. A descriptive-only admin edit automatically reaches matching locked and in-review rows; no separate bypass switch or client assertion is required.
+2. The server is the authority: `bu_console_group_edit_definition` classifies the change set against `public.bu_console_descriptive_fields()`. If a single non-descriptive field is present, the entire edit follows normal scoring/workflow locks; the client cannot widen the set.
 3. The action is admin-only.
 4. Scores, their inputs (weightage, target, frequency and cycle anchor, rating bands, threshold mode), KRA/category placement and workflow statuses are never written by this path.
-5. Individually overridden fields and cycle-anchor conflicts continue to be skipped on their own terms.
-6. The edit run records `text_only`, and every KPI audit entry carries the flag; the run remains individually undoable.
+5. Formula and Scoring Logic columns are explanatory definition text; executable scoring truth remains the structured target, KPI/UOM type, threshold mode, qualitative options, R0–R5 bands, weightage, frequency/cycle and day-count controls.
+6. Descriptive group standardisation is canonical for the selected group and is not silently removed by individual descriptive override markers. Protected-field overrides and cycle-anchor conflicts continue to be respected.
+7. The edit run records the server-derived class, and every KPI audit entry carries it; the run remains individually undoable.
 
 
 

@@ -1062,6 +1062,8 @@ export interface GroupEditResult {
   anchor_conflicts?: CycleAnchorConflictRow[];
   preview?: GroupEditPreviewRow[];
   skipped_details?: GroupWriteSkipRow[];
+  /** ADR-323 — server-derived from the actual fields, never trusted from the client. */
+  edit_class?: 'none' | 'descriptive' | 'protected';
 }
 
 export interface GroupEditArgs {
@@ -1080,7 +1082,7 @@ export interface GroupEditArgs {
   changes: Record<string, string | null>;
   allowLocked: boolean;
   resetOverrides: boolean;
-  /** ADR-321 — descriptive-only edit allowed on locked / in-review rows. */
+  /** Backward-compatible hint; ADR-323 server derives the class from `changes`. */
   textOnly?: boolean;
   dryRun: boolean;
 }
