@@ -7051,3 +7051,17 @@ people.
    locked row can never have its score moved by this path.
 
 - **v2.66.324 (2026-08-26):** §CONSOLE-MIXED-EDIT-PARTITIONING added (ADR-326).
+
+## §CONSOLE-EMPLOYEE-SCORING-PROFILE — shared KPI identity, individual scoring contract (ADR-327)
+
+1. A KPI's description and measurement formula are shared definition fields.
+2. Target, weightage, R0–R5 bands and `kpi_scoring_logic` are employee scoring-profile fields. Any of them may differ by employee.
+3. Shared-definition standardisation MUST NOT write, clear, equalise or derive any employee scoring-profile field.
+4. A scoring profile is identified by the complete scoring signature, not target alone. Equal targets with different bands, weightages or scoring tests are distinct profiles.
+5. Reusable scoring rules may resolve profiles for groups or individuals, but the resolved employee profile remains authoritative and auditable.
+6. Changes to protected or historically approved scoring profiles remain subject to existing immutability, preview, audit and effective-period controls.
+7. Profile lists must be server-paged, restricted to console-authorised users and exclude inactive employees.
+
+### Version History
+
+- **v2.67.1 (2026-08-26):** §CONSOLE-EMPLOYEE-SCORING-PROFILE added (ADR-327); scoring tests reclassified from shared wording to employee scoring data.
