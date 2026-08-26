@@ -50,6 +50,17 @@ import { buildCycleScopeLabel } from '@/lib/frequencyUtils';
 import {
   needsTypedConfirmation, confirmationSatisfied, GROUP_ACTION_CONFIRM_WORD,
 } from '@/lib/review/groupPreviewSummary';
+import {
+  kpiScopeLabel, rowScopeNeedsTarget,
+  KPI_ROW_SCOPE_TARGET_COLUMNS, KPI_ROW_TARGET_COLUMNS,
+} from '@/lib/review/kpiScope';
+import { ScopeTargetPicker } from '@/components/admin/kpi-scope/ScopeTargetPicker';
+import { GroupDataOwnersField } from './GroupDataOwnersField';
+
+/** ADR-322 — scopes a KPI row can be moved to today (planned ones stay out). */
+const SELECTABLE_SCOPES = [
+  'organization', 'department', 'employee', 'business_unit', 'location',
+] as const;
 
 interface Props {
   args: KpiDetailArgs | null;
@@ -88,6 +99,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const [dayCountType, setDayCountType] = useState('');
   const [orgLevel, setOrgLevel] = useState<boolean | null>(null);
   const [orgLevelScope, setOrgLevelScope] = useState('');
+  const [scopeTargetId, setScopeTargetId] = useState('');
   const [requireResubmitReason, setRequireResubmitReason] = useState<boolean | null>(null);
   const [frequencyLocked, setFrequencyLocked] = useState<boolean | null>(null);
   const [criteria, setCriteria] = useState('');
@@ -145,6 +157,11 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     setDayCountType(definition?.day_count_type ?? '');
     setOrgLevel(definition?.is_org_level ?? false);
     setOrgLevelScope(definition?.org_level_scope ?? '');
+    setScopeTargetId(
+      (definition?.[KPI_ROW_SCOPE_TARGET_COLUMNS[
+        (definition?.org_level_scope ?? 'organization') as keyof typeof KPI_ROW_SCOPE_TARGET_COLUMNS
+      ] ?? ''] as string) ?? '',
+    );
     setRequireResubmitReason(definition?.require_resubmit_reason ?? false);
     setFrequencyLocked(definition?.is_frequency_locked ?? false);
     setCriteria(definition?.criteria ?? '');
@@ -182,6 +199,8 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     is_frequency_locked: definition?.is_frequency_locked ?? false,
     criteria: definition?.criteria ?? null,
     source_of_data: definition?.source_of_data ?? null,
+    // ADR-322 — the grouped scope's target id.
+    ...Object.fromEntries(KPI_ROW_TARGET_COLUMNS.map((c) => [c, definition?.[c] ?? null])),
   }), [definition, args?.categoryId, args?.kraName]);
 
   const changes: ChangeSet = useMemo(() => {
@@ -210,11 +229,20 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
       is_frequency_locked: frequencyLocked === null ? '' : String(frequencyLocked),
       criteria,
       source_of_data: sourceOfData,
+      // ADR-322 — exactly one target travels with the scope; the others clear.
+      ...Object.fromEntries(KPI_ROW_TARGET_COLUMNS.map((c) => [
+        c,
+        orgLevel && KPI_ROW_SCOPE_TARGET_COLUMNS[
+          orgLevelScope as keyof typeof KPI_ROW_SCOPE_TARGET_COLUMNS
+        ] === c
+          ? scopeTargetId
+          : '',
+      ])),
     };
     return diffChanges(original, next, GROUP_EDIT_FIELDS as unknown as string[]);
   }, [
     text, scoring, uom, target, weightage, categoryId, kraName, frequency, cycleStart,
-    dayCountType, orgLevel, orgLevelScope, requireResubmitReason, frequencyLocked,
+    dayCountType, orgLevel, orgLevelScope, scopeTargetId, requireResubmitReason, frequencyLocked,
     criteria, sourceOfData, original,
   ]);
 
@@ -229,7 +257,11 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     : confirmationSatisfied(preview, confirmText);
   const weightRows = uniqueByEmployee(preview?.weightage_impact);
   const deviations = weightageDeviations(weightRows);
-  const cycleError = validateCycleChange(changes);
+  // ADR-322 — a grouped scope cannot be saved without naming its target.
+  const scopeError = orgLevel && rowScopeNeedsTarget(orgLevelScope) && !scopeTargetId
+    ? `Choose which ${kpiScopeLabel(orgLevelScope).toLowerCase()} this KPI applies to.`
+    : null;
+  const cycleError = validateCycleChange(changes) || scopeError;
   const conflicts = preview?.anchor_conflicts ?? [];
 
   const cycleOptions = useMemo(() => {
@@ -419,14 +451,49 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
               <Switch checked={!!orgLevel} onCheckedChange={(v) => { setOrgLevel(v); setPreview(null); }} />
             </div>
             {orgLevel && (
-              <div className="space-y-1.5">
-                <Label className="text-xs">Org-level scope</Label>
-                <Input
-                  value={orgLevelScope}
-                  onChange={(e) => { setOrgLevelScope(e.target.value); setPreview(null); }}
-                  placeholder="e.g. organization, business_unit, department"
+              <>
+                <div className="space-y-1.5 min-w-0">
+                  <Label className="text-xs">Scope</Label>
+                  <Select
+                    value={orgLevelScope || 'organization'}
+                    onValueChange={(v) => {
+                      setOrgLevelScope(v);
+                      setScopeTargetId('');
+                      setPreview(null);
+                    }}
+                  >
+                    <SelectTrigger className="h-10">
+                      <SelectValue placeholder="Select a scope" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SELECTABLE_SCOPES.map((s) => (
+                        <SelectItem key={s} value={s}>{kpiScopeLabel(s)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Who one central value reaches. Scoring and approvals are unchanged.
+                  </p>
+                </div>
+                {rowScopeNeedsTarget(orgLevelScope) && (
+                  <ScopeTargetPicker
+                    id="group-scope-target"
+                    scope={orgLevelScope}
+                    value={scopeTargetId || null}
+                    onChange={(v) => { setScopeTargetId(v ?? ''); setPreview(null); }}
+                  />
+                )}
+                {scopeError && (
+                  <p className="flex items-center gap-1 text-xs text-destructive">
+                    <AlertTriangle className="h-3 w-3" /> {scopeError}
+                  </p>
+                )}
+                <GroupDataOwnersField
+                  categoryId={categoryId}
+                  kraName={kraName}
+                  kpiName={definition?.kpi_name ?? ''}
                 />
-              </div>
+              </>
             )}
             <div className="flex items-center justify-between gap-3">
               <div>

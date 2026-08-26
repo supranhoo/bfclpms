@@ -967,6 +967,8 @@ export const GROUP_EDIT_FIELDS = [
   // ADR-275 — cycle anchor and operational flags.
   'frequency_cycle_start', 'day_count_type', 'is_org_level', 'org_level_scope',
   'require_resubmit_reason', 'is_frequency_locked',
+  // ADR-322 — a grouped scope owns exactly one target id.
+  'business_unit_id', 'location_id', 'division_id', 'pms_grade_id', 'level_id',
 ] as const;
 
 export type GroupEditField = (typeof GROUP_EDIT_FIELDS)[number];
@@ -992,9 +994,14 @@ export const GROUP_EDIT_FIELD_LABELS: Record<string, string> = {
   frequency_cycle_start: 'Cycle anchor',
   day_count_type: 'Day counting',
   is_org_level: 'Organisation-level KPI',
-  org_level_scope: 'Org-level scope',
+  org_level_scope: 'Scope',
   require_resubmit_reason: 'Reason on resubmission',
   is_frequency_locked: 'Lock frequency after submission',
+  business_unit_id: 'Business unit',
+  location_id: 'Location',
+  division_id: 'Division',
+  pms_grade_id: 'PMS grade',
+  level_id: 'Level',
 };
 
 export const GROUP_EDIT_SKIP_LABELS: Record<string, string> = {

@@ -6984,3 +6984,20 @@ people.
    audited.
 
 - **v2.66.320 (2026-08-26):** §KPI-SCOPE-GROUPED-TARGETING introduced (ADR-320).
+
+### §KPI-SCOPE-GROUPED-TARGETING — amendment (ADR-322, 2026-08-26)
+
+6. **A scope is picked, never typed.** Every surface offering a scope renders the
+   SSOT list from `src/lib/review/kpiScope.ts`. Free-text scope entry is forbidden.
+7. **Only the five grouped dimensions carry a target id on a `kpis` row** —
+   business unit, location, division, PMS grade, level. Department and Employee
+   scopes resolve from the row's own employee; a group edit must never write
+   `department_id` or `employee_id`.
+8. **Exactly one target travels with a scope.** Changing the scope clears the other
+   target columns in the same change set, and the server refuses a foreign target,
+   an unknown scope word, a grouped scope with no target, or a target that resolves
+   to zero active employees.
+9. **Data-entry ownership is period-agnostic** (category + KRA + KPI name). It is
+   written immediately and is never part of a monthly "Apply to" span.
+
+- **v2.66.322 (2026-08-26):** §KPI-SCOPE-GROUPED-TARGETING amended (ADR-322).

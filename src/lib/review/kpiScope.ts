@@ -154,3 +154,33 @@ export function kpiScopeLabel(value: string | null | undefined): string {
   }
   return KPI_SCOPE_COPY[toKpiScope(value)].label;
 }
+
+/**
+ * ADR-322 — on a `kpis` row only the grouped org dimensions carry a target
+ * column; `department` and `employee` resolve from the row's own employee, so
+ * their columns must never be rewritten by a group edit. Mirrors
+ * `public.bu_console_scope_target_column()` and the `kpis_scope_target_check`
+ * constraint.
+ */
+export const KPI_ROW_SCOPE_TARGET_COLUMNS: Record<AnyKpiScope, string | null> = {
+  individual: null,
+  organization: null,
+  department: null,
+  employee: null,
+  business_unit: 'business_unit_id',
+  location: 'location_id',
+  division: 'division_id',
+  pms_grade: 'pms_grade_id',
+  level: 'level_id',
+};
+
+/** Every target column a KPI row can carry for a grouped scope. */
+export const KPI_ROW_TARGET_COLUMNS = [
+  'business_unit_id', 'location_id', 'division_id', 'pms_grade_id', 'level_id',
+] as const;
+
+/** True when editing a KPI row in this scope must also name a target id. */
+export function rowScopeNeedsTarget(scope: string | null | undefined): boolean {
+  if (!scope) return false;
+  return (KPI_ROW_SCOPE_TARGET_COLUMNS as Record<string, string | null>)[scope] != null;
+}
