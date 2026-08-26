@@ -1037,6 +1037,9 @@ export interface GroupEditPreviewRow {
   weightage: number | null;
   target_value: number | null;
   fields: string[];
+  /** ADR-326 — the row is locked, so only the wording fields are written. */
+  partial?: boolean;
+  withheld_fields?: string[];
 }
 
 export interface GroupEditWeightageRow {
@@ -1062,9 +1065,13 @@ export interface GroupEditResult {
   anchor_conflicts?: CycleAnchorConflictRow[];
   preview?: GroupEditPreviewRow[];
   skipped_details?: GroupWriteSkipRow[];
+  /** ADR-326 — rows that receive only the wording slice of a mixed change set. */
+  partial_rows?: number;
+  withheld_fields?: string[];
   /** ADR-323 — server-derived from the actual fields, never trusted from the client. */
-  edit_class?: 'none' | 'descriptive' | 'protected';
+  edit_class?: 'none' | 'descriptive' | 'protected' | 'partial_descriptive';
 }
+
 
 export interface GroupEditArgs {
   categoryId: string;
