@@ -99,6 +99,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const [dayCountType, setDayCountType] = useState('');
   const [orgLevel, setOrgLevel] = useState<boolean | null>(null);
   const [orgLevelScope, setOrgLevelScope] = useState('');
+  const [scopeTargetId, setScopeTargetId] = useState('');
   const [requireResubmitReason, setRequireResubmitReason] = useState<boolean | null>(null);
   const [frequencyLocked, setFrequencyLocked] = useState<boolean | null>(null);
   const [criteria, setCriteria] = useState('');
