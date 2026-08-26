@@ -483,6 +483,11 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
                     onChange={(v) => { setScopeTargetId(v ?? ''); setPreview(null); }}
                   />
                 )}
+                {scopeError && (
+                  <p className="flex items-center gap-1 text-xs text-destructive">
+                    <AlertTriangle className="h-3 w-3" /> {scopeError}
+                  </p>
+                )}
                 <GroupDataOwnersField
                   categoryId={categoryId}
                   kraName={kraName}
