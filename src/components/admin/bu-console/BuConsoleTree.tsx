@@ -163,6 +163,9 @@ function KpiRow({
   // ADR-325 — wording drift is a defect (amber, actionable); different targets
   // are deliberate individual bars (neutral, informational).
   const variance = classifyVariance(kpi.variants ?? []);
+  // When the payload carries no variant detail, fall back to the flat count.
+  const wordingDrift = (kpi.variants?.length ?? 0) > 0 ? variance.hasWordingDrift : hasVariance;
+  const wordingGroups = (kpi.variants?.length ?? 0) > 0 ? variance.wordingGroups : variantCount;
 
   const isLookalike = (lookalikeCount ?? 0) > 1;
   const panelId = `kpi-people-${kpi.kpi_key.replace(/[^\w-]/g, '_')}`;
@@ -260,7 +263,7 @@ function KpiRow({
                 Fix text split
               </span>
             )}
-            {hasVariance && variance.hasWordingDrift && (
+            {hasVariance && wordingDrift && (
               <span
                 role="button"
                 tabIndex={0}
@@ -272,7 +275,7 @@ function KpiRow({
                 className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400"
               >
                 <Layers className="h-3 w-3" />
-                {variantCount} variants · {variance.wordingGroups} wording
+                {variantCount} variants{wordingGroups < variantCount ? ` · ${wordingGroups} wording` : ''}
               </span>
             )}
             {hasVariance && variance.targetGroups > 1 && (
