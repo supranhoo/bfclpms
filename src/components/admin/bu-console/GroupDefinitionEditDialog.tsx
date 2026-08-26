@@ -229,11 +229,20 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
       is_frequency_locked: frequencyLocked === null ? '' : String(frequencyLocked),
       criteria,
       source_of_data: sourceOfData,
+      // ADR-322 — exactly one target travels with the scope; the others clear.
+      ...Object.fromEntries(KPI_ROW_TARGET_COLUMNS.map((c) => [
+        c,
+        orgLevel && KPI_ROW_SCOPE_TARGET_COLUMNS[
+          orgLevelScope as keyof typeof KPI_ROW_SCOPE_TARGET_COLUMNS
+        ] === c
+          ? scopeTargetId
+          : '',
+      ])),
     };
     return diffChanges(original, next, GROUP_EDIT_FIELDS as unknown as string[]);
   }, [
     text, scoring, uom, target, weightage, categoryId, kraName, frequency, cycleStart,
-    dayCountType, orgLevel, orgLevelScope, requireResubmitReason, frequencyLocked,
+    dayCountType, orgLevel, orgLevelScope, scopeTargetId, requireResubmitReason, frequencyLocked,
     criteria, sourceOfData, original,
   ]);
 
