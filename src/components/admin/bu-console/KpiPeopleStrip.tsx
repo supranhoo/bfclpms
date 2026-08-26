@@ -29,8 +29,11 @@ import {
 } from './reviewRunModel';
 import { EmployeeScorecardDrawer } from './EmployeeScorecardDrawer';
 import { TargetRulesDialog, type TargetRulesTarget } from './TargetRulesDialog';
+import { ScoringLadderDialog } from './ScoringLadderDialog';
+import type { LadderTarget } from '@/hooks/useScoringLadder';
 import { stageLabel } from './pipelineStages';
-import { ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ListTree, SlidersHorizontal } from 'lucide-react';
+
 
 const COL_W = 128;
 const PAGE_SIZE = 100;
@@ -56,6 +59,7 @@ export function KpiPeopleStrip({
   const [result, setResult] = useState<RunAdvanceResult | null>(null);
   const [drawerEmployee, setDrawerEmployee] = useState<{ id: string; name: string | null } | null>(null);
   const [ruleTarget, setRuleTarget] = useState<TargetRulesTarget | null>(null);
+  const [ladderTarget, setLadderTarget] = useState<LadderTarget | null>(null);
 
   useEffect(() => { setSelection(new Set()); setResult(null); setPage(1); }, [scope, stage, kraName, kpiKey]);
 
@@ -172,6 +176,16 @@ export function KpiPeopleStrip({
           >
             <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
           </Button>
+          <Button
+            variant="ghost" size="icon" className="h-8 w-8"
+            aria-label={`Scoring ladder for ${kpiName}`}
+            onClick={() => setLadderTarget({
+              categoryId: kpi.category_id, kraName: kpi.kra_name, kpiName: kpi.kpi_name,
+            })}
+          >
+            <ListTree className="h-4 w-4 text-muted-foreground" />
+          </Button>
+
           {totalPages > 1 && (
             <>
               <Button
@@ -328,6 +342,12 @@ export function KpiPeopleStrip({
         scope={scope}
         open={!!ruleTarget}
         onOpenChange={o => !o && setRuleTarget(null)}
+      />
+      <ScoringLadderDialog
+        target={ladderTarget}
+        scope={scope}
+        open={!!ladderTarget}
+        onOpenChange={o => !o && setLadderTarget(null)}
       />
     </div>
   );

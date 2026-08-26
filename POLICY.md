@@ -7002,3 +7002,25 @@ people.
    written immediately and is never part of a monthly "Apply to" span.
 
 - **v2.66.322 (2026-08-26):** §KPI-SCOPE-GROUPED-TARGETING amended (ADR-322).
+
+### §KPI-SCORING-LADDER (ADR-324)
+
+1. **A KPI is one title.** Different targets, rating bands, weightage or written
+   formula/scoring logic across people do not make it a different KPI — they make
+   it a different **tier** of the same ladder.
+2. **Tiers resolve top-down, first match wins**, and "Everyone else" is always
+   evaluated last regardless of its order number.
+3. **A ladder never rewrites an approved row** (final score present) unless the
+   change is descriptive only — formula and scoring-logic wording — matching
+   §CONSOLE-TEXT-ONLY-STANDARDISATION.
+4. **Hand-tuned values win.** A per-employee override is left alone unless the
+   admin explicitly asks to replace tuned values.
+5. **Preview before apply, always.** Every ladder application is a dry run first
+   and, when committed, is written to the console change trail and reversible.
+6. **Cascade is explicit or a split, never implicit.** Auto-split divides one
+   parent number by the headcount the tier actually reaches; if the tier reaches
+   nobody the typed tier target stands.
+7. **Reads need console access; writes need admin.** No client writes `kpis`
+   directly — only the ladder RPCs (§CONSOLE-WRITE-TIERS).
+
+- **v2.66.323 (2026-08-26):** §KPI-SCORING-LADDER added (ADR-324).

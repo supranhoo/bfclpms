@@ -4003,6 +4003,68 @@ export type Database = {
         }
         Relationships: []
       }
+      bu_console_kpi_ladder_config: {
+        Row: {
+          cascade_mode: string
+          category_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          kpi_key: string
+          kpi_name: string
+          kra_name: string
+          notes: string | null
+          parent_target: number | null
+          review_period: string | null
+          review_year: number | null
+          rollup_mode: string
+          split_mode: string
+          updated_at: string
+        }
+        Insert: {
+          cascade_mode?: string
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kpi_key: string
+          kpi_name: string
+          kra_name: string
+          notes?: string | null
+          parent_target?: number | null
+          review_period?: string | null
+          review_year?: number | null
+          rollup_mode?: string
+          split_mode?: string
+          updated_at?: string
+        }
+        Update: {
+          cascade_mode?: string
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kpi_key?: string
+          kpi_name?: string
+          kra_name?: string
+          notes?: string | null
+          parent_target?: number | null
+          review_period?: string | null
+          review_year?: number | null
+          rollup_mode?: string
+          split_mode?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bu_console_kpi_ladder_config_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bu_console_kpi_overrides: {
         Row: {
           created_at: string
@@ -4037,6 +4099,98 @@ export type Database = {
             columns: ["run_id"]
             isOneToOne: false
             referencedRelation: "bu_console_edit_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bu_console_kpi_scoring_tiers: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          kpi_formula: string | null
+          kpi_key: string
+          kpi_name: string
+          kpi_scoring_logic: string | null
+          kra_name: string
+          match_dimension: string
+          match_value: string | null
+          notes: string | null
+          priority: number
+          r0: string | null
+          r1: string | null
+          r2: string | null
+          r3: string | null
+          r4: string | null
+          r5: string | null
+          review_period: string | null
+          review_year: number | null
+          target_value: number | null
+          tier_label: string
+          updated_at: string
+          weightage: number | null
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kpi_formula?: string | null
+          kpi_key: string
+          kpi_name: string
+          kpi_scoring_logic?: string | null
+          kra_name: string
+          match_dimension: string
+          match_value?: string | null
+          notes?: string | null
+          priority?: number
+          r0?: string | null
+          r1?: string | null
+          r2?: string | null
+          r3?: string | null
+          r4?: string | null
+          r5?: string | null
+          review_period?: string | null
+          review_year?: number | null
+          target_value?: number | null
+          tier_label: string
+          updated_at?: string
+          weightage?: number | null
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kpi_formula?: string | null
+          kpi_key?: string
+          kpi_name?: string
+          kpi_scoring_logic?: string | null
+          kra_name?: string
+          match_dimension?: string
+          match_value?: string | null
+          notes?: string | null
+          priority?: number
+          r0?: string | null
+          r1?: string | null
+          r2?: string | null
+          r3?: string | null
+          r4?: string | null
+          r5?: string | null
+          review_period?: string | null
+          review_year?: number | null
+          target_value?: number | null
+          tier_label?: string
+          updated_at?: string
+          weightage?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bu_console_kpi_scoring_tiers_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "kra_categories"
             referencedColumns: ["id"]
           },
         ]
@@ -18007,6 +18161,50 @@ export type Database = {
           p_period: string
           p_title_key?: string
           p_variant_key?: string
+          p_year: number
+        }
+        Returns: Json
+      }
+      bu_console_ladder_apply: {
+        Args: {
+          p_bu_ids?: string[]
+          p_category_id: string
+          p_dept_ids?: string[]
+          p_division_ids?: string[]
+          p_dry_run?: boolean
+          p_fields?: string[]
+          p_kpi_name: string
+          p_kra_name: string
+          p_manager_ids?: string[]
+          p_period: string
+          p_reset_overrides?: boolean
+          p_year: number
+        }
+        Returns: Json
+      }
+      bu_console_ladder_fields: { Args: never; Returns: string[] }
+      bu_console_ladder_get: {
+        Args: {
+          p_category_id: string
+          p_kpi_name: string
+          p_kra_name: string
+          p_period?: string
+          p_year?: number
+        }
+        Returns: Json
+      }
+      bu_console_ladder_key: {
+        Args: { p_category_id: string; p_kpi_name: string; p_kra_name: string }
+        Returns: string
+      }
+      bu_console_ladder_upsert: {
+        Args: {
+          p_category_id: string
+          p_config?: Json
+          p_kpi_name: string
+          p_kra_name: string
+          p_period: string
+          p_tiers?: Json
           p_year: number
         }
         Returns: Json
