@@ -79,8 +79,12 @@ const TEXT_FIELDS = ['kpi_title', 'kpi_description', 'kpi_formula', 'kpi_scoring
 /** Same option sets as the Admin KPI Editor (POLICY §KPI-DEFINITION-FORM-PARITY). */
 const FREQUENCY_OPTIONS = ['Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
 
-/** Moving a group to another category / KRA is structural — always confirm. */
-const STRUCTURAL_FIELDS = ['category_id', 'kra_name'];
+/**
+ * Moving a group to another category / KRA is structural — always confirm.
+ * ADR-328 — so is switching the KPI type or its qualitative options: that
+ * rewrites how every mapped employee is scored.
+ */
+const STRUCTURAL_FIELDS = ['category_id', 'kra_name', 'uom_type', 'qualitative_options'];
 
 /** ADR-275 — a cycle move re-anchors which months the KPI covers: always confirm. */
 const CYCLE_FIELDS = ['frequency', 'frequency_cycle_start'];
