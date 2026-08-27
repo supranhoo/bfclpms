@@ -45,6 +45,14 @@ export interface MatrixFilters {
   search?: string;
   reviewPeriod: string;
   reviewYear: number;
+  /**
+   * ADR-330 — display mode for KPI names.
+   * 'entered'   : the exact text stored on the row (default).
+   * 'canonical' : variant names resolved through the KPI registry so
+   *               variants of the same KPI collapse into one row.
+   * Display only — no data is rewritten.
+   */
+  nameMode?: 'entered' | 'canonical';
 }
 
 export interface MatrixScopePreview {
@@ -115,6 +123,43 @@ export function useKpiEmployeeMatrixScope(filters: MatrixFilters) {
   });
 }
 
+// ─── Canonical name resolution (ADR-330) ───────────────────
+
+type CanonicalMap = Map<string, { kra: string; kpi: string }>;
+
+function aliasKey(categoryId: string | null, kra: string, kpi: string): string {
+  return `${categoryId ?? ''}::${kra.trim().toLowerCase()}::${kpi.trim().toLowerCase()}`;
+}
+
+/**
+ * Reads the registry (definitions + aliases) and returns a lookup from a
+ * variant signature to the canonical wording. Fails open: on any error the
+ * matrix simply keeps the entered names.
+ */
+async function fetchCanonicalMap(): Promise<CanonicalMap> {
+  const map: CanonicalMap = new Map();
+  try {
+    const [defsRes, aliasRes] = await Promise.all([
+      supabase.from('kpi_definitions' as any).select('id, category_id, canonical_kra_name, canonical_kpi_name'),
+      supabase.from('kpi_name_aliases' as any).select('definition_id, variant_kra_name, variant_kpi_name'),
+    ]);
+    if (defsRes.error || aliasRes.error) return map;
+    const defs = new Map<string, any>();
+    ((defsRes.data ?? []) as any[]).forEach(d => defs.set(d.id, d));
+    ((aliasRes.data ?? []) as any[]).forEach(a => {
+      const def = defs.get(a.definition_id);
+      if (!def) return;
+      map.set(aliasKey(def.category_id, a.variant_kra_name, a.variant_kpi_name), {
+        kra: def.canonical_kra_name,
+        kpi: def.canonical_kpi_name,
+      });
+    });
+  } catch {
+    // fail open — entered names stay visible
+  }
+  return map;
+}
+
 // ─── Main hook ──────────────────────────────────────────────
 
 export function useKpiEmployeeMatrix(filters: MatrixFilters, options?: { enabled?: boolean }) {
@@ -178,6 +223,11 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters, options?: { enabled
         kpiRows.push(...((data || []) as any[]));
       }
 
+      // ── 3b. Canonical name map (display only) ──
+      const canonicalMap = filters.nameMode === 'canonical'
+        ? await fetchCanonicalMap()
+        : null;
+
       // ── 4. Fetch submissions for these KPI ids ──
       const kpiIds = kpiRows.map(k => k.kpi_id);
       const subMap = new Map<string, any>();
@@ -214,15 +264,18 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters, options?: { enabled
           });
         }
 
-        // Build KPI row key
-        const rowKey = `${kpi.kra_name}|${kpi.kpi_name}`;
+        // Build KPI row key — canonical mode collapses registry variants
+        const canonical = canonicalMap?.get(aliasKey(kpi.category_id, kpi.kra_name, kpi.kpi_name));
+        const displayKra = canonical?.kra ?? kpi.kra_name;
+        const displayKpi = canonical?.kpi ?? kpi.kpi_name;
+        const rowKey = `${displayKra}|${displayKpi}`;
         if (!kpiRowMap.has(rowKey)) {
           kpiRowMap.set(rowKey, {
             key: rowKey,
             categoryName: kpi.category_name || 'Uncategorized',
             categoryId: kpi.category_id || '',
-            kraName: kpi.kra_name,
-            kpiName: kpi.kpi_name,
+            kraName: displayKra,
+            kpiName: displayKpi,
             description: (kpi.description || '').toString(),
             weightage: Number(kpi.weightage) || 0,
             employeeWeightages: {},
