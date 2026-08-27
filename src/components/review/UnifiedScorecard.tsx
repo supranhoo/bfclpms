@@ -71,7 +71,7 @@ function assertResolvableStatus(
 }
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
-  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays, UserCheck, ClipboardCheck, AlertTriangle, X, Ban, RefreshCw
+  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays, UserCheck, ClipboardCheck, AlertTriangle, X, Ban, RefreshCw, Copy
 } from 'lucide-react';
 import { SelfReviewSheet } from '@/components/review/SelfReviewSheet';
 import { ProfileCard } from '@/components/dashboard/ProfileCard';
@@ -98,6 +98,7 @@ import { useAuditKpiAssignments } from '@/hooks/useAuditKpiAssignments';
 import { KraExportMenu } from '@/components/review/KraExportMenu';
 import { EmployeeBulkZeroScoreDialog } from '@/components/review/EmployeeBulkZeroScoreDialog';
 import { RolloverDialog } from '@/components/admin/RolloverDialog';
+import { CopyKrasDialog } from '@/components/admin/CopyKrasDialog';
 import { useAppSettings } from '@/hooks/useAppSettings';
 import { useEmployeeWorkflowStages } from '@/hooks/useWorkflowConfig';
 import { useRemarksMandatorySettings } from '@/hooks/useWorkflowSettings';
@@ -232,6 +233,7 @@ export function UnifiedScorecard({
   const isAdmin = effectiveRole === 'admin';
   const [zeroScoreDialogOpen, setZeroScoreDialogOpen] = useState(false);
   const [rolloverDialogOpen, setRolloverDialogOpen] = useState(false);
+  const [copyKrasOpen, setCopyKrasOpen] = useState(false);
   const { data: allKpis, isLoading } = useKpisByEmployee(employee.id);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -1787,6 +1789,15 @@ export function UnifiedScorecard({
                 <Button
                   size="sm"
                   variant="outline"
+                  onClick={() => setCopyKrasOpen(true)}
+                >
+                  <Copy className="h-3.5 w-3.5 mr-1" /> Copy KRAs
+                </Button>
+              )}
+              {isAdmin && (
+                <Button
+                  size="sm"
+                  variant="outline"
                   className="text-destructive border-destructive/30 hover:bg-destructive/10"
                   onClick={() => setZeroScoreDialogOpen(true)}
                 >
@@ -2372,6 +2383,16 @@ export function UnifiedScorecard({
           }}
           defaultTargetMonth={selectedPeriod}
           defaultTargetYear={selectedYear}
+        />
+      )}
+      {/* Copy KRAs from this employee/period (Admin only) */}
+      {isAdmin && copyKrasOpen && (
+        <CopyKrasDialog
+          isOpen
+          onClose={() => setCopyKrasOpen(false)}
+          defaultSourceEmployeeId={employee.id}
+          defaultSourcePeriod={selectedPeriod}
+          defaultSourceYear={selectedYear}
         />
       )}
     </div>
