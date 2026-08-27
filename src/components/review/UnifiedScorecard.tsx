@@ -1789,6 +1789,15 @@ export function UnifiedScorecard({
                 <Button
                   size="sm"
                   variant="outline"
+                  onClick={() => setCopyKrasOpen(true)}
+                >
+                  <Copy className="h-3.5 w-3.5 mr-1" /> Copy KRAs
+                </Button>
+              )}
+              {isAdmin && (
+                <Button
+                  size="sm"
+                  variant="outline"
                   className="text-destructive border-destructive/30 hover:bg-destructive/10"
                   onClick={() => setZeroScoreDialogOpen(true)}
                 >
