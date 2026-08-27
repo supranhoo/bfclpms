@@ -51,6 +51,7 @@ const BundleEditor = lazy(() => import("./pages/admin/BundleEditor"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const PIPManagement = lazy(() => import("./pages/admin/PIPManagement"));
 const PIPCreate = lazy(() => import("./pages/admin/PIPCreate"));
+const PIPDetail = lazy(() => import("./pages/admin/PIPDetail"));
 const EmailLogs = lazy(() => import("./pages/admin/EmailLogs"));
 const ObservationsOverview = lazy(() => import("./pages/admin/ObservationsOverview"));
 const RollbackRequests = lazy(() => import("./pages/admin/RollbackRequests"));
@@ -499,6 +500,11 @@ const App = () => (
                 <Route path="/admin/pip/new" element={
                   <ProtectedRoute allowedRoles={['manager', 'admin', 'management']} menuKey="admin-pip">
                     <PIPCreate />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/pip/:pipId" element={
+                  <ProtectedRoute allowedRoles={['manager', 'admin', 'management']} menuKey="admin-pip">
+                    <PIPDetail />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin/observations" element={
