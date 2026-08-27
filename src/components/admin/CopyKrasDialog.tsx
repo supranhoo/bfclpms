@@ -24,6 +24,10 @@ const MONTHS = [
 interface CopyKrasDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Optional seed for the copy SOURCE (e.g. opened from an employee scorecard). */
+  defaultSourceEmployeeId?: string;
+  defaultSourcePeriod?: string;
+  defaultSourceYear?: number;
 }
 
 interface SourceKpi {
