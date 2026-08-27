@@ -5,12 +5,13 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Search, ChevronDown, ChevronRight, BookCheck, Trash2, Plus, Loader2, Pencil, Link2Off, Eye } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight, BookCheck, Trash2, Plus, Loader2, Pencil, Link2Off, Eye, Wand2 } from 'lucide-react';
 import { useKpiDefinitions, useKpiAliases, KpiDefinition, useDeleteDefinition, useUnlinkAlias } from '@/hooks/useKpiRegistry';
 import { useToast } from '@/hooks/use-toast';
 import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 import { EditDefinitionDialog } from './EditDefinitionDialog';
 import { AffectedKpisTable } from './AffectedKpisTable';
+import { ApplyRegistryDialog } from './ApplyRegistryDialog';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { RegistryPager, pagedSlice } from './RegistryPager';
 
@@ -22,6 +23,7 @@ export function ReviewRegistryTab() {
   const [pageSize, setPageSize] = useState(25);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<KpiDefinition | null>(null);
+  const [applyingTo, setApplyingTo] = useState<KpiDefinition | null>(null);
   const { toast } = useToast();
   const { deleteDefinition } = useDeleteDefinition();
 
@@ -104,6 +106,7 @@ export function ReviewRegistryTab() {
                     onToggle={() => setExpandedId(expandedId === def.id ? null : def.id)}
                     onDelete={() => handleDelete(def.id)}
                     onEdit={() => setEditing(def)}
+                    onApply={() => setApplyingTo(def)}
                   />
                 ))}
               </div>
@@ -121,6 +124,13 @@ export function ReviewRegistryTab() {
         </CardContent>
       </Card>
 
+      <ApplyRegistryDialog
+        open={!!applyingTo}
+        onClose={() => setApplyingTo(null)}
+        definition={applyingTo}
+        onApplied={refetch}
+      />
+
       <EditDefinitionDialog
         open={!!editing}
         onClose={() => setEditing(null)}
@@ -137,12 +147,14 @@ function RegistryRow({
   onToggle,
   onDelete,
   onEdit,
+  onApply,
 }: {
   definition: KpiDefinition;
   isExpanded: boolean;
   onToggle: () => void;
   onDelete: () => void;
   onEdit: () => void;
+  onApply: () => void;
 }) {
   const { data: aliases, loading, refetch: refetchAliases } = useKpiAliases(isExpanded ? definition.id : undefined);
   const { unlinkAlias, saving: unlinking } = useUnlinkAlias();
@@ -163,6 +175,16 @@ function RegistryRow({
                 </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={e => { e.stopPropagation(); onApply(); }}
+                  title="Rename the real KPI rows to this canonical name"
+                >
+                  <Wand2 className="h-3.5 w-3.5 mr-1" />
+                  Apply to KPI rows
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
