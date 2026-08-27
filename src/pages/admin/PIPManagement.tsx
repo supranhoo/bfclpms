@@ -18,7 +18,6 @@ import {
   type PIPStatus,
 } from '@/lib/pip/pipVocabulary';
 import { useAuth } from '@/contexts/AuthContext';
-import { PIPDetailSheet } from '@/components/pip/PIPDetailSheet';
 import { PIPSuggestionsPanel } from '@/components/pip/PIPSuggestionsPanel';
 import type { PIPCandidate } from '@/hooks/usePIPCandidates';
 import type { MonthKey } from '@/hooks/useMonthlyTrend';
@@ -50,7 +49,6 @@ export default function PIPManagement() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<PIPStatus | 'all'>('all');
-  const [selectedPipId, setSelectedPipId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [view, setView] = useState<'plans' | 'suggestions'>('plans');
 
@@ -203,7 +201,7 @@ export default function PIPManagement() {
           <PIPSuggestionsPanel
             active={view === 'suggestions'}
             onInitiate={handleInitiateFromSuggestion}
-            onOpenPip={(id) => setSelectedPipId(id)}
+            onOpenPip={(id) => navigate(`/admin/pip/${id}`)}
           />
         </TabsContent>
 
@@ -264,7 +262,7 @@ export default function PIPManagement() {
                       const totalMilestones = pip.milestones?.length || 0;
 
                       return (
-                        <TableRow key={pip.id} className="cursor-pointer" onClick={() => setSelectedPipId(pip.id)}>
+                        <TableRow key={pip.id} className="cursor-pointer" onClick={() => navigate(`/admin/pip/${pip.id}`)}>
                           <TableCell>
                             <div>
                               <div className="font-medium">{pip.employee?.full_name}</div>
@@ -342,12 +340,6 @@ export default function PIPManagement() {
         </TabsContent>
       </Tabs>
 
-      {/* Detail Sheet */}
-      <PIPDetailSheet 
-        pipId={selectedPipId} 
-        open={!!selectedPipId} 
-        onOpenChange={(open) => !open && setSelectedPipId(null)} 
-      />
     </div>
   );
 }

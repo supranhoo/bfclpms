@@ -9400,3 +9400,11 @@ The group definition editor now shows the KPI type (Numeric / Binary / Tiered) u
 The client descriptive-field list now mirrors `public.bu_console_descriptive_fields()` exactly: the scoring test is not descriptive (ADR-327), so touching it is reported as a protected-path edit rather than a text-only run that silently skips rows.
 
 - **v2.67.2 (2026-08-26):** Added ADR-328 UOM-type-aware group editing, controlled unit list, structural type-switch confirmation, `ladderForType` helper and regression tests; realigned the client descriptive-field allowlist with the server.
+
+### ADR-329 — PIP detail is a full page
+
+**What**: The PIP record opens at `/admin/pip/:pipId` (`PIPDetail` page + `PIPDetailView`) instead of the narrow right-side sheet; `PIPDetailSheet.tsx` is removed.
+
+**Why**: Long policy reasons, improvement areas and milestones were unreadable in a `sm:max-w-xl` sheet, and the record was not deep-linkable.
+
+**How**: Two-column grid (main content / employee-duration-outcome + sticky Actions panel), mobile sticky action bar with safe-area padding, `min-w-0` + `break-words` to prevent horizontal scroll. No change to hooks, transitions, RLS or scoring — presentation only.
