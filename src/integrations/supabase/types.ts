@@ -18690,6 +18690,40 @@ export type Database = {
           score: number
         }[]
       }
+      correct_kpis_range: {
+        Args: {
+          p_category_id: string
+          p_definition_id: string
+          p_from_period: string
+          p_from_year: number
+          p_include_locked?: boolean
+          p_new_kpi: string
+          p_new_kra: string
+          p_old_kpi: string
+          p_old_kra: string
+          p_to_period: string
+          p_to_year: number
+        }
+        Returns: Json
+      }
+      correct_kpis_range_dry_run: {
+        Args: {
+          p_category_id: string
+          p_from_period: string
+          p_from_year: number
+          p_old_kpi: string
+          p_old_kra: string
+          p_to_period: string
+          p_to_year: number
+        }
+        Returns: {
+          kpi_rows: number
+          locked_rows: number
+          org_rows: number
+          review_period: string
+          review_year: number
+        }[]
+      }
       correct_may_kpis: {
         Args: {
           p_category_id: string
@@ -20068,6 +20102,7 @@ export type Database = {
         Args: { p_period: string; p_year: number }
         Returns: number
       }
+      kpi_period_month_num: { Args: { p_period: string }; Returns: number }
       kpi_scope_options: {
         Args: { p_scope: string }
         Returns: {

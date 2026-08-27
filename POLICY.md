@@ -7079,3 +7079,16 @@ people.
 
 - **v2.67.2 (2026-08-26):** §KPI-UOM-TYPE-GROUP-OWNED added (ADR-328); the group definition editor gained the type selector and a controlled unit list; the client descriptive-field allowlist realigned with the server (scoring test excluded).
 
+
+### §KPI-REGISTRY-APPLY (ADR-330)
+
+1. Linking a KPI name to the canonical registry is metadata. Reports must not be
+   assumed corrected until an explicit **Apply to KPI rows** action has renamed
+   the underlying `kpis` / `org_kpi_values` rows.
+2. Every apply is range-scoped, previewed before commit, recorded in
+   `kpi_standardization_actions` with a full before-image, and reversible.
+3. Applies may change KPI text and registry binding only. Target, weightage,
+   score, rating band and workflow status are never written by a rename.
+4. The May 2026 forward-only freeze applies: earlier months are skipped.
+5. Any report offering canonical names must resolve them at read time and label
+   the mode, so entered text remains inspectable.

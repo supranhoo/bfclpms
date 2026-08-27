@@ -1,16 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Activity, AlertTriangle, GitMerge, RefreshCw, Database, Link2, Unlink, Sparkles, GitBranch } from 'lucide-react';
+import { Activity, AlertTriangle, GitMerge, RefreshCw, Database, Link2, Unlink, Sparkles, GitBranch, Wand2 } from 'lucide-react';
 import { useRegistryHealth } from '@/hooks/useRegistryHealth';
 import { usePendingSuggestionCount } from '@/hooks/useRegistrySuggestions';
 import { useRecentRegistryAudit } from '@/hooks/useDefinitionSplit';
 import { SplitDefinitionDialog } from './SplitDefinitionDialog';
 import { format } from 'date-fns';
+import { fetchApplyCoverage, type ApplyCoverage } from '@/hooks/useKpiRangeCorrection';
 
 /**
  * Phase 2c: Health & Coverage dashboard.
@@ -27,6 +28,16 @@ export function HealthCoverageTab() {
     canonical_kpi_name: string;
     category_name: string;
   } | null>(null);
+
+  // ADR-330 — linking is not renaming; show applied renames separately.
+  const [applied, setApplied] = useState<ApplyCoverage | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetchApplyCoverage()
+      .then(r => { if (!cancelled) setApplied(r); })
+      .catch(() => { if (!cancelled) setApplied(null); });
+    return () => { cancelled = true; };
+  }, [loading]);
 
   const coveragePct = stats?.coverage_pct ?? 0;
   const coverageTone = useMemo(() => {
@@ -93,6 +104,32 @@ export function HealthCoverageTab() {
           tone={stats && stats.inscope_kpis_unlinked > 0 ? 'warn' : undefined}
         />
       </div>
+
+      {/* ADR-330: applied-rename tile — registry links alone never rewrite rows */}
+      <Card className={applied && applied.rowsRenamed === 0 ? 'border-amber-500/40 bg-amber-500/5' : undefined}>
+        <CardContent className="p-4 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="rounded-md bg-primary/10 p-2">
+              <Wand2 className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <div className="text-sm font-medium">Canonical names applied to KPI rows</div>
+              <div className="text-xs text-muted-foreground">
+                {applied === null
+                  ? 'Loading…'
+                  : applied.rowsRenamed === 0
+                    ? 'No rows renamed yet — linking a variant to the registry does not change report text. Use "Apply to KPI rows" in Review Registry.'
+                    : `${applied.rowsRenamed} row(s) renamed across ${applied.renameActions} action(s)${applied.lastRenameAt ? `, last on ${format(new Date(applied.lastRenameAt), 'dd MMM yyyy')}` : ''}.`}
+              </div>
+            </div>
+          </div>
+          {applied && (
+            <Badge variant="outline" className="font-semibold tabular-nums">
+              {applied.rowsRenamed} rows
+            </Badge>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Phase 4c: Pending suggestions tile */}
       <Card className={counts.total > 0 ? 'border-primary/40 bg-primary/5' : undefined}>

@@ -9409,3 +9409,21 @@ The client descriptive-field list now mirrors `public.bu_console_descriptive_fie
 **Why**: Long policy reasons, improvement areas and milestones were unreadable in a `sm:max-w-xl` sheet, and the record was not deep-linkable.
 
 **How**: Two-column grid (main content / employee-duration-outcome + sticky Actions panel), mobile sticky action bar with safe-area padding, `min-w-0` + `break-words` to prevent horizontal scroll. No change to hooks, transitions, RLS or scoring — presentation only.
+
+## ADR-330 — Applying the canonical KPI registry to real rows
+
+Building the registry (definitions + aliases) is metadata only; it never rewrote
+`kpis.kpi_name`, which is why the KPI-Employee Matrix export kept showing the old
+variant text after standardization work.
+
+- **Review Registry → "Apply to KPI rows"** (`ApplyRegistryDialog.tsx`) — pick a
+  month range, preview per-variant impact via `correct_kpis_range_dry_run`, then
+  rename every linked variant with `correct_kpis_range` (one reversible action per
+  variant, undoable from History). Renames touch text and definition binding only:
+  targets, weightages, scores and workflow status are never written. Months before
+  May 2026 remain frozen (POLICY §88I).
+- **Health & Coverage** now separates "linked to registry" from "rows renamed"
+  (`fetchApplyCoverage`), so a fully linked but unapplied registry is visible.
+- **KPI-Employee Matrix** gained a *Canonical names* toggle
+  (`MatrixFilters.nameMode`) that resolves variants through the registry at read
+  time and collapses them into one row — display only, no data rewrite.
