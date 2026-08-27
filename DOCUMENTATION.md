@@ -1821,6 +1821,7 @@ Sub-period submissions (daily/weekly) enforce a **one-time update** policy for a
   - **(v1.45.0)** `getPreviousStatus` now accepts an optional `workflowStages` parameter and uses the full 8-stage `FULL_STATUS_ORDER` as default. Cascade-clear logic uses index-based comparison against the full order instead of hardcoded status strings, correctly handling `skip_level_check` and `hr_pms_review` stages.
 - Audit logging for all changes
 - **Copy KRAs (`CopyKrasDialog`):** Replicate KRAs from one employee to another without re-drafting.
+  - **Entry points:** Admin KPI Dashboard (`AllKpis`) and, since v2.66.13, the **employee scorecard** (`UnifiedScorecard` → *KPI Details* toolbar → **Copy KRAs**). The scorecard entry is **admin-only** (`effectiveRole === 'admin'`, same gate as Zero-Score / Rollover KRAs) and seeds the dialog's source with the currently viewed employee, period and year via the optional `defaultSourceEmployeeId` / `defaultSourcePeriod` / `defaultSourceYear` props. Both remain editable inside the dialog; server RLS remains the authority.
   - **Step 1 – Source:** Select source employee, review period, and year. KRAs auto-load.
   - **Step 2 – Select KRAs:** Cherry-pick individual KRAs with Select All / Deselect All toggle. Shows category, KPI name, and weightage.
   - **Step 3 – Target:** Multi-select target employees (excludes source), set target period/year.
