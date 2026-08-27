@@ -133,6 +133,9 @@ export default function KpiEmployeeMatrix() {
     return list;
   }, [departments, businessUnitId, divisionId, businessUnits]);
 
+  // ADR-330 — show registry canonical names instead of entered text
+  const [canonicalNames, setCanonicalNames] = useState(false);
+
   // Matrix filters
   const filters: MatrixFilters = useMemo(() => ({
     businessUnitId: businessUnitId || undefined,
@@ -142,7 +145,8 @@ export default function KpiEmployeeMatrix() {
     search: search || undefined,
     reviewPeriod,
     reviewYear,
-  }), [businessUnitId, divisionId, departmentId, categoryId, search, reviewPeriod, reviewYear]);
+    nameMode: canonicalNames ? 'canonical' : 'entered',
+  }), [businessUnitId, divisionId, departmentId, categoryId, search, reviewPeriod, reviewYear, canonicalNames]);
 
   const { data: scope, isLoading: scopeLoading } = useKpiEmployeeMatrixScope(filters);
   const { data, isLoading, isFetching } = useKpiEmployeeMatrix(filters, { enabled: loaded });
@@ -463,6 +467,17 @@ export default function KpiEmployeeMatrix() {
               </div>
             </PopoverContent>
           </Popover>
+
+          <div className="flex items-center gap-2 h-8 px-2 rounded-md border">
+            <Switch
+              id="canonical-names"
+              checked={canonicalNames}
+              onCheckedChange={setCanonicalNames}
+            />
+            <Label htmlFor="canonical-names" className="text-xs cursor-pointer whitespace-nowrap">
+              Canonical names
+            </Label>
+          </div>
 
           <Button variant="outline" size="sm" className="h-8" onClick={exportToExcel} disabled={!loaded || isLoading || !filteredRows.length}>
             <Download className="h-3.5 w-3.5 mr-1" /> Export
