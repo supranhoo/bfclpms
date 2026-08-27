@@ -67,15 +67,21 @@ interface Employee {
   department: string;
 }
 
-export function CopyKrasDialog({ isOpen, onClose }: CopyKrasDialogProps) {
+export function CopyKrasDialog({
+  isOpen,
+  onClose,
+  defaultSourceEmployeeId,
+  defaultSourcePeriod,
+  defaultSourceYear,
+}: CopyKrasDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const now = new Date();
 
   // Source state
-  const [sourceEmployeeId, setSourceEmployeeId] = useState('');
-  const [sourcePeriod, setSourcePeriod] = useState(MONTHS[now.getMonth()]);
-  const [sourceYear, setSourceYear] = useState(now.getFullYear());
+  const [sourceEmployeeId, setSourceEmployeeId] = useState(defaultSourceEmployeeId ?? '');
+  const [sourcePeriod, setSourcePeriod] = useState(defaultSourcePeriod ?? MONTHS[now.getMonth()]);
+  const [sourceYear, setSourceYear] = useState(defaultSourceYear ?? now.getFullYear());
 
   // KRA selection
   const [selectedKraIds, setSelectedKraIds] = useState<Set<string>>(new Set());
