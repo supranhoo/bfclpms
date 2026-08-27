@@ -233,6 +233,7 @@ export function UnifiedScorecard({
   const isAdmin = effectiveRole === 'admin';
   const [zeroScoreDialogOpen, setZeroScoreDialogOpen] = useState(false);
   const [rolloverDialogOpen, setRolloverDialogOpen] = useState(false);
+  const [copyKrasOpen, setCopyKrasOpen] = useState(false);
   const { data: allKpis, isLoading } = useKpisByEmployee(employee.id);
   const queryClient = useQueryClient();
   const { toast } = useToast();
