@@ -2385,6 +2385,16 @@ export function UnifiedScorecard({
           defaultTargetYear={selectedYear}
         />
       )}
+      {/* Copy KRAs from this employee/period (Admin only) */}
+      {isAdmin && copyKrasOpen && (
+        <CopyKrasDialog
+          isOpen
+          onClose={() => setCopyKrasOpen(false)}
+          defaultSourceEmployeeId={employee.id}
+          defaultSourcePeriod={selectedPeriod}
+          defaultSourceYear={selectedYear}
+        />
+      )}
     </div>
   );
 }
