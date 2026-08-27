@@ -71,7 +71,7 @@ function assertResolvableStatus(
 }
 import { 
   ArrowLeft, Target, CheckCircle2, Clock, 
-  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays, UserCheck, ClipboardCheck, AlertTriangle, X, Ban, RefreshCw
+  Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays, UserCheck, ClipboardCheck, AlertTriangle, X, Ban, RefreshCw, Copy
 } from 'lucide-react';
 import { SelfReviewSheet } from '@/components/review/SelfReviewSheet';
 import { ProfileCard } from '@/components/dashboard/ProfileCard';
