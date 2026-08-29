@@ -106,9 +106,22 @@ export function KraRehydrateCard() {
   const [rollbackToken, setRollbackToken] = useState('');
   const [rollbackReason, setRollbackReason] = useState('');
 
+  const [driftSearch, setDriftSearch] = useState('');
+  const [driftPage, setDriftPage] = useState(0);
+
   const { data: runs = [], isLoading: runsLoading } = useRuns(activeCycleId);
   const { data: itemsData, isLoading: itemsLoading } = useItems(selectedRunId, page);
   const { data: drift, isLoading: driftLoading, refetch: refetchDrift } = useDrift(activeCycleId);
+  const { data: driftedData, isLoading: driftedLoading, refetch: refetchDrifted } = useQuery({
+    queryKey: ['kra-drifted-instances', activeCycleId, driftSearch, driftPage],
+    queryFn: () => listDriftedKraInstances(activeCycleId!, {
+      search: driftSearch, page: driftPage, pageSize: DRIFT_PAGE_SIZE,
+    }),
+    enabled: !!activeCycleId,
+    staleTime: 60_000,
+  });
+  const driftedRows = driftedData?.rows ?? [];
+  const driftedTotal = driftedData?.total ?? 0;
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['kra-rehydrate-runs'] });
