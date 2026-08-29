@@ -149,3 +149,36 @@ export async function listKraRehydrateItems(
   if (error) throw error;
   return { rows: (data as any[]) ?? [], total: count ?? 0 };
 }
+
+/**
+ * ADR-331 — which employees are currently drifted (names, not just a count).
+ * Server-paged; search matches name or employee code.
+ */
+export interface DriftedInstanceRow {
+  instance_id: string;
+  employee_id: string;
+  employee_code: string | null;
+  full_name: string | null;
+  overall_status: string;
+  stored_score: number | null;
+  latest_score: number | null;
+  delta: number | null;
+  total_count: number;
+}
+
+export async function listDriftedKraInstances(
+  cycleId: string,
+  opts: { search?: string; page?: number; pageSize?: number } = {},
+): Promise<{ rows: DriftedInstanceRow[]; total: number }> {
+  const page = opts.page ?? 0;
+  const pageSize = opts.pageSize ?? 25;
+  const { data, error } = await (supabase as any).rpc('annual_review_kra_drifted_instances', {
+    p_cycle_id: cycleId,
+    p_search: opts.search?.trim() || null,
+    p_limit: pageSize,
+    p_offset: page * pageSize,
+  });
+  if (error) throw error;
+  const rows = (data as DriftedInstanceRow[]) ?? [];
+  return { rows, total: Number(rows[0]?.total_count ?? 0) };
+}
