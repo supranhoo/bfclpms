@@ -230,6 +230,75 @@ export function KraRehydrateCard() {
           )}
         </div>
 
+        {/* ADR-331 — who exactly is drifted (Recheck only refreshed a count before) */}
+        <div className="rounded-md border">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b p-2">
+            <div className="text-sm font-medium">
+              Drifted reviews{' '}
+              <span className="font-normal text-muted-foreground">
+                ({driftedLoading ? '…' : driftedTotal} employee{driftedTotal === 1 ? '' : 's'})
+              </span>
+            </div>
+            <Input
+              value={driftSearch}
+              onChange={(e) => { setDriftSearch(e.target.value); setDriftPage(0); }}
+              placeholder="Search name or employee code"
+              className="h-8 w-full sm:w-64"
+            />
+          </div>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Stored KRA</TableHead>
+                  <TableHead className="text-right">Latest KRA</TableHead>
+                  <TableHead className="text-right">Δ</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {driftedLoading ? (
+                  <TableRow><TableCell colSpan={5}><Skeleton className="h-16 w-full" /></TableCell></TableRow>
+                ) : driftedRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                      No drifted reviews match.
+                    </TableCell>
+                  </TableRow>
+                ) : driftedRows.map((r) => (
+                  <TableRow key={r.instance_id}>
+                    <TableCell className="text-sm">
+                      {r.full_name ?? '—'}
+                      <span className="ml-1 text-xs text-muted-foreground">({r.employee_code ?? '—'})</span>
+                    </TableCell>
+                    <TableCell><Badge variant="secondary">{r.overall_status}</Badge></TableCell>
+                    <TableCell className="text-right">{r.stored_score ?? '—'}</TableCell>
+                    <TableCell className="text-right">{r.latest_score ?? '—'}</TableCell>
+                    <TableCell className={`text-right ${(r.delta ?? 0) === 0 ? 'text-muted-foreground' : (r.delta ?? 0) > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {r.delta == null ? '—' : r.delta > 0 ? `+${r.delta}` : r.delta}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          {driftedTotal > DRIFT_PAGE_SIZE && (
+            <div className="flex items-center justify-end gap-2 border-t p-2">
+              <Button size="sm" variant="ghost" disabled={driftPage === 0} onClick={() => setDriftPage(driftPage - 1)}>Prev</Button>
+              <span className="text-xs">
+                Page {driftPage + 1} / {Math.max(1, Math.ceil(driftedTotal / DRIFT_PAGE_SIZE))}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={(driftPage + 1) * DRIFT_PAGE_SIZE >= driftedTotal}
+                onClick={() => setDriftPage(driftPage + 1)}
+              >Next</Button>
+            </div>
+          )}
+        </div>
+
         <div className="grid gap-3 md:grid-cols-2">
           <div>
             <Label className="text-xs">Cycle</Label>
