@@ -17678,6 +17678,25 @@ export type Database = {
         Args: { p_cycle_id: string }
         Returns: Json
       }
+      annual_review_kra_drifted_instances: {
+        Args: {
+          p_cycle_id: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+        }
+        Returns: {
+          delta: number
+          employee_code: string
+          employee_id: string
+          full_name: string
+          instance_id: string
+          latest_score: number
+          overall_status: string
+          stored_score: number
+          total_count: number
+        }[]
+      }
       annual_review_kra_instance_drift: {
         Args: { p_instance_id: string }
         Returns: Json
