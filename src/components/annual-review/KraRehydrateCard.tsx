@@ -32,9 +32,12 @@ import {
   startKraRehydrate, rollbackKraRehydrateRun,
   listKraRehydrateRuns, listKraRehydrateItems,
   getKraDriftSummary,
+  listDriftedKraInstances,
   type KraRehydrateRun,
 } from '@/services/annualReview/kraRehydrate';
 import { describeDrift } from '@/lib/annualReview/kraDrift';
+
+const DRIFT_PAGE_SIZE = 25;
 
 interface CycleOption { id: string; name: string; }
 
@@ -127,6 +130,7 @@ export function KraRehydrateCard() {
     qc.invalidateQueries({ queryKey: ['kra-rehydrate-runs'] });
     qc.invalidateQueries({ queryKey: ['kra-rehydrate-items'] });
     qc.invalidateQueries({ queryKey: ['kra-drift-summary'] });
+    qc.invalidateQueries({ queryKey: ['kra-drifted-instances'] });
   };
 
   const dryRun = useMutation({
@@ -236,7 +240,7 @@ export function KraRehydrateCard() {
                   </div>
                 </div>
               </div>
-              <Button size="sm" variant="ghost" onClick={() => refetchDrift()}>
+              <Button size="sm" variant="ghost" onClick={() => { refetchDrift(); refetchDrifted(); }}>
                 <RefreshCw className="mr-1 h-4 w-4" /> Recheck
               </Button>
             </div>
