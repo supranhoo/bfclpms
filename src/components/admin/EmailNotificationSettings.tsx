@@ -45,7 +45,9 @@ const EMAIL_EVENTS: { key: EmailEventType; label: string; description: string }[
   { key: 'pip_completed', label: 'PIP Completed', description: 'Notify employee when PIP is successfully completed' },
   { key: 'observation_raised', label: 'Observation Raised', description: 'Notify KPI owner when a new observation is raised on their KPI' },
   { key: 'observation_reply', label: 'Observation Reply', description: 'Notify participants when someone replies to an observation' },
+  { key: 'observation_mention', label: 'Mentioned in Observation', description: 'Notify a user by email when someone @mentions them in an observation' },
   { key: 'observation_resolved', label: 'Observation Resolved', description: 'Notify participants when an observation is marked as resolved' },
+
   { key: 'password_rollout', label: 'Password Rollout', description: 'Send login credentials when admin generates passwords for users' },
   { key: 'kra_batch_assigned', label: 'Batch KRA Assignment', description: 'Notify employee & manager when KRAs are assigned in bulk' },
   { key: 'admin_status_step_back', label: 'Admin Status Step Back', description: 'Notify employee when admin moves KPI back one workflow stage' },
