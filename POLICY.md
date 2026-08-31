@@ -7092,3 +7092,17 @@ people.
 4. The May 2026 forward-only freeze applies: earlier months are skipped.
 5. Any report offering canonical names must resolve them at read time and label
    the mode, so entered text remains inspectable.
+
+
+### §OBS-MENTION-EMAIL (ADR-331)
+
+1. Being @mentioned in an observation is an emailable event, not just an in-app
+   notification. It is delivered as the `observation_mention` email event.
+2. Only the users explicitly mentioned receive it — one email each, never the
+   author, never the whole thread.
+3. Registry parity is mandatory: every notification type that the notification →
+   email bridge maps to an email event MUST appear in the Notification Events
+   list, the Email Templates registry and the Email Logs label map. An event
+   absent from the events list can never be enabled and is silently skipped.
+4. The event ships disabled by default; an admin enables it in Notification
+   Events. Subject/body and send schedule are editable like any other template.
