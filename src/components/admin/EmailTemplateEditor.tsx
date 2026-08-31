@@ -370,7 +370,27 @@ Please check the observation thread for the latest update.`,
     emoji: '💬',
   },
   {
+    key: 'observation_mention',
+    label: 'Mentioned in Observation',
+    description: 'Sent to a user when someone @mentions them in an observation',
+    subject: '[PMS] {{actor_name}} mentioned you in an observation — {{kpi_name}}',
+    bodyTemplate: `Hi {{recipient_name}},
+
+{{actor_name}} mentioned you in an observation.
+
+KPI: {{kpi_name}}
+Period: {{review_period}} {{review_year}}
+Observation: {{observation_title}}
+Type: {{observation_type}}
+Description: {{observation_description}}
+
+Please log in to review the observation thread and respond if needed.`,
+    color: '#3b82f6',
+    emoji: '@',
+  },
+  {
     key: 'observation_resolved',
+
     label: 'Observation Resolved',
     description: 'Sent when an observation is marked as resolved',
     subject: '[PMS] Observation Resolved - {{kpi_name}}',
