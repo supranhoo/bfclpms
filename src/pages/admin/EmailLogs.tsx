@@ -54,7 +54,9 @@ const EVENT_LABELS: Record<string, string> = {
   password_rollout: 'Password Rollout',
   observation_raised: 'Observation Raised',
   observation_reply: 'Observation Reply',
+  observation_mention: 'Mentioned in Observation',
   observation_resolved: 'Observation Resolved',
+
   test: 'Test Email',
   admin_status_step_back: 'Admin Step Back',
   rollback_requested: 'Rollback Requested',

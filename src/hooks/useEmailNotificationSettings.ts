@@ -23,7 +23,9 @@ export type EmailEventType =
   | 'org_kpi_sent_back'
   | 'observation_raised'
   | 'observation_reply'
+  | 'observation_mention'
   | 'observation_resolved'
+
   | 'password_rollout'
   | 'kra_batch_assigned'
   | 'admin_status_step_back'

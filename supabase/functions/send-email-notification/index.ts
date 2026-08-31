@@ -629,7 +629,7 @@ Observation: {{observation_title}}
 No further action is needed on this observation.`,
   },
   observation_mention: {
-    subject: '[PMS] You were mentioned in an Observation',
+    subject: '[PMS] {{actor_name}} mentioned you in an observation — {{kpi_name}}',
     body: `Hi {{recipient_name}},
 
 {{actor_name}} mentioned you in an observation.
@@ -640,7 +640,8 @@ Observation: {{observation_title}}
 Type: {{observation_type}}
 Description: {{observation_description}}
 
-Please log in to review the observation and respond if needed.`,
+Please log in to review the observation thread and respond if needed.`,
+
   },
   org_kpi_pending_reminder: {
     subject: '[PMS] Pending Org KPI Data Entry Reminder - {{review_period}} {{review_year}}',

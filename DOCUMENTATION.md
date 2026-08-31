@@ -9427,3 +9427,24 @@ variant text after standardization work.
 - **KPI-Employee Matrix** gained a *Canonical names* toggle
   (`MatrixFilters.nameMode`) that resolves variants through the registry at read
   time and collapses them into one row — display only, no data rewrite.
+
+## ADR-331 — Email for "@Mentioned in Observation"
+
+**What:** `observation_mention` is now a first-class email event — a toggle in
+**Notification Events**, an editable card in **Email Templates** (with the usual
+preview, reset and per-template send schedule), and a readable label in
+**Email Logs**.
+
+**Why:** The backend chain was already complete — the mention writes a
+`notifications` row, `send_email_on_notification` maps it to the
+`observation_mention` email event, and the edge function carried a default
+template. The break was the admin surface: the event was missing from the
+Notification Events list, so it could never appear in
+`system_settings.email_notification_events`, and the email function skipped
+every mention email as "event type not enabled".
+
+**How:** Enable **Mentioned in Observation** under Email Notifications →
+Notification Events, then optionally tailor the wording under Email Templates.
+Mentioned users then receive mail carrying the KPI, period, observation title,
+type and description. `src/tests/observationMentionEmailRegistry.test.ts` locks
+the registry parity so the same drift cannot recur.
