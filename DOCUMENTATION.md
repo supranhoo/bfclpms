@@ -9482,3 +9482,17 @@ The badge lists the exact months, past months carry a `back-dated` chip, and any
 month that matches nothing is highlighted in amber. Confirm to write each month
 as its own undoable run. `src/test/groupEditSpan.test.ts` locks the contiguity
 rule (POLICY §CONSOLE-EDIT-SPAN-CONTIGUITY).
+
+### v2.66.338 — KPI rename preview fix (ADR-338)
+
+**What:** "Preview rename" in the group definition editor no longer fails with
+`invalid input value for enum review_status: "locked"`.
+
+**Why:** The rename functions compared `kpis.status` (a `review_status` enum)
+against `kpi_status` values, which Postgres rejects at runtime — so the preview
+never ran and the skip-locked apply path would have failed too.
+
+**How:** `preview_kpi_range_correction` and `correct_kpis_range` now use the
+canonical console lock rule — final score present, or status past `kra_set` —
+via a `review_submissions` join. See POLICY §KPI-RENAME-LOCK-PREDICATE and
+`src/tests/kpiRenameLockPredicate.test.ts`.

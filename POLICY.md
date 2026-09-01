@@ -7187,3 +7187,14 @@ the administrator explicitly selected.
    reports and Org KPI matching downstream.
 
 - **v2.66.337 (2026-09-01):** §CONSOLE-EDIT-SPAN-CONTIGUITY introduced (ADR-337).
+
+## §KPI-RENAME-LOCK-PREDICATE (ADR-338, 2026-09-01)
+
+`public.kpis.status` is of enum type `review_status`. Any SQL that filters it must
+use only `review_status` values; the `kpi_status` vocabulary (`locked`,
+`approved_by_manager`) is invalid there and raises at execution time.
+
+A KPI row is **locked** for a name correction when it carries a final score
+(`review_submissions.final_score IS NOT NULL`) or its status has moved past
+`kra_set`. `preview_kpi_range_correction` and `correct_kpis_range` share this one
+predicate so the preview count and the applied skip count always agree.
