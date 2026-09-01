@@ -969,9 +969,21 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {spanPreview.entries.map((e) => (
-                        <TableRow key={periodLabel(e.target)}>
-                          <TableCell>{periodLabel(e.target)}</TableCell>
+                      {spanPreview.entries.map((e) => {
+                        const noMatch = !e.error
+                          && (e.result?.will_write ?? 0) === 0
+                          && (e.result?.will_skip ?? 0) === 0;
+                        return (
+                        <TableRow
+                          key={periodLabel(e.target)}
+                          className={noMatch ? 'bg-amber-500/10' : undefined}
+                        >
+                          <TableCell>
+                            {periodLabel(e.target)}
+                            {isPastPeriod(e.target as any) && (
+                              <Badge variant="outline" className="ml-2 text-[10px]">back-dated</Badge>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">
                             {e.error
                               ? <span className="text-destructive">{e.error}</span>
@@ -992,11 +1004,17 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
                                       {skipReasonLabel(e.result) ?? 'rows skipped'}
                                     </span>
                                   )
-                                  : <span className="text-muted-foreground">no KPI assignments</span>}
+                                  : (
+                                    <span className="text-amber-700 dark:text-amber-400">
+                                      no rows matched in this month
+                                    </span>
+                                  )}
                           </TableCell>
                           <TableCell className="text-right">{e.result?.will_skip ?? 0}</TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
+
 
                     </TableBody>
                   </Table>
