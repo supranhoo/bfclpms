@@ -8,6 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { useKraCategories, useProfiles, useCreateKraCategory } from '@/hooks/useOrganization';
 import { useCreateKpi, ReviewStatus } from '@/hooks/useKpis';
+import { useAssignOrgKpiOwner } from '@/hooks/useOrgKpiDataOwner';
+import { OrgKpiDataOwnersField } from './org-kpi/OrgKpiDataOwnersField';
+import { PendingOwner, buildOwnerAssignments, partitionOwnerFlush } from './org-kpi/ownerAssignmentModel';
 import { useSystemSettings } from '@/hooks/useSystemSettings';
 
 import { Separator } from '@/components/ui/separator';
@@ -116,6 +119,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
   const [thresholdMode, setThresholdMode] = useState<'absolute' | 'ratio'>('absolute');
   const [isOrgLevel, setIsOrgLevel] = useState(false);
   const [orgLevelScope, setOrgLevelScope] = useState('organization');
+  // ADR-335 — owners queued while the KPI does not exist yet.
+  const [pendingOwners, setPendingOwners] = useState<PendingOwner[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   // ADR-272 — structured KPI text, shared with the Admin KPI Editor
@@ -278,6 +283,7 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
     setThresholdMode('absolute');
     setIsOrgLevel(false);
     setOrgLevelScope('organization');
+    setPendingOwners([]);
     setIsCustomKra(false);
     setIsCustomKpi(false);
     setIsCustomCategory(false);
@@ -338,6 +344,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
     setKpiName(buildTextPayload(next).kpi_name);
   };
 
+  const assignOwner = useAssignOrgKpiOwner();
+
   const handleSubmit = async () => {
     if (!employeeId || !categoryId || !kraName || !kpiName) {
       return;
@@ -387,6 +395,37 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
         assignedMonth: reviewPeriod,
         frequencyCycleStart: (frequencyCycleStart && frequencyCycleStart !== 'system_default') ? frequencyCycleStart : null,
       });
+
+      // ADR-335 — attach queued data entry owners once the KPI exists. A
+      // failure never rolls the KPI back; the picks stay for a retry.
+      if (isOrgLevel && pendingOwners.length > 0) {
+        const assignments = buildOwnerAssignments(
+          { categoryId, kraName, kpiName: textPayload.kpi_name || kpiName },
+          pendingOwners,
+        );
+        const results = await Promise.all(
+          assignments.map(async (a) => {
+            try {
+              await assignOwner.mutateAsync({
+                categoryId: a.categoryId,
+                kraName: a.kraName,
+                kpiName: a.kpiName,
+                ownerId: a.ownerId,
+              });
+              return { ownerId: a.ownerId, ok: true };
+            } catch {
+              return { ownerId: a.ownerId, ok: false };
+            }
+          }),
+        );
+        const outcome = partitionOwnerFlush(pendingOwners, results);
+        if (outcome.failed.length > 0) {
+          setPendingOwners(outcome.remaining);
+          toast.error(outcome.message ?? 'Some data entry owners were not attached');
+          return;
+        }
+      }
+
       handleClose();
     } catch {
       // Error already handled by useCreateKpi onError toast
@@ -1157,7 +1196,8 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                       />
                     </div>
                     {isOrgLevel && (
-                      <div className="mt-3 space-y-1.5">
+                      <div className="mt-3 space-y-3">
+                        <div className="space-y-1.5">
                         <Label className="text-xs font-medium">Scope</Label>
                         <Select value={orgLevelScope} onValueChange={setOrgLevelScope}>
                           <SelectTrigger className="h-8 text-xs">
@@ -1169,6 +1209,16 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                             <SelectItem value="employee">Employee</SelectItem>
                           </SelectContent>
                         </Select>
+                        </div>
+                        {/* ADR-335 — map the KPI's data entry owners here */}
+                        <OrgKpiDataOwnersField
+                          mode="pending"
+                          categoryId={categoryId}
+                          kraName={kraName}
+                          kpiName={kpiName}
+                          pending={pendingOwners}
+                          onPendingChange={setPendingOwners}
+                        />
                       </div>
                     )}
                   </div>
