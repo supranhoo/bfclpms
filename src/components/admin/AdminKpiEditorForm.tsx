@@ -36,6 +36,8 @@ import {
   textStateFromRow,
   validateScoringState,
 } from '@/components/admin/kpi-form/kpiFormModel';
+import { OrgKpiDataOwnersField } from '@/components/admin/org-kpi/OrgKpiDataOwnersField';
+import { ownerRenameCarry } from '@/components/admin/org-kpi/ownerAssignmentModel';
 import { supabase } from '@/integrations/supabase/client';
 import { isFiscalTuple } from '@/lib/fiscalWindow';
 import { toast } from 'sonner';
