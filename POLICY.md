@@ -6014,7 +6014,8 @@ overwrite fields absent from the upload.
    failure names the failing period and how many earlier periods were applied.
 3. **Deliberate issuance is authoritative.** Any admin/manual rollover records
    `kra_period_issuance(employee_id, review_period, review_year, status='issued')`.
-   The monthly cron (`triggered_by = 'system'`, `force = false`) MUST skip every
+   The monthly scheduler (`triggered_by = 'cron'` or legacy `'system'`,
+   authenticated by its scheduler secret, `force = false`) MUST skip every
    employee whose target period is marked issued, and — as a backstop for
    pre-ADR-248 data — every employee who already has at least one KPI in the
    exact target month. Dedup on `(kra_name, kpi_name, period)` alone is NOT
@@ -6026,6 +6027,17 @@ overwrite fields absent from the upload.
    per affected employee for the target period and returns
    `weightage_warnings` for anyone above 100. The UI must surface these. The
    system flags, never silently corrects, a KRA set.
+6. **Scheduled invocation is canonical and fail-closed (ADR-333).** Invocation
+   classification is owned by `rolloverGuard.ts`; caller-supplied labels without
+   the valid scheduler secret never gain scheduled privileges. A scheduled run
+   MUST abort when issuance or target-month guard reads fail. Before inserting,
+   it MUST skip any employee whose projected target-month weightage would exceed
+   100.5%; manual/admin top-ups retain the explicit override path.
+7. **Incident repair is archive-first.** Automated cleanup MUST preserve the
+   complete KPI before-image and linked audit rows, prove that no submissions,
+   observations, queries, or auditor assignments depend on candidates, and then
+   delete in the same transaction. Automated repair attribution remains NULL;
+   archives are Admin-readable and backend-writable only.
 
 ## §PERF-EVIDENCE-PREVIEW (ADR-250, 2026-08-04)
 

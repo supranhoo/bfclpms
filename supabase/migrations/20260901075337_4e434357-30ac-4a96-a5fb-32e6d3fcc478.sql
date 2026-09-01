@@ -1,0 +1,2 @@
+REVOKE EXECUTE ON FUNCTION public.admin_repair_sep_2026_rollover_incident(boolean, text) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_repair_sep_2026_rollover_incident(boolean, text) TO service_role;

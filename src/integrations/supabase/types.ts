@@ -9864,6 +9864,54 @@ export type Database = {
           },
         ]
       }
+      kra_rollover_incident_repair_archive: {
+        Row: {
+          audit_rows: Json
+          employee_id: string
+          id: string
+          incident_key: string
+          kpi_row: Json
+          original_kpi_id: string
+          repair_reason: string
+          repaired_at: string
+          repaired_by: string | null
+          restored_at: string | null
+          restored_by: string | null
+          review_period: string
+          review_year: number
+        }
+        Insert: {
+          audit_rows?: Json
+          employee_id: string
+          id?: string
+          incident_key: string
+          kpi_row: Json
+          original_kpi_id: string
+          repair_reason: string
+          repaired_at?: string
+          repaired_by?: string | null
+          restored_at?: string | null
+          restored_by?: string | null
+          review_period: string
+          review_year: number
+        }
+        Update: {
+          audit_rows?: Json
+          employee_id?: string
+          id?: string
+          incident_key?: string
+          kpi_row?: Json
+          original_kpi_id?: string
+          repair_reason?: string
+          repaired_at?: string
+          repaired_by?: string | null
+          restored_at?: string | null
+          restored_by?: string | null
+          review_period?: string
+          review_year?: number
+        }
+        Relationships: []
+      }
       kra_rollover_logs: {
         Row: {
           created_at: string | null
@@ -17485,6 +17533,10 @@ export type Database = {
           p_instance_ids: string[]
           p_reason: string
         }
+        Returns: Json
+      }
+      admin_repair_sep_2026_rollover_incident: {
+        Args: { p_dry_run?: boolean; p_reason?: string }
         Returns: Json
       }
       admin_rescale_dust_emission_june_2026: {

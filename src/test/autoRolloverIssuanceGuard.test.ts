@@ -1,4 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import {
+  exceedsScheduledWeightageLimit,
+  projectedTargetWeightage,
+  resolveInvocationMode,
+  resolveIssuanceSkipSet,
+} from '../../supabase/functions/auto-rollover-kpis/rolloverGuard';
 
 /**
  * ADR-248 / POLICY §KRA-PERIOD-ISSUANCE.
@@ -9,31 +15,8 @@ import { describe, it, expect } from 'vitest';
  * purpose" — the observed failure was total weightage inflating past 100.
  */
 
-interface GuardArgs {
-  triggeredBy: string;
-  force?: boolean;
-  employeeIds: string[];
-  /** employees with a `kra_period_issuance` row status='issued' for the target */
-  issuedEmployeeIds: string[];
-  /** existing target-period KPI rows (any month in the queried cycle set) */
-  targetKpis: Array<{ employee_id: string; review_period: string }>;
-  targetMonth: string;
-}
-
-function resolveIssuanceSkipSet(a: GuardArgs): Set<string> {
-  const skip = new Set<string>();
-  if (a.triggeredBy !== 'system' || a.force) return skip;
-  for (const id of a.issuedEmployeeIds) {
-    if (a.employeeIds.includes(id)) skip.add(id);
-  }
-  for (const tk of a.targetKpis) {
-    if (tk.review_period === a.targetMonth) skip.add(tk.employee_id);
-  }
-  return skip;
-}
-
-const base: GuardArgs = {
-  triggeredBy: 'system',
+const base = {
+  mode: 'scheduled' as const,
   employeeIds: ['e1', 'e2', 'e3'],
   issuedEmployeeIds: [],
   targetKpis: [],
@@ -41,6 +24,18 @@ const base: GuardArgs = {
 };
 
 describe('auto-rollover issuance guard', () => {
+  it('classifies the deployed cron payload as scheduled', () => {
+    expect(resolveInvocationMode({ triggeredBy: 'cron', hasValidCronSecret: true })).toBe('scheduled');
+  });
+
+  it('classifies a valid cron-secret request as scheduled regardless of its body label', () => {
+    expect(resolveInvocationMode({ triggeredBy: 'admin_manual', hasValidCronSecret: true })).toBe('scheduled');
+  });
+
+  it('keeps the legacy system label fail-safe for dry-run probes', () => {
+    expect(resolveInvocationMode({ triggeredBy: 'system', hasValidCronSecret: false })).toBe('scheduled');
+  });
+
   it('cron skips employees whose target period is explicitly marked issued', () => {
     const skip = resolveIssuanceSkipSet({ ...base, issuedEmployeeIds: ['e2'] });
     expect([...skip]).toEqual(['e2']);
@@ -65,7 +60,7 @@ describe('auto-rollover issuance guard', () => {
   it('manual admin runs are never blocked — balances can still be topped up', () => {
     const skip = resolveIssuanceSkipSet({
       ...base,
-      triggeredBy: 'admin_manual',
+      mode: 'manual',
       issuedEmployeeIds: ['e1', 'e2'],
       targetKpis: [{ employee_id: 'e3', review_period: 'July' }],
     });
@@ -104,5 +99,28 @@ describe('rollover weightage guard', () => {
 
   it('tolerates rounding noise at exactly 100', () => {
     expect(weightageWarnings([{ employee_id: 'e1', weightage: 100.2 }])).toEqual([]);
+  });
+
+  it('blocks the production failure shape before insert', () => {
+    const projected = projectedTargetWeightage(
+      [{ review_period: 'September', weightage: 100 }],
+      [{ review_period: 'September', weightage: 55 }],
+      'September',
+    );
+    expect(projected).toBe(155);
+    expect(exceedsScheduledWeightageLimit(projected)).toBe(true);
+  });
+
+  it('does not count later cycle siblings against the exact target month', () => {
+    const projected = projectedTargetWeightage(
+      [],
+      [
+        { review_period: 'September', weightage: 50 },
+        { review_period: 'October', weightage: 60 },
+      ],
+      'September',
+    );
+    expect(projected).toBe(50);
+    expect(exceedsScheduledWeightageLimit(projected)).toBe(false);
   });
 });
