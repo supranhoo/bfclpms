@@ -18313,6 +18313,7 @@ export type Database = {
           p_page?: number
           p_page_size?: number
           p_period: string
+          p_search?: string
           p_stage?: string
           p_year: number
         }
