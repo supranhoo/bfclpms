@@ -20,7 +20,8 @@ import {
 import { ReviewPeriodSelector } from '@/components/ui/ReviewPeriodSelector';
 import { OrgFilterCombobox, type ComboboxOption } from '@/components/admin/OrgFilterCombobox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 
 export interface ScopeFilterConfig {
   key: string;
@@ -275,6 +276,7 @@ export function ScopeToolbar({
           Filters changed — apply to refresh the results below.
         </p>
       )}
+      {searchSummary && <div className="pt-1.5 text-xs text-muted-foreground">{searchSummary}</div>}
       {hint && <p className="pt-1.5 text-xs text-muted-foreground">{hint}</p>}
     </div>
     </>
