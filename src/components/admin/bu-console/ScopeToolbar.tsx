@@ -142,6 +142,27 @@ export function ScopeToolbar({
           />
         </div>
 
+        {/* ADR-336 — search the loaded tree: category, KRA or KPI. */}
+        {onSearchChange && (
+          <div className="relative w-full min-w-[180px] sm:w-auto sm:flex-1 sm:max-w-[280px]">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              type="search"
+              value={search ?? ''}
+              onChange={e => onSearchChange(e.target.value)}
+              disabled={!hasScope}
+              placeholder="Search KRA, KPI or employee"
+              aria-label="Search categories, KRAs, KPIs and employees in the loaded scope"
+              className="h-10 pl-8"
+            />
+          </div>
+        )}
+
+
+
         {/* Desktop: inline filters */}
         <div className="hidden flex-1 flex-wrap items-center gap-2 md:flex">
           {filters.map(f => (
