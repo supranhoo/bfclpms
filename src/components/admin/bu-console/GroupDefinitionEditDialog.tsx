@@ -420,9 +420,22 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     if (!args || !spanPreview) return;
     commitMut.mutate(
       { ...baseArgs(args), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly },
-      { onSuccess: () => onOpenChange(false) },
+      {
+        onSuccess: async () => {
+          // ADR-334 — the rename runs only after the definition edit succeeded.
+          // If it fails, the definition changes stay and the hook toasts the
+          // rename as the failed part; the dialog stays open so it can be retried.
+          if (renameArgs) {
+            const res = await renameApply(renameArgs);
+            if (!res) return;
+            await queryClient.invalidateQueries();
+          }
+          onOpenChange(false);
+        },
+      },
     );
   };
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
