@@ -722,6 +722,152 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
             </div>
           </div>
 
+          {/* ADR-334 — opt-in legacy display-name rename (reports + Org KPI Data Entry). */}
+          <div className="space-y-3 rounded-md border p-3">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="legacy-rename"
+                checked={rename.enabled}
+                onCheckedChange={(v) => patchRename({ enabled: v === true })}
+              />
+              <div className="space-y-0.5">
+                <Label htmlFor="legacy-rename" className="text-xs font-medium">
+                  Also update the legacy display name used in reports and Org KPI Data Entry
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Off by default. The wording above always updates the scorecard and console;
+                  this also rewrites the old KPI name that reports and Excel exports still show.
+                </p>
+              </div>
+            </div>
+
+            {rename.enabled && (
+              <div className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5 min-w-0">
+                    <Label className="text-xs">New KRA name</Label>
+                    <Input
+                      value={rename.newKra}
+                      onChange={(e) => patchRename({ newKra: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5 min-w-0">
+                    <Label className="text-xs">New KPI name</Label>
+                    <Input
+                      value={rename.newKpi}
+                      onChange={(e) => patchRename({ newKpi: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5 min-w-0">
+                    <Label className="text-xs">Rename from</Label>
+                    <Select
+                      value={`${rename.fromPeriod}|${rename.fromYear}`}
+                      onValueChange={(v) => {
+                        const [p, y] = v.split('|');
+                        patchRename({ fromPeriod: p, fromYear: Number(y) });
+                      }}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {monthOptions.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5 min-w-0">
+                    <Label className="text-xs">Rename to</Label>
+                    <Select
+                      value={`${rename.toPeriod}|${rename.toYear}`}
+                      onValueChange={(v) => {
+                        const [p, y] = v.split('|');
+                        patchRename({ toPeriod: p, toYear: Number(y) });
+                      }}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {monthOptions.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-muted-foreground">
+                  Months before May 2026 are frozen and cannot be renamed. A rename is one
+                  reversible action — it can be undone from KPI Standardization — and it only
+                  changes text: targets, weightages, scores and workflow status are never touched.
+                </p>
+
+                {renameError && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>{renameError}</AlertDescription>
+                  </Alert>
+                )}
+                {!renameError && renameNoop && (
+                  <p className="text-[11px] text-muted-foreground">
+                    The names are unchanged, so nothing will be renamed.
+                  </p>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={runRenamePreview}
+                    disabled={!renameArgs || renamePreviewing}
+                  >
+                    {renamePreviewing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Preview rename
+                  </Button>
+                  {renamePreview && (
+                    <>
+                      <Badge>{renameRows} rows to rename</Badge>
+                      <Badge variant="outline">{renameOrgRows} Org KPI rows</Badge>
+                      <Badge variant="outline">{renameLocked} locked rows</Badge>
+                    </>
+                  )}
+                </div>
+
+                {renamePreview && renamePreview.length > 0 && (
+                  <details className="rounded-md border p-3 text-sm" open>
+                    <summary className="cursor-pointer font-medium">Per-month rename preview</summary>
+                    <Table className="mt-2">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Period</TableHead>
+                          <TableHead className="text-right">Rows</TableHead>
+                          <TableHead className="text-right">Locked</TableHead>
+                          <TableHead className="text-right">Org KPI</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {renamePreview.map((r) => (
+                          <TableRow key={`${r.review_period}-${r.review_year}`}>
+                            <TableCell>{r.review_period} {r.review_year}</TableCell>
+                            <TableCell className="text-right">{r.kpi_rows}</TableCell>
+                            <TableCell className="text-right">{r.locked_rows}</TableCell>
+                            <TableCell className="text-right">{r.org_rows}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </details>
+                )}
+                {renamePreview && renamePreview.length === 0 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    No matching rows found in that range.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
 
           <div className="text-xs text-muted-foreground">
             {changedFields.length === 0
