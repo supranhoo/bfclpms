@@ -58,6 +58,13 @@ import {
   kpiScopeLabel, rowScopeNeedsTarget,
   KPI_ROW_SCOPE_TARGET_COLUMNS, KPI_ROW_TARGET_COLUMNS,
 } from '@/lib/review/kpiScope';
+import { useKpiRangeCorrection, type RangeDryRunRow } from '@/hooks/useKpiRangeCorrection';
+import {
+  buildRenameArgs, initialRenameState, isRenameNoop, renameMonthOptions, validateRename,
+  type LegacyRenameState,
+} from './legacyRename';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useQueryClient } from '@tanstack/react-query';
 import { ScopeTargetPicker } from '@/components/admin/kpi-scope/ScopeTargetPicker';
 import { GroupDataOwnersField } from './GroupDataOwnersField';
 
