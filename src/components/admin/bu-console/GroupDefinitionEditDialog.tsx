@@ -197,9 +197,17 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   );
 
   const pastAnchorSpan = useMemo(
-    () => (args ? spanSkipsPastMonths(toTarget(args.period, args.year), spanMode) : false),
-    [args?.period, args?.year, spanMode],
+    () => (args ? spanSkipsPastMonths(toTarget(args.period, args.year), spanMode, new Date(), spanCount) : false),
+    [args?.period, args?.year, spanMode, spanCount],
   );
+
+  /** ADR-337 — the back-dated months of the span, named explicitly. */
+  const backDatedLabel = useMemo(() => {
+    const back = backDatedTargets(targets);
+    if (!back.length) return '';
+    return `${back.map(periodLabel).join(', ')} ${back.length === 1 ? 'is' : 'are'}`;
+  }, [targets]);
+
 
 
   /** Detail lists (weightage, skips, clashes) always describe the selected month. */
