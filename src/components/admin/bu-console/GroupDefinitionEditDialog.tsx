@@ -58,6 +58,13 @@ import {
   kpiScopeLabel, rowScopeNeedsTarget,
   KPI_ROW_SCOPE_TARGET_COLUMNS, KPI_ROW_TARGET_COLUMNS,
 } from '@/lib/review/kpiScope';
+import { useKpiRangeCorrection, type RangeDryRunRow } from '@/hooks/useKpiRangeCorrection';
+import {
+  buildRenameArgs, initialRenameState, isRenameNoop, renameMonthOptions, validateRename,
+  type LegacyRenameState,
+} from './legacyRename';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useQueryClient } from '@tanstack/react-query';
 import { ScopeTargetPicker } from '@/components/admin/kpi-scope/ScopeTargetPicker';
 import { GroupDataOwnersField } from './GroupDataOwnersField';
 
@@ -118,13 +125,64 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const [spanCount, setSpanCount] = useState(3);
   const [spanPreview, setSpanPreview] = useState<GroupEditSpanResult | null>(null);
   const [confirmText, setConfirmText] = useState('');
+  // ADR-334 — opt-in legacy display-name rename (reports / Org KPI Data Entry).
+  const [rename, setRename] = useState<LegacyRenameState>(() =>
+    initialRenameState(
+      {
+        categoryId: args?.categoryId ?? '',
+        oldKra: args?.kraName ?? '',
+        oldKpi: args?.kpiName ?? '',
+        period: args?.period ?? 'July',
+        year: args?.year ?? new Date().getFullYear(),
+      },
+      definition?.kpi_title,
+    ));
+  const [renamePreview, setRenamePreview] = useState<RangeDryRunRow[] | null>(null);
 
 
   const previewMut = useGroupEditSpanPreview();
   const commitMut = useGroupEditSpanCommit();
   const { data: categories } = useKraCategories();
+  const queryClient = useQueryClient();
+  const { dryRun: renameDryRun, apply: renameApply, previewing: renamePreviewing, applying: renameApplying } =
+    useKpiRangeCorrection();
+
+  const renameAnchor = useMemo(() => ({
+    categoryId: args?.categoryId ?? '',
+    oldKra: args?.kraName ?? '',
+    oldKpi: args?.kpiName ?? '',
+    period: args?.period ?? 'July',
+    year: args?.year ?? new Date().getFullYear(),
+  }), [args?.categoryId, args?.kraName, args?.kpiName, args?.period, args?.year]);
+
+  const renameError = validateRename(rename);
+  const renameNoop = rename.enabled && !renameError && isRenameNoop(rename, renameAnchor);
+  const renameArgs = buildRenameArgs(
+    rename,
+    renameAnchor,
+    (definition?.kpi_definition_id as string) ?? null,
+  );
+  const renameRows = (renamePreview ?? []).reduce((n, r) => n + Number(r.kpi_rows ?? 0), 0);
+  const renameOrgRows = (renamePreview ?? []).reduce((n, r) => n + Number(r.org_rows ?? 0), 0);
+  const renameLocked = (renamePreview ?? []).reduce((n, r) => n + Number(r.locked_rows ?? 0), 0);
+
+  const monthOptions = useMemo(() => {
+    const base = renameAnchor.year;
+    return renameMonthOptions([base - 1, base, base + 1]);
+  }, [renameAnchor.year]);
+
+  const patchRename = (patch: Partial<LegacyRenameState>) => {
+    setRename((prev) => ({ ...prev, ...patch }));
+    setRenamePreview(null);
+  };
+
+  const runRenamePreview = async () => {
+    if (!renameArgs) return;
+    setRenamePreview(await renameDryRun(renameArgs));
+  };
 
   const setPreview = (v: GroupEditSpanResult | null) => setSpanPreview(v);
+
 
   const spanModes = useMemo(
     () => (args ? spanModesAvailable(toTarget(args.period, args.year)) : (['this'] as EditSpanMode[])),
@@ -179,7 +237,20 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     setResetOverrides(false);
     setSpanMode('this');
     setSpanCount(3);
-  }, [open, definition, args?.categoryId, args?.kraName]);
+    // ADR-334 — the rename is always opt-in again on every open.
+    setRename(initialRenameState(
+      {
+        categoryId: args?.categoryId ?? '',
+        oldKra: definition?.kra_name ?? args?.kraName ?? '',
+        oldKpi: args?.kpiName ?? '',
+        period: args?.period ?? 'July',
+        year: args?.year ?? new Date().getFullYear(),
+      },
+      definition?.kpi_title,
+    ));
+    setRenamePreview(null);
+  }, [open, definition, args?.categoryId, args?.kraName, args?.kpiName, args?.period, args?.year]);
+
 
   const original = useMemo(() => ({
     kpi_title: definition?.kpi_title ?? null,
@@ -349,9 +420,22 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     if (!args || !spanPreview) return;
     commitMut.mutate(
       { ...baseArgs(args), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly },
-      { onSuccess: () => onOpenChange(false) },
+      {
+        onSuccess: async () => {
+          // ADR-334 — the rename runs only after the definition edit succeeded.
+          // If it fails, the definition changes stay and the hook toasts the
+          // rename as the failed part; the dialog stays open so it can be retried.
+          if (renameArgs) {
+            const res = await renameApply(renameArgs);
+            if (!res) return;
+            await queryClient.invalidateQueries();
+          }
+          onOpenChange(false);
+        },
+      },
     );
   };
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -359,9 +443,12 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
         <DialogHeader>
           <DialogTitle>Edit definition for the whole group</DialogTitle>
           <DialogDescription>
-            Only the fields you change are written. The legacy KPI name is kept as-is so history,
-            reports and Org KPI matching keep working.
+            Only the fields you change are written.{' '}
+            {rename.enabled
+              ? 'The legacy KPI name will also be renamed for the months you pick below, so reports and Org KPI Data Entry match.'
+              : 'The legacy KPI name is kept as-is so history, reports and Org KPI matching keep working — tick the rename option below to update it too.'}
           </DialogDescription>
+
         </DialogHeader>
 
         <div className="space-y-4">
@@ -635,6 +722,152 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
             </div>
           </div>
 
+          {/* ADR-334 — opt-in legacy display-name rename (reports + Org KPI Data Entry). */}
+          <div className="space-y-3 rounded-md border p-3">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="legacy-rename"
+                checked={rename.enabled}
+                onCheckedChange={(v) => patchRename({ enabled: v === true })}
+              />
+              <div className="space-y-0.5">
+                <Label htmlFor="legacy-rename" className="text-xs font-medium">
+                  Also update the legacy display name used in reports and Org KPI Data Entry
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Off by default. The wording above always updates the scorecard and console;
+                  this also rewrites the old KPI name that reports and Excel exports still show.
+                </p>
+              </div>
+            </div>
+
+            {rename.enabled && (
+              <div className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5 min-w-0">
+                    <Label className="text-xs">New KRA name</Label>
+                    <Input
+                      value={rename.newKra}
+                      onChange={(e) => patchRename({ newKra: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5 min-w-0">
+                    <Label className="text-xs">New KPI name</Label>
+                    <Input
+                      value={rename.newKpi}
+                      onChange={(e) => patchRename({ newKpi: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5 min-w-0">
+                    <Label className="text-xs">Rename from</Label>
+                    <Select
+                      value={`${rename.fromPeriod}|${rename.fromYear}`}
+                      onValueChange={(v) => {
+                        const [p, y] = v.split('|');
+                        patchRename({ fromPeriod: p, fromYear: Number(y) });
+                      }}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {monthOptions.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5 min-w-0">
+                    <Label className="text-xs">Rename to</Label>
+                    <Select
+                      value={`${rename.toPeriod}|${rename.toYear}`}
+                      onValueChange={(v) => {
+                        const [p, y] = v.split('|');
+                        patchRename({ toPeriod: p, toYear: Number(y) });
+                      }}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {monthOptions.map((o) => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-muted-foreground">
+                  Months before May 2026 are frozen and cannot be renamed. A rename is one
+                  reversible action — it can be undone from KPI Standardization — and it only
+                  changes text: targets, weightages, scores and workflow status are never touched.
+                </p>
+
+                {renameError && (
+                  <Alert variant="destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>{renameError}</AlertDescription>
+                  </Alert>
+                )}
+                {!renameError && renameNoop && (
+                  <p className="text-[11px] text-muted-foreground">
+                    The names are unchanged, so nothing will be renamed.
+                  </p>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={runRenamePreview}
+                    disabled={!renameArgs || renamePreviewing}
+                  >
+                    {renamePreviewing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Preview rename
+                  </Button>
+                  {renamePreview && (
+                    <>
+                      <Badge>{renameRows} rows to rename</Badge>
+                      <Badge variant="outline">{renameOrgRows} Org KPI rows</Badge>
+                      <Badge variant="outline">{renameLocked} locked rows</Badge>
+                    </>
+                  )}
+                </div>
+
+                {renamePreview && renamePreview.length > 0 && (
+                  <details className="rounded-md border p-3 text-sm" open>
+                    <summary className="cursor-pointer font-medium">Per-month rename preview</summary>
+                    <Table className="mt-2">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Period</TableHead>
+                          <TableHead className="text-right">Rows</TableHead>
+                          <TableHead className="text-right">Locked</TableHead>
+                          <TableHead className="text-right">Org KPI</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {renamePreview.map((r) => (
+                          <TableRow key={`${r.review_period}-${r.review_year}`}>
+                            <TableCell>{r.review_period} {r.review_year}</TableCell>
+                            <TableCell className="text-right">{r.kpi_rows}</TableCell>
+                            <TableCell className="text-right">{r.locked_rows}</TableCell>
+                            <TableCell className="text-right">{r.org_rows}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </details>
+                )}
+                {renamePreview && renamePreview.length === 0 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    No matching rows found in that range.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
 
           <div className="text-xs text-muted-foreground">
             {changedFields.length === 0
@@ -863,11 +1096,18 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
           </Button>
           <Button
             onClick={runCommit}
-            disabled={!spanPreview || affected === 0 || commitMut.isPending || !confirmed}
+            disabled={
+              !spanPreview || affected === 0 || commitMut.isPending || !confirmed
+              || !!renameError || renameApplying
+            }
           >
-            {commitMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {(commitMut.isPending || renameApplying) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Apply to {affected} rows{targets.length > 1 ? ` · ${targets.length} months` : ''}
+            {renameArgs
+              ? ` · rename ${renamePreview ? `${renameRows} rows across ${renamePreview.length} months` : 'legacy name'}`
+              : ''}
           </Button>
+
         </DialogFooter>
       </DialogContent>
     </Dialog>
