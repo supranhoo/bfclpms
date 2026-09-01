@@ -1,4 +1,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  exceedsScheduledWeightageLimit,
+  projectedTargetWeightage,
+  resolveInvocationMode,
+  resolveIssuanceSkipSet,
+} from './rolloverGuard.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,6 +26,8 @@ interface EmployeeResult {
   existing_kpi_count: number;
   existing_kpi_names: string[];
   source_kpi_count: number;
+  reason?: string;
+  projected_weightage?: number;
 }
 
 interface RolloverRequest {
@@ -190,9 +198,10 @@ Deno.serve(async (req) => {
     const cronSecret = Deno.env.get('CRON_SECRET');
     const cronHeader = req.headers.get('X-Cron-Secret');
     const authHeader = req.headers.get('Authorization');
+    const hasValidCronSecret = Boolean(cronSecret && cronHeader && cronHeader === cronSecret);
     let isAuthorized = false;
 
-    if (cronSecret && cronHeader && cronHeader === cronSecret) {
+    if (hasValidCronSecret) {
       isAuthorized = true;
     } else if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.replace('Bearer ', '');
@@ -233,7 +242,12 @@ Deno.serve(async (req) => {
       carry_audit_assignments = false,
       issued_by,
     } = params;
-    const isCronRun = triggered_by === 'system';
+    // ADR-333: production pg_cron sends `cron`, while the historical function
+    // default was `system`. The validated cron header is authoritative and both
+    // legacy labels remain fail-safe aliases for scheduled behavior.
+    const invocationMode = resolveInvocationMode({ triggeredBy: triggered_by, hasValidCronSecret });
+    const isCronRun = invocationMode === 'scheduled';
+    const effectiveTriggeredBy = isCronRun ? 'cron' : triggered_by;
     // Manual/admin runs mark the target period as deliberately issued by
     // default; the cron never does.
     const markIssued = params.mark_issued ?? !isCronRun;
@@ -251,12 +265,16 @@ Deno.serve(async (req) => {
     console.log(`Rollover: ${sourceMonth} ${sourceYear} → ${targetMonth} ${targetYear}, dry_run=${dry_run}, balance_only=${rollover_balance_only}`);
 
     // Check auto-rollover setting (skip if manual/force/dry_run)
-    if (!force && !dry_run && triggered_by === 'system') {
-      const { data: setting } = await supabase
+    if (!force && !dry_run && isCronRun) {
+      const { data: setting, error: settingError } = await supabase
         .from('system_settings')
         .select('setting_value')
         .eq('setting_key', 'auto_kra_rollover')
         .single();
+
+      if (settingError) {
+        throw new Error(`Failed to verify auto-rollover setting: ${settingError.message}`);
+      }
 
       if (setting?.setting_value) {
         const value = typeof setting.setting_value === 'string'
@@ -304,7 +322,7 @@ Deno.serve(async (req) => {
           source_period: sourceMonth, source_year: sourceYear,
           target_period: targetMonth, target_year: targetYear,
           kpis_copied: 0, employees_affected: 0,
-          triggered_by, status: 'completed',
+          triggered_by: effectiveTriggeredBy, status: 'completed',
         });
       }
       return new Response(
@@ -325,11 +343,12 @@ Deno.serve(async (req) => {
     const inactiveSet = new Set<string>();
     for (let i = 0; i < empIdsAll.length; i += 50) {
       const chunk = empIdsAll.slice(i, i + 50);
-      const { data: profileChunk } = await supabase
+      const { data: profileChunk, error: profileError } = await supabase
         .from('profiles')
         .select('id, is_active')
         .in('id', chunk)
         .eq('is_active', false);
+      if (profileError) throw new Error(`Failed to verify active employees: ${profileError.message}`);
       if (profileChunk) {
         for (const p of profileChunk) inactiveSet.add(p.id);
       }
@@ -358,13 +377,14 @@ Deno.serve(async (req) => {
       const chunk = empIds.slice(i, i + 50);
       let tPage = 0;
       while (true) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('kpis')
-          .select('employee_id, kra_name, kpi_name, review_period')
+          .select('employee_id, kra_name, kpi_name, review_period, weightage')
           .eq('review_year', targetYear)
           .in('review_period', Array.from(possibleTargetMonths))
           .in('employee_id', chunk)
           .range(tPage * PAGE_SIZE, (tPage + 1) * PAGE_SIZE - 1);
+        if (error) throw new Error(`Failed to verify target-period KPIs: ${error.message}`);
         if (!data || data.length === 0) break;
         targetKpis.push(...data);
         if (data.length < PAGE_SIZE) break;
@@ -397,22 +417,29 @@ Deno.serve(async (req) => {
     //   2. backstop for historical data — the employee already has at least
     //      one KPI in the exact target month.
     // Manual/admin runs are unaffected and can still top-up balances.
-    const issuanceSkipSet = new Set<string>();
+    let issuanceSkipSet = new Set<string>();
     if (isCronRun && !force) {
+      const issuedEmployeeIds: string[] = [];
       for (let i = 0; i < empIds.length; i += 50) {
         const chunk = empIds.slice(i, i + 50);
-        const { data: issuedRows } = await supabase
+        const { data: issuedRows, error: issuedError } = await supabase
           .from('kra_period_issuance')
           .select('employee_id')
           .eq('review_period', targetMonth)
           .eq('review_year', targetYear)
           .eq('status', 'issued')
           .in('employee_id', chunk);
-        for (const r of issuedRows ?? []) issuanceSkipSet.add(r.employee_id);
+        if (issuedError) throw new Error(`Failed to verify target-period issuance: ${issuedError.message}`);
+        for (const r of issuedRows ?? []) issuedEmployeeIds.push(r.employee_id);
       }
-      for (const tk of targetKpis) {
-        if (tk.review_period === targetMonth) issuanceSkipSet.add(tk.employee_id);
-      }
+      issuanceSkipSet = resolveIssuanceSkipSet({
+        mode: invocationMode,
+        force,
+        employeeIds: empIds,
+        issuedEmployeeIds,
+        targetKpis,
+        targetMonth,
+      });
       if (issuanceSkipSet.size > 0) {
         console.log(
           `[Rollover] Cron skipping ${issuanceSkipSet.size} employee(s) whose ${targetMonth} ${targetYear} KRAs were already issued.`,
@@ -420,6 +447,7 @@ Deno.serve(async (req) => {
       }
     }
     const skippedAlreadyIssued: EmployeeResult[] = [];
+    const blockedOverweight: EmployeeResult[] = [];
     const conflicts: EmployeeResult[] = [];
     const kpisToInsert: any[] = [];
     // Track which source KPI each target row was cloned from, keyed by the
@@ -513,6 +541,33 @@ Deno.serve(async (req) => {
         }
       }
 
+      // ADR-333: a scheduled run must not create a target-month set above 100.
+      // This is a pre-write boundary; manual and explicit force runs retain the
+      // existing post-write warning so administrators can deliberately repair.
+      if (isCronRun && !force && kpisForThisEmployee.length > 0) {
+        const projected = projectedTargetWeightage(
+          targetKpis.filter((row) => row.employee_id === empId),
+          kpisForThisEmployee,
+          targetMonth,
+        );
+        if (exceedsScheduledWeightageLimit(projected)) {
+          blockedOverweight.push({
+            employee_id: empId,
+            employee_name: empName,
+            employee_code: empCode,
+            department: deptName,
+            kpis_copied: 0,
+            status: 'skipped',
+            existing_kpi_count: existingCount,
+            existing_kpi_names: existingNames,
+            source_kpi_count: kpis.length,
+            reason: 'projected_weightage_exceeds_100',
+            projected_weightage: Math.round(projected * 100) / 100,
+          });
+          continue;
+        }
+      }
+
       if (dry_run && existingCount > 0 && kpisCopied > 0) {
         conflicts.push({
           employee_id: empId,
@@ -561,11 +616,12 @@ Deno.serve(async (req) => {
           success: true,
           dry_run: true,
           rolled_over: rolledOver,
-          skipped_employees: [...skippedEmployees, ...skippedAlreadyIssued],
+          skipped_employees: [...skippedEmployees, ...skippedAlreadyIssued, ...blockedOverweight],
           conflicts,
           total_kpis_copied: rolledOver.reduce((s, r) => s + r.kpis_copied, 0),
           total_employees_affected: rolledOver.length,
           employees_skipped_already_issued: skippedAlreadyIssued.length,
+          employees_blocked_overweight: blockedOverweight.length,
           source_period: sourceMonth,
           source_year: sourceYear,
           target_period: targetMonth,
@@ -581,10 +637,11 @@ Deno.serve(async (req) => {
       resolvedMonthsSet.add(kpi.review_period);
     }
     for (const rm of resolvedMonthsSet) {
-      await supabase.from('review_periods').upsert(
+      const { error: periodError } = await supabase.from('review_periods').upsert(
         { period_name: rm, review_year: targetYear, is_locked: false },
         { onConflict: 'period_name,review_year', ignoreDuplicates: true }
       );
+      if (periodError) throw new Error(`Failed to prepare review period ${rm} ${targetYear}: ${periodError.message}`);
     }
 
     // Insert KPIs in batches of 500
@@ -608,7 +665,7 @@ Deno.serve(async (req) => {
           source_period: sourceMonth, source_year: sourceYear,
           target_period: targetMonth, target_year: targetYear,
           kpis_copied: totalInserted, employees_affected: 0,
-          triggered_by, status: 'failed',
+          triggered_by: effectiveTriggeredBy, status: 'failed',
           error_message: insertError.message,
         });
         throw new Error(`Insert failed: ${insertError.message}`);
@@ -710,7 +767,7 @@ Deno.serve(async (req) => {
                 source_year: sourceYear,
                 target_period: targetMonth,
                 target_year: targetYear,
-                triggered_by,
+                triggered_by: effectiveTriggeredBy,
                 source_assignments_found: sourceAssignmentByKpi.size,
                 target_kpis_matched: rowsToUpsert.length,
                 cloned: auditAssignmentsCloned,
@@ -823,7 +880,7 @@ Deno.serve(async (req) => {
         review_period: targetMonth,
         review_year: targetYear,
         status: 'issued',
-        source: `rollover:${triggered_by}`,
+        source: `rollover:${effectiveTriggeredBy}`,
         issued_by: issued_by ?? null,
         note: `Rolled over from ${sourceMonth} ${sourceYear}`,
       }));
@@ -878,7 +935,7 @@ Deno.serve(async (req) => {
       target_year: targetYear,
       kpis_copied: totalInserted,
       employees_affected: rolledOver.length,
-      triggered_by,
+      triggered_by: effectiveTriggeredBy,
       status: 'completed',
       error_message: duplicatesSkipped > 0
         ? `Skipped ${duplicatesSkipped} pre-existing duplicate KPI(s).`
@@ -887,6 +944,7 @@ Deno.serve(async (req) => {
         rolled_over: rolledOver,
         skipped: skippedEmployees,
         skipped_already_issued: skippedAlreadyIssued,
+        blocked_overweight: blockedOverweight,
         duplicates_skipped: duplicatesSkipped,
         weightage_warnings: weightageWarnings,
       },
@@ -896,12 +954,13 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         rolled_over: rolledOver,
-        skipped_employees: [...skippedEmployees, ...skippedAlreadyIssued],
+        skipped_employees: [...skippedEmployees, ...skippedAlreadyIssued, ...blockedOverweight],
         conflicts: [],
         total_kpis_copied: totalInserted,
         duplicates_skipped: duplicatesSkipped,
         total_employees_affected: rolledOver.length,
         employees_skipped_already_issued: skippedAlreadyIssued.length,
+        employees_blocked_overweight: blockedOverweight.length,
         weightage_warnings: weightageWarnings,
         source_period: sourceMonth,
         source_year: sourceYear,
