@@ -1143,7 +1143,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   );
 }
 
-function baseArgs(a: KpiDetailArgs) {
+function baseArgs(a: KpiDetailArgs, definitionId?: string | null) {
   return {
     categoryId: a.categoryId,
     kraName: a.kraName,
@@ -1156,8 +1156,11 @@ function baseArgs(a: KpiDetailArgs) {
     managerIds: a.managerIds,
     titleKey: a.titleKey ?? null,
     variantKey: a.variantKey ?? null,
+    /** ADR-337 — stable fallback key when a month's rows lost their title. */
+    definitionId: definitionId ?? null,
   };
 }
+
 
 function scoringFromDefinition(def: Record<string, any> | null | undefined): KpiScoringState {
   return {
