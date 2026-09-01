@@ -443,9 +443,12 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
         <DialogHeader>
           <DialogTitle>Edit definition for the whole group</DialogTitle>
           <DialogDescription>
-            Only the fields you change are written. The legacy KPI name is kept as-is so history,
-            reports and Org KPI matching keep working.
+            Only the fields you change are written.{' '}
+            {rename.enabled
+              ? 'The legacy KPI name will also be renamed for the months you pick below, so reports and Org KPI Data Entry match.'
+              : 'The legacy KPI name is kept as-is so history, reports and Org KPI matching keep working — tick the rename option below to update it too.'}
           </DialogDescription>
+
         </DialogHeader>
 
         <div className="space-y-4">
