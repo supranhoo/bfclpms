@@ -125,13 +125,60 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const [spanCount, setSpanCount] = useState(3);
   const [spanPreview, setSpanPreview] = useState<GroupEditSpanResult | null>(null);
   const [confirmText, setConfirmText] = useState('');
+  // ADR-334 — opt-in legacy display-name rename (reports / Org KPI Data Entry).
+  const [rename, setRename] = useState<LegacyRenameState>(() =>
+    initialRenameState(
+      {
+        categoryId: args?.categoryId ?? '',
+        oldKra: args?.kraName ?? '',
+        oldKpi: args?.kpiName ?? '',
+        period: args?.period ?? 'July',
+        year: args?.year ?? new Date().getFullYear(),
+      },
+      definition?.kpi_title,
+    ));
+  const [renamePreview, setRenamePreview] = useState<RangeDryRunRow[] | null>(null);
 
 
   const previewMut = useGroupEditSpanPreview();
   const commitMut = useGroupEditSpanCommit();
   const { data: categories } = useKraCategories();
+  const queryClient = useQueryClient();
+  const { dryRun: renameDryRun, apply: renameApply, previewing: renamePreviewing, applying: renameApplying } =
+    useKpiRangeCorrection();
+
+  const renameAnchor = useMemo(() => ({
+    categoryId: args?.categoryId ?? '',
+    oldKra: args?.kraName ?? '',
+    oldKpi: args?.kpiName ?? '',
+    period: args?.period ?? 'July',
+    year: args?.year ?? new Date().getFullYear(),
+  }), [args?.categoryId, args?.kraName, args?.kpiName, args?.period, args?.year]);
+
+  const renameError = validateRename(rename);
+  const renameNoop = rename.enabled && !renameError && isRenameNoop(rename, renameAnchor);
+  const renameArgs = buildRenameArgs(rename, renameAnchor, (definition?.definition_id as string) ?? null);
+  const renameRows = (renamePreview ?? []).reduce((n, r) => n + Number(r.kpi_rows ?? 0), 0);
+  const renameOrgRows = (renamePreview ?? []).reduce((n, r) => n + Number(r.org_rows ?? 0), 0);
+  const renameLocked = (renamePreview ?? []).reduce((n, r) => n + Number(r.locked_rows ?? 0), 0);
+
+  const monthOptions = useMemo(() => {
+    const base = renameAnchor.year;
+    return renameMonthOptions([base - 1, base, base + 1]);
+  }, [renameAnchor.year]);
+
+  const patchRename = (patch: Partial<LegacyRenameState>) => {
+    setRename((prev) => ({ ...prev, ...patch }));
+    setRenamePreview(null);
+  };
+
+  const runRenamePreview = async () => {
+    if (!renameArgs) return;
+    setRenamePreview(await renameDryRun(renameArgs));
+  };
 
   const setPreview = (v: GroupEditSpanResult | null) => setSpanPreview(v);
+
 
   const spanModes = useMemo(
     () => (args ? spanModesAvailable(toTarget(args.period, args.year)) : (['this'] as EditSpanMode[])),
