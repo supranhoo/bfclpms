@@ -6981,7 +6981,19 @@ cascade still to ship).
    `org_level_scope = NULL`; existing rows are left untouched because reads
    ignore the field when `is_org_level = false`.
 
+5. **Owner mapping travels with the scope (ADR-335).** Wherever a KPI can be
+   marked organization-level — the Performance Console group editor, **Assign
+   New KRA**, and the **Admin KPI Editor** — the same **Data entry owners**
+   picker is offered, backed by one shared component and by
+   `org_kpi_data_owners` (category + KRA + KPI name, period-agnostic). Owners
+   are written immediately when the KPI exists, and queued then flushed after
+   a successful create when it does not; a failed attachment never rolls the
+   KPI back and is surfaced by name for retry. Renaming the KRA or KPI carries
+   the owner rows across. Turning the org-level toggle off never deletes
+   owner rows.
+
 - **v2.66.319 (2026-08-26):** §KPI-SCOPE-SINGLE-VOCABULARY introduced (ADR-319).
+- **v2.66.335 (2026-09-01):** owner mapping available from every org-level KPI surface (ADR-335).
 
 ## §KPI-SCOPE-GROUPED-TARGETING (ADR-320)
 
