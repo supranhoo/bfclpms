@@ -9457,3 +9457,28 @@ Notification Events, then optionally tailor the wording under Email Templates.
 Mentioned users then receive mail carrying the KPI, period, observation title,
 type and description. `src/tests/observationMentionEmailRegistry.test.ts` locks
 the registry parity so the same drift cannot recur.
+
+
+## ADR-337 — Group KPI edits now reach every month of the span
+
+**What:** A definition edit made from the Performance Console on a back-dated
+month (e.g. July while it is September) now writes every month from that anchor
+onward, matches rows by their definition link when the structured title is
+missing, and flags both back-dated months and zero-match months in the preview.
+The monthly rollover carries `kpi_title`, `kpi_description`, `kpi_formula`,
+`kpi_scoring_logic` and `kpi_definition_id` forward, and 11,173 existing rows
+that had lost that wording were restored (archived in
+`kpi_title_backfill_2026_09`, reversible).
+
+**Why:** An edit applied in July 2026 did not appear in August onward. Three
+independent faults stacked: the span builder dropped implicit months that were
+already past, so August was skipped entirely; rollover-created September and
+October rows had a NULL `kpi_title`, so the title-key match found nothing and
+reported "0 rows"; and the preview rendered that as a quiet "no KPI
+assignments", giving no signal that the edit had missed those months.
+
+**How:** Pick the month, open the KPI group editor, choose an "Apply to" span.
+The badge lists the exact months, past months carry a `back-dated` chip, and any
+month that matches nothing is highlighted in amber. Confirm to write each month
+as its own undoable run. `src/test/groupEditSpan.test.ts` locks the contiguity
+rule (POLICY §CONSOLE-EDIT-SPAN-CONTIGUITY).
