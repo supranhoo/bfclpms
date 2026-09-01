@@ -31,21 +31,29 @@ describe('ADR-291 — group edit span resolution', () => {
     expect(resolveEditSpan(toTarget('August', 2026), 'next_n', 99, today)).toHaveLength(12);
   });
 
-  it('ADR-321 — a past anchor is honoured and the rollout resumes from the current month', () => {
+  it('ADR-337 — a back-dated anchor keeps every month contiguous, gaps are never punched', () => {
     expect(isPastPeriod(toTarget('July', 2026), today)).toBe(true);
     expect(resolveEditSpan(toTarget('July', 2026), 'this', 5, today))
       .toEqual([{ month: 'July', year: 2026 }]);
 
     const forward = resolveEditSpan(toTarget('July', 2026), 'forward', 5, today);
     expect(forward[0]).toEqual({ month: 'July', year: 2026 });
-    // No past month other than the explicitly selected anchor.
-    expect(forward.slice(1).some((t) => isPastPeriod(t, today))).toBe(false);
+    // The month between the past anchor and today must be written, not skipped.
     expect(forward[1]).toEqual({ month: 'August', year: 2026 });
+    expect(forward[2]).toEqual({ month: 'September', year: 2026 });
     expect(forward.length).toBeLessThanOrEqual(12);
+
+    const nextN = resolveEditSpan(toTarget('July', 2026), 'next_n', 3, today);
+    expect(nextN.map((t) => t.month)).toEqual(['July', 'August', 'September']);
+
+    expect(backDatedTargets(nextN, today).map((t) => t.month)).toEqual(['July']);
+    expect(spanSkipsPastMonths(toTarget('July', 2026), 'forward', today)).toBe(true);
+    expect(spanSkipsPastMonths(toTarget('August', 2026), 'forward', today)).toBe(false);
 
     expect(spanModesAvailable(toTarget('July', 2026), today)).toEqual(['this', 'forward', 'next_n']);
     expect(spanModesAvailable(toTarget('August', 2026), today)).toEqual(['this', 'forward', 'next_n']);
   });
+
 
 
   it('describes the span for the operator', () => {
