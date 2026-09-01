@@ -31,44 +31,59 @@ export function isPastPeriod(target: RolloverTarget, today: Date = new Date()): 
 
 /**
  * ADR-321 — every mode is offered, including from a past anchor. The invariant
- * is not "never write a past month" but "never write a past month the admin did
- * not explicitly select": the anchor is always honoured, implicitly added months
- * are filtered to the current month onwards.
+ * is not "never write a past month" but "never write a month before the anchor
+ * the admin explicitly selected".
  */
 export function spanModesAvailable(_first: RolloverTarget, _today: Date = new Date()): EditSpanMode[] {
   return ['this', 'forward', 'next_n'];
 }
 
-/** True when the span will silently skip past months between anchor and today. */
+/**
+ * ADR-337 — true when the resolved span contains at least one month that is
+ * already in the past (anchor or a month between the anchor and today). These
+ * months are written, not skipped; the dialog flags them as back-dated.
+ */
 export function spanSkipsPastMonths(
   first: RolloverTarget,
   mode: EditSpanMode,
   today: Date = new Date(),
+  count = 2,
 ): boolean {
-  return mode !== 'this' && isPastPeriod(first, today);
+  return resolveEditSpan(first, mode, count, today).some((t) => isPastPeriod(t, today));
+}
+
+/** ADR-337 — months of the span that sit before the current calendar month. */
+export function backDatedTargets(
+  targets: RolloverTarget[],
+  today: Date = new Date(),
+): RolloverTarget[] {
+  return targets.filter((t) => isPastPeriod(t, today));
 }
 
 /**
- * Ordered target list for the chosen span: the selected month always, plus the
- * implicit months of the mode with past months removed and the 12-period cap
- * applied.
+ * Ordered target list for the chosen span: the anchor month plus the implicit
+ * months of the mode, contiguous and capped at 12 periods.
+ *
+ * ADR-337 — months between a past anchor and today are NEVER dropped. Removing
+ * them silently punched a hole in the span (July written, August skipped) and
+ * the admin had no way to see it.
  */
 export function resolveEditSpan(
   first: RolloverTarget,
   mode: EditSpanMode,
   count = 2,
-  today: Date = new Date(),
+  _today: Date = new Date(),
 ): RolloverTarget[] {
   if (mode === 'this') return [first];
   const targets = mode === 'forward'
     ? resolveRolloutTargets(first, 'rest_of_fy')
     : resolveRolloutTargets(first, 'next_n', count);
+  if (!targets.length) return [first];
   const key = (t: RolloverTarget) => `${t.month}-${t.year}`;
-  const kept = targets.filter((t) => key(t) === key(first) || !isPastPeriod(t, today));
-  if (!kept.length) return [first];
-  const withAnchor = kept.some((t) => key(t) === key(first)) ? kept : [first, ...kept];
+  const withAnchor = targets.some((t) => key(t) === key(first)) ? targets : [first, ...targets];
   return withAnchor.slice(0, MAX_ROLLOUT_PERIODS);
 }
+
 
 
 export function describeSpan(targets: RolloverTarget[]): string {
