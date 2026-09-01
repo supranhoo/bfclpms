@@ -9,7 +9,7 @@
  * Alignment (KRA tree) and the KPI library are dialogs off this page, not tabs.
  * Access is gated by the `feature_bu_console` admin flag.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +31,8 @@ import {
   type BuConsoleKpiVariant,
 } from '@/hooks/useBuConsole';
 import { BuConsoleTree } from '@/components/admin/bu-console/BuConsoleTree';
+import { filterConsoleTree } from '@/components/admin/bu-console/consoleSearch';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { ScopeToolbar } from '@/components/admin/bu-console/ScopeToolbar';
 import { KpiDetailDrawer } from '@/components/admin/bu-console/KpiDetailDrawer';
 import { MergeProposalsTab } from '@/components/admin/bu-console/MergeProposalsTab';
@@ -63,6 +65,10 @@ export default function BuConsole() {
   const [divisionIds, setDivisionIds] = useState<string[]>([]);
   const [managerIds, setManagerIds] = useState<string[]>([]);
   const [scope, setScope] = useState<BuConsoleScope | null>(null);
+
+  // ADR-336 — one search box over the loaded tree (debounced, POLICY §120).
+  const [searchInput, setSearchInput] = useState('');
+  const search = useDebouncedValue(searchInput, 300);
 
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [kraKey, setKraKey] = useState<string | null>(null);
@@ -165,6 +171,20 @@ export default function BuConsole() {
     () => (tree?.authorized ? computeConsoleStats(tree.categories, tree.employee_total) : null),
     [tree],
   );
+
+  // ADR-336 — the tree is already loaded, so search is a client-side projection.
+  const searchResult = useMemo(
+    () => filterConsoleTree(tree?.authorized ? tree.categories : [], search),
+    [tree, search],
+  );
+
+  // A search re-anchors the drilldown on the best hit so the user never lands
+  // on a category that the filter has emptied.
+  useEffect(() => {
+    if (!searchResult.active) return;
+    setCategoryId(searchResult.firstCategoryId);
+    setKraKey(searchResult.firstKraKey);
+  }, [search, searchResult.active, searchResult.firstCategoryId, searchResult.firstKraKey]);
 
   // Human-readable summary of the loaded scope (presentation only).
   const scopeSummary = useMemo(() => {
@@ -354,6 +374,24 @@ export default function BuConsole() {
             hasScope={!!scope}
             isDirty={scopeDirty}
             summary={scope ? `${scope.period} ${scope.year} · ${scopeSummary}` : undefined}
+            search={searchInput}
+            onSearchChange={setSearchInput}
+            searchSummary={
+              searchResult.active ? (
+                <span>
+                  {searchResult.matchedKpis} KPI{searchResult.matchedKpis === 1 ? '' : 's'} in{' '}
+                  {searchResult.matchedKras} KRA{searchResult.matchedKras === 1 ? '' : 's'} match
+                  “{search}”. Employee matches are filtered inside an open KPI.
+                  <button
+                    type="button"
+                    className="ml-2 underline hover:text-foreground"
+                    onClick={() => setSearchInput('')}
+                  >
+                    Clear search
+                  </button>
+                </span>
+              ) : undefined
+            }
             hint={!scope ? 'Nothing loads until you apply a scope — this keeps large BUs responsive.' : undefined}
           />
 
@@ -400,7 +438,7 @@ export default function BuConsole() {
           {tree?.authorized && !isFetching && (
             <div className={scopeDirty ? 'opacity-60 transition-opacity' : undefined} aria-busy={scopeDirty}>
             <BuConsoleTree
-              categories={tree.categories}
+              categories={searchResult.categories}
               selectedCategoryId={categoryId}
               selectedKraKey={kraKey}
               period={scope?.period}
@@ -428,6 +466,7 @@ export default function BuConsole() {
                         kpiKey={kpi.kpi_key}
                         kpiName={kpi.kpi_title || kpi.kpi_name}
                         stage={stage}
+                        initialPersonSearch={search}
                       />
                     )
                   : undefined
