@@ -46,6 +46,11 @@ interface ScopeToolbarProps {
   hint?: ReactNode;
   /** ADR-283 — one-line summary shown when the bar collapses on scroll. */
   summary?: string;
+  /** ADR-336 — free-text search over the loaded tree (category / KRA / KPI). */
+  search?: string;
+  onSearchChange?: (value: string) => void;
+  /** Result line rendered under the bar while a search is active. */
+  searchSummary?: ReactNode;
 }
 
 export function ScopeToolbar({
@@ -61,7 +66,11 @@ export function ScopeToolbar({
   isDirty,
   hint,
   summary,
+  search,
+  onSearchChange,
+  searchSummary,
 }: ScopeToolbarProps) {
+
   const [sheetOpen, setSheetOpen] = useState(false);
   const activeCount = filters.reduce((n, f) => n + (f.values.length > 0 ? 1 : 0), 0);
 
