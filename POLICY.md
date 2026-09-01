@@ -7104,6 +7104,12 @@ people.
 4. The May 2026 forward-only freeze applies: earlier months are skipped.
 5. Any report offering canonical names must resolve them at read time and label
    the mode, so entered text remains inspectable.
+6. **Console handoff (ADR-334).** The group definition editor may trigger the
+   same rename engine, but only as an explicit opt-in step: it is off by
+   default, previewed per month before commit, forward-only (nothing before
+   May 2026), reversible as one action, and it runs only after the definition
+   edit has committed. A definition edit alone never rewrites `kpi_name`.
+
 
 
 ### §OBS-MENTION-EMAIL (ADR-331)
