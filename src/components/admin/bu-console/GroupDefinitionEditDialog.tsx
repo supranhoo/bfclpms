@@ -237,7 +237,20 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
     setResetOverrides(false);
     setSpanMode('this');
     setSpanCount(3);
-  }, [open, definition, args?.categoryId, args?.kraName]);
+    // ADR-334 — the rename is always opt-in again on every open.
+    setRename(initialRenameState(
+      {
+        categoryId: args?.categoryId ?? '',
+        oldKra: definition?.kra_name ?? args?.kraName ?? '',
+        oldKpi: args?.kpiName ?? '',
+        period: args?.period ?? 'July',
+        year: args?.year ?? new Date().getFullYear(),
+      },
+      definition?.kpi_title,
+    ));
+    setRenamePreview(null);
+  }, [open, definition, args?.categoryId, args?.kraName, args?.kpiName, args?.period, args?.year]);
+
 
   const original = useMemo(() => ({
     kpi_title: definition?.kpi_title ?? null,
