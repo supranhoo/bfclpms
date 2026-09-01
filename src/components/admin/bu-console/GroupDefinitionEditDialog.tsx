@@ -41,8 +41,10 @@ import {
 } from '@/hooks/useBuConsole';
 import {
   resolveEditSpan, spanModesAvailable, spanSkipsPastMonths, describeSpan, aggregateSpan, periodLabel, toTarget,
+  backDatedTargets, isPastPeriod,
   EDIT_SPAN_LABELS, MAX_ROLLOUT_PERIODS, type EditSpanMode,
 } from './groupEditSpan';
+
 import { isDescriptiveOnly, scoringFields } from './editFieldClass';
 import {
   diffChanges, hasChanges, weightageDeviations, uniqueByEmployee,
