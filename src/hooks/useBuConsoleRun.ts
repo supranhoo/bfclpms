@@ -74,6 +74,8 @@ export interface RunSnapshotArgs extends BuConsoleScope {
   kraName?: string | null;
   page: number;
   pageSize: number;
+  /** ADR-336 — optional employee name / code filter (server-side). */
+  search?: string | null;
 }
 
 export function useRunSnapshot(args: RunSnapshotArgs | null) {
@@ -95,6 +97,7 @@ export function useRunSnapshot(args: RunSnapshotArgs | null) {
         p_manager_ids: args!.managerIds?.length ? args!.managerIds : null,
         p_page: args!.page,
         p_page_size: args!.pageSize,
+        p_search: args!.search?.trim() ? args!.search.trim() : null,
       });
       if (error) throw error;
       const d = (data ?? {}) as any;

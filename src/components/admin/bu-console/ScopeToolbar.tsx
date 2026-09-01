@@ -20,7 +20,8 @@ import {
 import { ReviewPeriodSelector } from '@/components/ui/ReviewPeriodSelector';
 import { OrgFilterCombobox, type ComboboxOption } from '@/components/admin/OrgFilterCombobox';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { RefreshCw, Search, SlidersHorizontal } from 'lucide-react';
 
 export interface ScopeFilterConfig {
   key: string;
@@ -46,6 +47,11 @@ interface ScopeToolbarProps {
   hint?: ReactNode;
   /** ADR-283 — one-line summary shown when the bar collapses on scroll. */
   summary?: string;
+  /** ADR-336 — free-text search over the loaded tree (category / KRA / KPI). */
+  search?: string;
+  onSearchChange?: (value: string) => void;
+  /** Result line rendered under the bar while a search is active. */
+  searchSummary?: ReactNode;
 }
 
 export function ScopeToolbar({
@@ -61,7 +67,11 @@ export function ScopeToolbar({
   isDirty,
   hint,
   summary,
+  search,
+  onSearchChange,
+  searchSummary,
 }: ScopeToolbarProps) {
+
   const [sheetOpen, setSheetOpen] = useState(false);
   const activeCount = filters.reduce((n, f) => n + (f.values.length > 0 ? 1 : 0), 0);
 
@@ -132,6 +142,27 @@ export function ScopeToolbar({
             onYearChange={onYearChange}
           />
         </div>
+
+        {/* ADR-336 — search the loaded tree: category, KRA or KPI. */}
+        {onSearchChange && (
+          <div className="relative w-full min-w-[180px] sm:w-auto sm:flex-1 sm:max-w-[280px]">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              type="search"
+              value={search ?? ''}
+              onChange={e => onSearchChange(e.target.value)}
+              disabled={!hasScope}
+              placeholder="Search KRA, KPI or employee"
+              aria-label="Search categories, KRAs, KPIs and employees in the loaded scope"
+              className="h-10 pl-8"
+            />
+          </div>
+        )}
+
+
 
         {/* Desktop: inline filters */}
         <div className="hidden flex-1 flex-wrap items-center gap-2 md:flex">
@@ -245,6 +276,7 @@ export function ScopeToolbar({
           Filters changed — apply to refresh the results below.
         </p>
       )}
+      {searchSummary && <div className="pt-1.5 text-xs text-muted-foreground">{searchSummary}</div>}
       {hint && <p className="pt-1.5 text-xs text-muted-foreground">{hint}</p>}
     </div>
     </>

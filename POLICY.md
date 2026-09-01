@@ -7136,3 +7136,26 @@ people.
    absent from the events list can never be enabled and is silently skipped.
 4. The event ships disabled by default; an admin enables it in Notification
    Events. Subject/body and send schedule are editable like any other template.
+
+
+## §CONSOLE-SEARCH (ADR-336)
+
+The Performance Console exposes exactly one search vocabulary, applied at two
+levels:
+
+1. **Tree search (client-side).** The category → KRA → KPI tree is already
+   loaded in full for the applied scope, so search MUST be a projection over
+   that payload — never a new fetch. A category-name hit keeps the whole
+   category; a KRA-name hit keeps all of its KPIs; otherwise a KPI must match on
+   title, legacy `kpi_name`, description or a variant name. Node counts are
+   recomputed on the filtered nodes so no count advertises a hidden row.
+2. **People search (server-side).** Any employee list that is paged MUST filter
+   on the server. `bu_console_run_snapshot` takes `p_search` (name or employee
+   code) and applies it before paging, so totals, page window and cells agree.
+   Filtering a paged list in the browser is forbidden — it searches one page.
+
+Both inputs are debounced at 300 ms (POLICY §120). Search never writes, never
+changes scope, and never hides a row from a write or approval path: it is a
+read-side filter only.
+
+- **v2.66.336 (2026-09-01):** §CONSOLE-SEARCH introduced (ADR-336).
