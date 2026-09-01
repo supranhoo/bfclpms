@@ -32,7 +32,9 @@ import { TargetRulesDialog, type TargetRulesTarget } from './TargetRulesDialog';
 import { ScoringLadderDialog } from './ScoringLadderDialog';
 import type { LadderTarget } from '@/hooks/useScoringLadder';
 import { stageLabel } from './pipelineStages';
-import { ChevronLeft, ChevronRight, ListTree, SlidersHorizontal } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { ChevronLeft, ChevronRight, ListTree, Search, SlidersHorizontal } from 'lucide-react';
 
 
 const COL_W = 128;
@@ -47,10 +49,12 @@ export interface KpiPeopleStripProps {
   kpiName: string;
   /** Stage the run is working at — owned by the console header stage rail. */
   stage: string;
+  /** ADR-336 — seed the people filter from the console-wide search box. */
+  initialPersonSearch?: string;
 }
 
 export function KpiPeopleStrip({
-  scope, categoryId, kraName, kpiKey, kpiName, stage,
+  scope, categoryId, kraName, kpiKey, kpiName, stage, initialPersonSearch = '',
 }: KpiPeopleStripProps) {
   const { canWrite } = useBuConsoleCapability();
   const [page, setPage] = useState(1);
@@ -61,11 +65,21 @@ export function KpiPeopleStrip({
   const [ruleTarget, setRuleTarget] = useState<TargetRulesTarget | null>(null);
   const [ladderTarget, setLadderTarget] = useState<LadderTarget | null>(null);
 
+  // ADR-336 — people search is server-side: the list is paged, so filtering it
+  // in the browser would only search the open page.
+  const [personSearch, setPersonSearch] = useState(initialPersonSearch);
+  const debouncedPersonSearch = useDebouncedValue(personSearch, 300);
+
+  useEffect(() => { setPersonSearch(initialPersonSearch); }, [initialPersonSearch]);
   useEffect(() => { setSelection(new Set()); setResult(null); setPage(1); }, [scope, stage, kraName, kpiKey]);
+  useEffect(() => { setPage(1); }, [debouncedPersonSearch]);
 
   const args = useMemo(
-    () => ({ ...scope, stage, categoryId, kraName, page, pageSize: PAGE_SIZE }),
-    [scope, stage, categoryId, kraName, page],
+    () => ({
+      ...scope, stage, categoryId, kraName, page, pageSize: PAGE_SIZE,
+      search: debouncedPersonSearch.trim() || null,
+    }),
+    [scope, stage, categoryId, kraName, page, debouncedPersonSearch],
   );
   const { data, isFetching } = useRunSnapshot(args);
   const preview = useRunAdvancePreview();
@@ -144,11 +158,18 @@ export function KpiPeopleStrip({
     );
   }
 
+  const searching = debouncedPersonSearch.trim().length > 0;
+
   if (!kpi) {
     return (
-      <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-        Nothing waiting at {stageLabel(stage)} for this KPI.
-      </p>
+      <div className="space-y-2 p-2">
+        <PersonSearchField value={personSearch} onChange={setPersonSearch} kpiName={kpiName} />
+        <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+          {searching
+            ? `No employee on this KPI matches “${debouncedPersonSearch.trim()}”.`
+            : `Nothing waiting at ${stageLabel(stage)} for this KPI.`}
+        </p>
+      </div>
     );
   }
 
@@ -157,7 +178,9 @@ export function KpiPeopleStrip({
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
           {stageLabel(stage)} · {employees.length} of {data?.employee_total ?? 0} people
+          {searching && <span className="ml-1 normal-case tracking-normal">(filtered)</span>}
         </p>
+        <PersonSearchField value={personSearch} onChange={setPersonSearch} kpiName={kpiName} />
         <div className="ml-auto flex items-center gap-1">
           {canWrite && selectableIds.length > 0 && (
             <Button
@@ -348,6 +371,29 @@ export function KpiPeopleStrip({
         scope={scope}
         open={!!ladderTarget}
         onOpenChange={o => !o && setLadderTarget(null)}
+      />
+    </div>
+  );
+}
+
+
+/** ADR-336 — "find a person" box for one KPI's people strip. */
+function PersonSearchField({
+  value, onChange, kpiName,
+}: { value: string; onChange: (v: string) => void; kpiName: string }) {
+  return (
+    <div className="relative w-full sm:w-[220px]">
+      <Search
+        className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+        aria-hidden
+      />
+      <Input
+        type="search"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="Find person"
+        aria-label={`Find an employee mapped to ${kpiName} by name or code`}
+        className="h-8 pl-8 text-xs"
       />
     </div>
   );
