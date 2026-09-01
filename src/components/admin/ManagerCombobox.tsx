@@ -35,6 +35,7 @@ export function ManagerCombobox({
   placeholder = 'Search manager...',
   showNone = true,
   noneLabel = 'None',
+  disabled = false,
 }: ManagerComboboxProps) {
   const [open, setOpen] = useState(false);
 
@@ -59,6 +60,7 @@ export function ManagerCombobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          disabled={disabled}
           className="w-full justify-between font-normal h-10"
         >
           <span className="truncate">
