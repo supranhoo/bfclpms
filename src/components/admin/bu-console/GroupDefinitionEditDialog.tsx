@@ -1096,11 +1096,18 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
           </Button>
           <Button
             onClick={runCommit}
-            disabled={!spanPreview || affected === 0 || commitMut.isPending || !confirmed}
+            disabled={
+              !spanPreview || affected === 0 || commitMut.isPending || !confirmed
+              || !!renameError || renameApplying
+            }
           >
-            {commitMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {(commitMut.isPending || renameApplying) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Apply to {affected} rows{targets.length > 1 ? ` · ${targets.length} months` : ''}
+            {renameArgs
+              ? ` · rename ${renamePreview ? `${renameRows} rows across ${renamePreview.length} months` : 'legacy name'}`
+              : ''}
           </Button>
+
         </DialogFooter>
       </DialogContent>
     </Dialog>
