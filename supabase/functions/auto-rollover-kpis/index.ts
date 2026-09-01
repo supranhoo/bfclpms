@@ -1025,6 +1025,14 @@ function buildNewKpi(source: any, targetMonth: string, targetYear: number) {
     day_count_type: source.day_count_type,
     frequency_cycle_start: resolvedCycleStart,
     require_resubmit_reason: source.require_resubmit_reason,
+    // ADR-337 — the structured definition must survive rollover. Dropping these
+    // left future months with a NULL kpi_title, so group edits could not match
+    // them and silently reported "0 rows affected".
+    kpi_title: source.kpi_title ?? null,
+    kpi_description: source.kpi_description ?? null,
+    kpi_formula: source.kpi_formula ?? null,
+    kpi_scoring_logic: source.kpi_scoring_logic ?? null,
+    kpi_definition_id: source.kpi_definition_id ?? null,
     review_period: targetMonth,
     review_year: targetYear,
     status: 'kra_set',

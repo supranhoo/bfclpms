@@ -7159,3 +7159,31 @@ changes scope, and never hides a row from a write or approval path: it is a
 read-side filter only.
 
 - **v2.66.336 (2026-09-01):** §CONSOLE-SEARCH introduced (ADR-336).
+
+
+## §CONSOLE-EDIT-SPAN-CONTIGUITY (ADR-337)
+
+A group definition edit spans a contiguous run of months anchored on the month
+the administrator explicitly selected.
+
+1. **No silent holes.** Months between a back-dated anchor and the current month
+   MUST be written. Filtering them out (the pre-ADR-337 behaviour) produced a
+   July-then-October span with August and September silently untouched.
+2. **Never before the anchor.** The only floor is the selected month; nothing
+   earlier is ever touched.
+3. **Back-dating is disclosed, not blocked.** Every past month in the span is
+   labelled `back-dated` in the per-month preview, and the span help text names
+   those months before the edit is confirmed.
+4. **Matching is definition-first.** A month's rows are matched by
+   `kpi_definition_id` when the group carries one, and only then by normalised
+   title / legacy `kpi_name`. Rows created by rollover may lack `kpi_title`, so
+   title-only matching silently reported "0 rows affected".
+5. **A zero-match month is a warning, not silence.** A month whose preview
+   matches no rows at all renders as an amber "no rows matched in this month"
+   row so the administrator sees the gap before committing.
+6. **Rollover parity.** Any process that creates a KPI row for a new month MUST
+   carry `kpi_title`, `kpi_description`, `kpi_formula`, `kpi_scoring_logic` and
+   `kpi_definition_id` from the source row. Dropping them breaks group edits,
+   reports and Org KPI matching downstream.
+
+- **v2.66.337 (2026-09-01):** §CONSOLE-EDIT-SPAN-CONTIGUITY introduced (ADR-337).

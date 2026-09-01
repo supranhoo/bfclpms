@@ -9542,6 +9542,63 @@ export type Database = {
         }
         Relationships: []
       }
+      kpi_title_backfill_2026_09: {
+        Row: {
+          created_at: string
+          employee_id: string | null
+          id: string
+          kpi_id: string
+          kpi_name: string | null
+          kra_name: string | null
+          new_kpi_definition_id: string | null
+          new_kpi_title: string | null
+          old_kpi_definition_id: string | null
+          old_kpi_description: string | null
+          old_kpi_formula: string | null
+          old_kpi_scoring_logic: string | null
+          old_kpi_title: string | null
+          review_period: string | null
+          review_year: number | null
+          source_kpi_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          employee_id?: string | null
+          id?: string
+          kpi_id: string
+          kpi_name?: string | null
+          kra_name?: string | null
+          new_kpi_definition_id?: string | null
+          new_kpi_title?: string | null
+          old_kpi_definition_id?: string | null
+          old_kpi_description?: string | null
+          old_kpi_formula?: string | null
+          old_kpi_scoring_logic?: string | null
+          old_kpi_title?: string | null
+          review_period?: string | null
+          review_year?: number | null
+          source_kpi_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string | null
+          id?: string
+          kpi_id?: string
+          kpi_name?: string | null
+          kra_name?: string | null
+          new_kpi_definition_id?: string | null
+          new_kpi_title?: string | null
+          old_kpi_definition_id?: string | null
+          old_kpi_description?: string | null
+          old_kpi_formula?: string | null
+          old_kpi_scoring_logic?: string | null
+          old_kpi_title?: string | null
+          review_period?: string | null
+          review_year?: number | null
+          source_kpi_id?: string | null
+        }
+        Relationships: []
+      }
       kpis: {
         Row: {
           business_unit_id: string | null
@@ -18156,6 +18213,7 @@ export type Database = {
           p_bu_ids?: string[]
           p_category_id: string
           p_changes: Json
+          p_definition_id?: string
           p_dept_ids?: string[]
           p_division_ids?: string[]
           p_dry_run?: boolean

@@ -41,8 +41,10 @@ import {
 } from '@/hooks/useBuConsole';
 import {
   resolveEditSpan, spanModesAvailable, spanSkipsPastMonths, describeSpan, aggregateSpan, periodLabel, toTarget,
+  backDatedTargets, isPastPeriod,
   EDIT_SPAN_LABELS, MAX_ROLLOUT_PERIODS, type EditSpanMode,
 } from './groupEditSpan';
+
 import { isDescriptiveOnly, scoringFields } from './editFieldClass';
 import {
   diffChanges, hasChanges, weightageDeviations, uniqueByEmployee,
@@ -195,9 +197,17 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   );
 
   const pastAnchorSpan = useMemo(
-    () => (args ? spanSkipsPastMonths(toTarget(args.period, args.year), spanMode) : false),
-    [args?.period, args?.year, spanMode],
+    () => (args ? spanSkipsPastMonths(toTarget(args.period, args.year), spanMode, new Date(), spanCount) : false),
+    [args?.period, args?.year, spanMode, spanCount],
   );
+
+  /** ADR-337 — the back-dated months of the span, named explicitly. */
+  const backDatedLabel = useMemo(() => {
+    const back = backDatedTargets(targets);
+    if (!back.length) return '';
+    return `${back.map(periodLabel).join(', ')} ${back.length === 1 ? 'is' : 'are'}`;
+  }, [targets]);
+
 
 
   /** Detail lists (weightage, skips, clashes) always describe the selected month. */
@@ -411,7 +421,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const runPreview = () => {
     if (!args || !hasChanges(changes) || cycleError) return;
     previewMut.mutate(
-      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly },
+      { ...baseArgs(args, (definition?.kpi_definition_id as string) ?? null), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly },
       { onSuccess: (res) => { setPreview(res); setConfirmText(''); } },
     );
   };
@@ -419,7 +429,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const runCommit = () => {
     if (!args || !spanPreview) return;
     commitMut.mutate(
-      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly },
+      { ...baseArgs(args, (definition?.kpi_definition_id as string) ?? null), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly },
       {
         onSuccess: async () => {
           // ADR-334 — the rename runs only after the definition edit succeeded.
@@ -915,9 +925,10 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
             </div>
             <p className="text-[11px] text-muted-foreground">
               {pastAnchorSpan
-                ? `The selected month is in the past: it is written because you picked it, and the rollout then resumes from the current month. Months in between are never touched (max ${MAX_ROLLOUT_PERIODS} periods).`
-                : `Past months are never touched. Each month is previewed and written separately, and each one can be undone on its own (max ${MAX_ROLLOUT_PERIODS} periods).`}
+                ? `The span is contiguous from the month you picked: ${backDatedLabel} already in the past and will be back-dated, the rest are future months. Nothing before the selected month is touched (max ${MAX_ROLLOUT_PERIODS} periods).`
+                : `Nothing before the selected month is touched. Each month is previewed and written separately, and each one can be undone on its own (max ${MAX_ROLLOUT_PERIODS} periods).`}
             </p>
+
 
           </div>
 
@@ -958,9 +969,21 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {spanPreview.entries.map((e) => (
-                        <TableRow key={periodLabel(e.target)}>
-                          <TableCell>{periodLabel(e.target)}</TableCell>
+                      {spanPreview.entries.map((e) => {
+                        const noMatch = !e.error
+                          && (e.result?.will_write ?? 0) === 0
+                          && (e.result?.will_skip ?? 0) === 0;
+                        return (
+                        <TableRow
+                          key={periodLabel(e.target)}
+                          className={noMatch ? 'bg-amber-500/10' : undefined}
+                        >
+                          <TableCell>
+                            {periodLabel(e.target)}
+                            {isPastPeriod(e.target as any) && (
+                              <Badge variant="outline" className="ml-2 text-[10px]">back-dated</Badge>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">
                             {e.error
                               ? <span className="text-destructive">{e.error}</span>
@@ -981,11 +1004,17 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
                                       {skipReasonLabel(e.result) ?? 'rows skipped'}
                                     </span>
                                   )
-                                  : <span className="text-muted-foreground">no KPI assignments</span>}
+                                  : (
+                                    <span className="text-amber-700 dark:text-amber-400">
+                                      no rows matched in this month
+                                    </span>
+                                  )}
                           </TableCell>
                           <TableCell className="text-right">{e.result?.will_skip ?? 0}</TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
+
 
                     </TableBody>
                   </Table>
@@ -1114,7 +1143,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   );
 }
 
-function baseArgs(a: KpiDetailArgs) {
+function baseArgs(a: KpiDetailArgs, definitionId?: string | null) {
   return {
     categoryId: a.categoryId,
     kraName: a.kraName,
@@ -1127,8 +1156,11 @@ function baseArgs(a: KpiDetailArgs) {
     managerIds: a.managerIds,
     titleKey: a.titleKey ?? null,
     variantKey: a.variantKey ?? null,
+    /** ADR-337 — stable fallback key when a month's rows lost their title. */
+    definitionId: definitionId ?? null,
   };
 }
+
 
 function scoringFromDefinition(def: Record<string, any> | null | undefined): KpiScoringState {
   return {
