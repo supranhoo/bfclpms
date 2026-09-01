@@ -157,7 +157,11 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
 
   const renameError = validateRename(rename);
   const renameNoop = rename.enabled && !renameError && isRenameNoop(rename, renameAnchor);
-  const renameArgs = buildRenameArgs(rename, renameAnchor, (definition?.definition_id as string) ?? null);
+  const renameArgs = buildRenameArgs(
+    rename,
+    renameAnchor,
+    (definition?.kpi_definition_id as string) ?? null,
+  );
   const renameRows = (renamePreview ?? []).reduce((n, r) => n + Number(r.kpi_rows ?? 0), 0);
   const renameOrgRows = (renamePreview ?? []).reduce((n, r) => n + Number(r.org_rows ?? 0), 0);
   const renameLocked = (renamePreview ?? []).reduce((n, r) => n + Number(r.locked_rows ?? 0), 0);
