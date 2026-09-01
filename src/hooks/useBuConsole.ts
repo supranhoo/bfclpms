@@ -1088,6 +1088,8 @@ export interface GroupEditArgs {
   managerIds?: string[];
   titleKey?: string | null;
   variantKey?: string | null;
+  /** ADR-337 — stable fallback key when a target month's rows lost their title. */
+  definitionId?: string | null;
   /** Only the fields the admin actually changed. */
   changes: Record<string, string | null>;
   allowLocked: boolean;
@@ -1115,6 +1117,7 @@ async function callGroupEdit(a: GroupEditArgs): Promise<GroupEditResult> {
     p_reset_overrides: a.resetOverrides,
     p_dry_run: a.dryRun,
     p_text_only: a.textOnly ?? false,
+    p_definition_id: a.definitionId ?? null,
   });
 
   if (error) throw error;
