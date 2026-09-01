@@ -412,6 +412,30 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
       }
     }
 
+    // ADR-335 — owner rows are keyed by name: carry them across a rename so
+    // ownership is never silently orphaned.
+    const carry = ownerRenameCarry(
+      { categoryId: kpi.category_id || '', kraName: kpi.kra_name || '', kpiName: kpi.kpi_name || '' },
+      { categoryId: formData.category_id, kraName: formData.kra_name, kpiName: textPayload.kpi_name || formData.kpi_name },
+    );
+    if (carry.needed) {
+      try {
+        const { error: carryError } = await supabase
+          .from('org_kpi_data_owners')
+          .update({ category_id: carry.to.categoryId, kra_name: carry.to.kraName, kpi_name: carry.to.kpiName })
+          .eq('category_id', carry.from.categoryId)
+          .eq('kra_name', carry.from.kraName)
+          .eq('kpi_name', carry.from.kpiName);
+        if (carryError) throw carryError;
+        queryClient.invalidateQueries({ queryKey: ['org-kpi-data-owners'] });
+        queryClient.invalidateQueries({ queryKey: ['org-kpi-owners'] });
+        queryClient.invalidateQueries({ queryKey: ['org-kpi-owner-check'] });
+      } catch (err) {
+        console.error('Data owner carry-over failed:', err);
+        toast.error('KPI saved, but its data entry owners still point at the old name');
+      }
+    }
+
     onSaved();
   };
 
@@ -1046,6 +1070,19 @@ export function AdminKpiEditorForm({ kpi, onSaved, onCancel }: AdminKpiEditorFor
           />
         </div>
       </div>
+
+      {/* ADR-335 — map this org KPI's data entry owners without leaving the editor */}
+      {formData.is_org_level && (
+        <div className="p-3 border rounded-md bg-muted/30">
+          <OrgKpiDataOwnersField
+            mode="immediate"
+            requireKey={false}
+            categoryId={formData.category_id}
+            kraName={formData.kra_name}
+            kpiName={formData.kpi_name}
+          />
+        </div>
+      )}
 
       {/* Resubmission — inline */}
       <div className="flex items-center justify-between gap-3 p-3 border rounded-md bg-muted/30">
