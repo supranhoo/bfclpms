@@ -19,6 +19,7 @@ interface ManagerComboboxProps {
   placeholder?: string;
   showNone?: boolean;
   noneLabel?: string;
+  disabled?: boolean;
 }
 
 export function formatManagerLabel(name: string | null, code: string | null): string {
