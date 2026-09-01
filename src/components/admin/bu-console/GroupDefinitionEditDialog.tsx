@@ -421,7 +421,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const runPreview = () => {
     if (!args || !hasChanges(changes) || cycleError) return;
     previewMut.mutate(
-      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly },
+      { ...baseArgs(args, (definition?.kpi_definition_id as string) ?? null), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly },
       { onSuccess: (res) => { setPreview(res); setConfirmText(''); } },
     );
   };
@@ -429,7 +429,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
   const runCommit = () => {
     if (!args || !spanPreview) return;
     commitMut.mutate(
-      { ...baseArgs(args), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly },
+      { ...baseArgs(args, (definition?.kpi_definition_id as string) ?? null), targets, changes, allowLocked, resetOverrides, textOnly: descriptiveOnly },
       {
         onSuccess: async () => {
           // ADR-334 — the rename runs only after the definition edit succeeded.
