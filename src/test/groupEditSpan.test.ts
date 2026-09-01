@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   resolveEditSpan, spanModesAvailable, isPastPeriod, aggregateSpan, describeSpan, toTarget,
+  backDatedTargets, spanSkipsPastMonths,
 } from '@/components/admin/bu-console/groupEditSpan';
 
 const today = new Date('2026-08-04T00:00:00Z');
