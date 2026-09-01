@@ -20825,6 +20825,24 @@ export type Database = {
           target_hr_id: string
         }[]
       }
+      preview_kpi_range_correction: {
+        Args: {
+          p_category_id: string
+          p_from_period: string
+          p_from_year: number
+          p_old_kpi: string
+          p_old_kra: string
+          p_to_period: string
+          p_to_year: number
+        }
+        Returns: {
+          kpi_rows: number
+          locked_rows: number
+          org_rows: number
+          review_period: string
+          review_year: number
+        }[]
+      }
       preview_org_kpi_propagation: {
         Args: {
           p_kpi_ids: string[]
