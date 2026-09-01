@@ -915,9 +915,10 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
             </div>
             <p className="text-[11px] text-muted-foreground">
               {pastAnchorSpan
-                ? `The selected month is in the past: it is written because you picked it, and the rollout then resumes from the current month. Months in between are never touched (max ${MAX_ROLLOUT_PERIODS} periods).`
-                : `Past months are never touched. Each month is previewed and written separately, and each one can be undone on its own (max ${MAX_ROLLOUT_PERIODS} periods).`}
+                ? `The span is contiguous from the month you picked: ${backDatedLabel} already in the past and ${backDatedTargets(targets).length === 1 ? 'is' : 'are'} back-dated, the rest are future months. Nothing before the selected month is touched (max ${MAX_ROLLOUT_PERIODS} periods).`
+                : `Nothing before the selected month is touched. Each month is previewed and written separately, and each one can be undone on its own (max ${MAX_ROLLOUT_PERIODS} periods).`}
             </p>
+
 
           </div>
 
