@@ -18156,6 +18156,7 @@ export type Database = {
           p_bu_ids?: string[]
           p_category_id: string
           p_changes: Json
+          p_definition_id?: string
           p_dept_ids?: string[]
           p_division_ids?: string[]
           p_dry_run?: boolean
