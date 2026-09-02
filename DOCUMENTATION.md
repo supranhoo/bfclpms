@@ -9578,3 +9578,18 @@ both and PostgREST refused to choose.
 **How:** Migration drop plus POLICY §DB-FUNCTION-SIGNATURE-CHANGES, which
 requires an explicit `DROP FUNCTION` in any migration that changes a signature.
 Covered by `src/tests/targetIsValueBased.test.ts`.
+
+### v2.66.343 — Performance Console render crash (ADR-341 follow-up)
+
+**What:** `/admin/bu-console` showed "Something went wrong". `GroupDefinitionEditDialog`
+called `targetForType` without importing it, so the page threw
+`targetForType is not defined` on render. Import restored.
+
+**Why:** The ADR-341 extraction added the call site but not the named import;
+build and typecheck passed, so only a browser render exposed it.
+
+**How:** `src/tests/buConsoleModuleBindings.test.ts` now evaluates every
+`bu-console` module, turning unresolved bindings into a test failure. Console
+surfaces must be exercised by this render/import test after any shared-helper
+extraction.
+
