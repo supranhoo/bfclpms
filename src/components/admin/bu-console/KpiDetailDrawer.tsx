@@ -305,7 +305,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
                     Values entered here are saved as individual overrides for the selected
                     employees only, in one run you can undo. Leave a box blank to keep it as-is.
                   </p>
-                  <div className="grid gap-2 sm:grid-cols-3">
+                  <div className={`grid gap-2 ${groupOwnsTarget ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
                     <div className="space-y-1">
                       <Label className="text-xs">Weightage</Label>
                       <Input
@@ -315,15 +315,24 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
                         onChange={(e) => setBulkWeightage(e.target.value)}
                       />
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Target</Label>
-                      <Input
-                        value={bulkTarget}
-                        inputMode="decimal"
-                        placeholder="unchanged"
-                        onChange={(e) => setBulkTarget(e.target.value)}
-                      />
-                    </div>
+                    {/* ADR-341 — target is value-based only. */}
+                    {groupOwnsTarget && (
+                      <div className="space-y-1">
+                        <Label className="text-xs">Target</Label>
+                        <Input
+                          value={bulkTarget}
+                          inputMode="decimal"
+                          placeholder="unchanged"
+                          onChange={(e) => setBulkTarget(e.target.value)}
+                        />
+                        {mixedTypes && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Applies to value-based rows only.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     <div className="flex items-end justify-between gap-2">
                       <div>
                         <Label className="text-xs">Include rows in review</Label>
