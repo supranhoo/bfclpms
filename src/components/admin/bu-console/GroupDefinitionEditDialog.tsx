@@ -322,7 +322,10 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
         r5: scoring.r5, r4: scoring.r4, r3: scoring.r3,
         r2: scoring.r2, r1: scoring.r1, r0: scoring.r0, uom,
       }),
-      target_value: target,
+      // ADR-341 — the target is value-based only; it clears on a move to
+      // Yes/No or tiered and never travels while the type stays qualitative.
+      target_value: targetForType(scoring.uom_type, target),
+
       weightage,
       category_id: categoryId,
       kra_name: kraName,
@@ -502,7 +505,7 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
             }}
           />
 
-          <div className={`grid gap-3 ${numericType ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+          <div className={`grid gap-3 ${numericType ? 'sm:grid-cols-3' : 'sm:grid-cols-1'}`}>
             <div className="space-y-1.5">
               <Label className="text-xs">Weightage (leave blank to keep each employee's own)</Label>
               <Input
@@ -512,10 +515,14 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
                 placeholder="unchanged"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Target</Label>
-              <Input value={target} onChange={(e) => { setTarget(e.target.value); setPreview(null); }} inputMode="decimal" />
-            </div>
+            {/* ADR-341 — only a value-based KPI owns a target. */}
+            {numericType && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Target</Label>
+                <Input value={target} onChange={(e) => { setTarget(e.target.value); setPreview(null); }} inputMode="decimal" />
+              </div>
+            )}
+
             {numericType && (
               <div className="space-y-1.5">
                 <Label className="text-xs">Unit</Label>

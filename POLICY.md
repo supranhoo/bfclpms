@@ -7224,3 +7224,32 @@ templates and re-applied from the same "Use template" list.
    admin explicitly re-saves them. §88 immutability is unchanged.
 6. **Validation before save.** A set must pass `validateQualitativeOptions`
    (≥ 2 tiers, unique labels, label + definition present, rating 0–5).
+
+## §KPI-TARGET-IS-VALUE-BASED (ADR-341, 2026-09-02)
+
+A **Target** is a property of value-based (numeric) KPIs only.
+
+1. **Single predicate.** `typeOwnsTarget(uom_type)` in `src/lib/kpiScoringModel.ts`
+   is the only rule. A missing `uom_type` means numeric (legacy rows).
+2. **Editors.** Admin KPI Editor, group definition edit, per-employee row
+   override and KPI detail bulk tuning hide the Target field for Yes/No and
+   tiered KPIs. A mixed-type group may still set a target; it applies to the
+   value-based rows only.
+3. **Type change clears it.** Moving a KPI to Yes/No or tiered nulls
+   `target_value` in the same change set.
+4. **Display and exports.** Scorecards and KRA exports render no target for
+   qualitative KPIs; the qualitative option label carries the expectation.
+5. **Server invariant.** Trigger `enforce_target_is_value_based` on
+   `public.kpis` nulls `target_value` on any insert or update where
+   `uom_type <> 'numeric'`, covering imports, rollover and copy paths.
+6. **Residue.** Rows from May 2026 onward were cleaned and archived in
+   `public.kpi_non_numeric_target_cleanup_2026_09` (219 rows). Earlier periods
+   stay frozen per §Migration Governance; scoring never read those values.
+
+## §DB-FUNCTION-SIGNATURE-CHANGES (ADR-342, 2026-09-02)
+
+Changing a database function's argument list creates an **overload**, it does
+not replace the function. Any migration that adds, removes or retypes a
+parameter MUST `DROP FUNCTION` the superseded signature in the same migration.
+Two live overloads make PostgREST named-argument calls ambiguous and break the
+feature at runtime (org KPI propagation, ADR-342).

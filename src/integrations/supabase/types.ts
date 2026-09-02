@@ -8883,6 +8883,45 @@ export type Database = {
           },
         ]
       }
+      kpi_non_numeric_target_cleanup_2026_09: {
+        Row: {
+          cleaned_at: string
+          employee_id: string | null
+          id: string
+          kpi_id: string
+          kpi_name: string | null
+          kra_name: string | null
+          old_target_value: number | null
+          review_period: string | null
+          review_year: number | null
+          uom_type: string | null
+        }
+        Insert: {
+          cleaned_at?: string
+          employee_id?: string | null
+          id?: string
+          kpi_id: string
+          kpi_name?: string | null
+          kra_name?: string | null
+          old_target_value?: number | null
+          review_period?: string | null
+          review_year?: number | null
+          uom_type?: string | null
+        }
+        Update: {
+          cleaned_at?: string
+          employee_id?: string | null
+          id?: string
+          kpi_id?: string
+          kpi_name?: string | null
+          kra_name?: string | null
+          old_target_value?: number | null
+          review_period?: string | null
+          review_year?: number | null
+          uom_type?: string | null
+        }
+        Relationships: []
+      }
       kpi_observation_replies: {
         Row: {
           created_at: string
@@ -21171,78 +21210,42 @@ export type Database = {
         Args: { p_bu_head_id: string; p_employee_id: string }
         Returns: string
       }
-      resolve_org_kpi_target_kpis:
-        | {
-            Args: {
-              p_category_id: string
-              p_department_id?: string
-              p_employee_id?: string
-              p_kpi_name: string
-              p_kra_name: string
-              p_review_period: string
-              p_review_year: number
-              p_scope?: string
-            }
-            Returns: {
-              criteria: string
-              department_id: string
-              department_name: string
-              employee_code: string
-              employee_id: string
-              full_name: string
-              id: string
-              is_org_level: boolean
-              org_level_scope: string
-              qualitative_options: Json
-              r0: string
-              r1: string
-              r2: string
-              r3: string
-              r4: string
-              r5: string
-              target_value: number
-              threshold_mode: string
-              uom: string
-              uom_type: string
-              weightage: number
-            }[]
-          }
-        | {
-            Args: {
-              p_category_id: string
-              p_department_id?: string
-              p_employee_id?: string
-              p_kpi_name: string
-              p_kra_name: string
-              p_review_period: string
-              p_review_year: number
-              p_scope?: string
-              p_target_id?: string
-            }
-            Returns: {
-              criteria: string
-              department_id: string
-              department_name: string
-              employee_code: string
-              employee_id: string
-              full_name: string
-              id: string
-              is_org_level: boolean
-              org_level_scope: string
-              qualitative_options: Json
-              r0: string
-              r1: string
-              r2: string
-              r3: string
-              r4: string
-              r5: string
-              target_value: number
-              threshold_mode: string
-              uom: string
-              uom_type: string
-              weightage: number
-            }[]
-          }
+      resolve_org_kpi_target_kpis: {
+        Args: {
+          p_category_id: string
+          p_department_id?: string
+          p_employee_id?: string
+          p_kpi_name: string
+          p_kra_name: string
+          p_review_period: string
+          p_review_year: number
+          p_scope?: string
+          p_target_id?: string
+        }
+        Returns: {
+          criteria: string
+          department_id: string
+          department_name: string
+          employee_code: string
+          employee_id: string
+          full_name: string
+          id: string
+          is_org_level: boolean
+          org_level_scope: string
+          qualitative_options: Json
+          r0: string
+          r1: string
+          r2: string
+          r3: string
+          r4: string
+          r5: string
+          target_value: number
+          threshold_mode: string
+          uom: string
+          uom_type: string
+          weightage: number
+        }[]
+      }
       resolve_safety_incident_sla: {
         Args: {
           p_priority: Database["public"]["Enums"]["safety_priority"]

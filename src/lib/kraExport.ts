@@ -1,6 +1,8 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import { typeOwnsTarget } from '@/lib/kpiScoringModel';
+
 
 // ============= Column Registry =============
 
@@ -282,7 +284,9 @@ export function buildKraSheetFromKpis(
       kra_name: k.kra_name,
       kpi_name: k.kpi_name,
       uom: k.uom,
-      target: k.target_value,
+      // ADR-341 — target is a value-based property; blank for Yes/No and tiered.
+      target: typeOwnsTarget((k as any).uom_type) ? k.target_value : null,
+
       weightage: k.weightage,
       criteria: k.criteria,
       r5: k.r5,
