@@ -162,6 +162,28 @@ export function OrgKpiScopeChangeDialog({
           </div>
         </div>
 
+        {/* ADR-344 — months with no row for this KPI can be created on request. */}
+        {(skips.missing.length > 0 || seedMissing) && (
+          <div className="flex items-start gap-3 rounded-md border p-3">
+            <Checkbox
+              id="seed-missing"
+              checked={seedMissing}
+              onCheckedChange={(v) => setSeedMissing(v === true)}
+            />
+            <div className="space-y-1">
+              <label htmlFor="seed-missing" className="text-sm font-medium cursor-pointer">
+                Also create this KPI in the remaining months that don't have it
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Copies the current month's definition (type, ladder, weightage, frequency and the
+                same employees) into those months with the new scope already applied. Locked
+                periods are never created.
+              </p>
+            </div>
+          </div>
+        )}
+
+
         {/* Preview */}
         <div className="rounded-md border">
           <div className="border-b px-3 py-2 text-xs font-medium text-muted-foreground">
