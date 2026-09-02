@@ -6,25 +6,35 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Sparkles, Save } from 'lucide-react';
 import {
   QualitativeOption,
   TIERED_TEMPLATES,
   TEMPLATE_LABELS,
   RATING_LABELS,
+  validateQualitativeOptions,
 } from '@/lib/qualitativeUom';
+import { useAuth } from '@/contexts/AuthContext';
+import { useDeleteTieredTemplate, useTieredTemplates } from '@/hooks/useTieredTemplates';
+import { SaveTieredTemplateDialog } from '@/components/admin/SaveTieredTemplateDialog';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 interface TieredOptionsBuilderProps {
   options: QualitativeOption[];
   onChange: (options: QualitativeOption[]) => void;
   disabled?: boolean;
 }
+
+const SAVED_PREFIX = 'saved:';
+
 
 const ratingColors: Record<number, string> = {
   5: 'bg-blue-500',
