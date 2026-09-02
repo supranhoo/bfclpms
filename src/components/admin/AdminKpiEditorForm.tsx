@@ -61,7 +61,7 @@ const STATUS_OPTIONS: { value: ReviewStatus; label: string }[] = [
   { value: 'approved', label: 'Approved' },
 ];
 
-const FREQUENCY_OPTIONS = ['Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
+import { FREQUENCY_OPTIONS } from '@/lib/frequencyCycleOptions'; // ADR-343 — SSOT
 const CRITERIA_OPTIONS = ['Higher is Better', 'Lower is Better', 'Equal to Target'];
 
 const MONTHS = [

@@ -86,7 +86,7 @@ interface Props {
 const TEXT_FIELDS = ['kpi_title', 'kpi_description', 'kpi_formula', 'kpi_scoring_logic'] as const;
 
 /** Same option sets as the Admin KPI Editor (POLICY §KPI-DEFINITION-FORM-PARITY). */
-const FREQUENCY_OPTIONS = ['Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
+import { FREQUENCY_OPTIONS } from '@/lib/frequencyCycleOptions'; // ADR-343 — SSOT
 
 /**
  * Moving a group to another category / KRA is structural — always confirm.
