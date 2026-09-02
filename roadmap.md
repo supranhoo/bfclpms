@@ -16,3 +16,13 @@
 - [x] RCA + 5 Whys for `resolve_org_kpi_target_kpis` overload ambiguity
 - [x] Dropped the stale 8-arg overload, regression test, POLICY + DOCUMENTATION
 
+## ADR-344 — Org KPI scope-change skip transparency & seeding (in progress)
+- [x] 11-arg `change_org_kpi_scope_cascading` overload with `p_seed_missing`
+- [x] Reason-aware skip grouping helper + unit tests
+- [x] Hook + dialog wiring: truthful skip labels, opt-in "create in remaining months"
+- [ ] POLICY + DOCUMENTATION sync
+
+## ADR-345 — KPI range rename blocked by stale audit vocabulary (done)
+- [x] RCA/5-Why: `correct_kpis_range` logs `rename_kpis_range`, CHECK allowlist lacked it
+- [x] Allowlist extended; constraint comment ties vocabulary to POLICY §AUDIT-ACTION-VOCABULARY
+- [ ] Vocabulary drift guard test + POLICY/DOCUMENTATION sync
