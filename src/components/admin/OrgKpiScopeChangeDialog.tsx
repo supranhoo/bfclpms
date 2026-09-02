@@ -10,7 +10,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertTriangle, CheckCircle2, Lock } from 'lucide-react';
+import { Loader2, AlertTriangle, CheckCircle2, Lock, CircleSlash } from 'lucide-react';
+import { groupSkips, skipSummaryText } from '@/lib/orgKpi/scopeCascadeSkips';
 import {
   useChangeOrgKpiScope,
   useScopeCascadePreview,
@@ -49,6 +50,8 @@ export function OrgKpiScopeChangeDialog({
   frequency,
 }: Props) {
   const [cascadeForward, setCascadeForward] = useState(false);
+  // ADR-344 — opt in to creating the KPI in months of the span that lack it.
+  const [seedMissing, setSeedMissing] = useState(false);
   // ADR-320 — a grouped scope must name the one target it moves to.
   const [newTarget, setNewTarget] = useState<string | null>(null);
   const needsTarget = scopeNeedsTarget(newScope) && newScope !== 'department' && newScope !== 'employee';
@@ -59,19 +62,21 @@ export function OrgKpiScopeChangeDialog({
   useEffect(() => {
     if (!open) return;
     if (needsTarget && !newTarget) return;
-    previewMutation.mutate({ identifier, newScope, newTarget, cascadeForward });
+    previewMutation.mutate({ identifier, newScope, newTarget, cascadeForward, seedMissing });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, cascadeForward, newTarget]);
+  }, [open, cascadeForward, newTarget, seedMissing]);
 
   const preview = previewMutation.data;
+  const skips = groupSkips(preview?.skipped);
 
   const handleApply = () => {
     const mode: ScopeCascadeMode = cascadeForward ? 'current_and_future' : 'current_only';
     applyMutation.mutate(
-      { identifier, newScope, newTarget, cascadeMode: mode },
+      { identifier, newScope, newTarget, cascadeMode: mode, seedMissing },
       { onSuccess: () => onClose() }
     );
   };
+
 
   const isAggregating =
     (currentScope === 'employee' && newScope !== 'employee') ||
@@ -158,6 +163,28 @@ export function OrgKpiScopeChangeDialog({
           </div>
         </div>
 
+        {/* ADR-344 — months with no row for this KPI can be created on request. */}
+        {(skips.missing.length > 0 || seedMissing) && (
+          <div className="flex items-start gap-3 rounded-md border p-3">
+            <Checkbox
+              id="seed-missing"
+              checked={seedMissing}
+              onCheckedChange={(v) => setSeedMissing(v === true)}
+            />
+            <div className="space-y-1">
+              <label htmlFor="seed-missing" className="text-sm font-medium cursor-pointer">
+                Also create this KPI in the remaining months that don't have it
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Copies the current month's definition (type, ladder, weightage, frequency and the
+                same employees) into those months with the new scope already applied. Locked
+                periods are never created.
+              </p>
+            </div>
+          </div>
+        )}
+
+
         {/* Preview */}
         <div className="rounded-md border">
           <div className="border-b px-3 py-2 text-xs font-medium text-muted-foreground">
@@ -180,6 +207,9 @@ export function OrgKpiScopeChangeDialog({
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-primary" />
                     <span className="font-medium">{p.period} {p.year}</span>
+                    {p.seeded && (
+                      <Badge variant="outline" className="text-[11px]">will be created</Badge>
+                    )}
                   </div>
                   <Badge variant="outline" className="text-[11px]">
                     {p.old_scope} → {p.new_scope}
@@ -192,12 +222,28 @@ export function OrgKpiScopeChangeDialog({
                   className="flex items-center justify-between px-3 py-2 text-sm text-muted-foreground"
                 >
                   <div className="flex items-center gap-2">
-                    <Lock className="h-4 w-4" />
+                    {s.reason === 'period_locked' ? (
+                      <Lock className="h-4 w-4" />
+                    ) : (
+                      <CircleSlash className="h-4 w-4" />
+                    )}
                     <span>{s.period} {s.year}</span>
                   </div>
-                  <Badge variant="secondary" className="text-[11px]">{s.reason}</Badge>
+                  <Badge variant="secondary" className="text-[11px]">
+                    {s.reason === 'period_locked'
+                      ? 'Period locked'
+                      : s.reason === 'no_org_kpi_rows'
+                        ? 'No rows for this KPI yet'
+                        : s.reason}
+                  </Badge>
                 </div>
               ))}
+              {skipSummaryText(preview.skipped) && (
+                <div className="px-3 py-2 text-xs text-muted-foreground">
+                  {skipSummaryText(preview.skipped)}
+                </div>
+              )}
+
             </div>
           ) : needsTarget && !newTarget ? (
             <div className="p-4 text-sm text-muted-foreground">

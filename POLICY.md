@@ -7265,3 +7265,18 @@ chosen, the cycle anchor (Cycle Start) MUST be offered alongside it, regardless
 of KPI type. The stored strings are join keys for scoring, rollover and
 reporting and MUST NOT be re-spelled for display without an explicit
 display-only mapping.
+
+## §AUDIT-ACTION-VOCABULARY (extended by ADR-345)
+Any RPC that writes to an audit table constrained by an `action_type` allowlist must
+have its literal added to that allowlist **and** handled by the matching reverse
+routine in the same migration. Adding a new audit literal without extending the
+CHECK constraint aborts the entire business transaction, not just the audit write.
+Current `public.kpi_standardization_actions` vocabulary: create_definition,
+link_alias, unlink_alias, rename_kpis, rename_kpis_range, delete_definition,
+edit_definition, skip_group, unskip_group, backfill_definition_links.
+
+## §ORG-KPI-SCOPE-SKIP-TRANSPARENCY (ADR-344)
+A scope cascade must report each skipped period with its real reason
+(`period_locked` vs `no_org_kpi_rows`). Months without a row for the KPI are only
+created when the admin explicitly opts in ("create in remaining months"); locked
+periods are never written, seeded or otherwise.
