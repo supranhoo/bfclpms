@@ -266,11 +266,13 @@ export function useScopeCascadePreview() {
       newScope,
       newTarget = null,
       cascadeForward,
+      seedMissing = false,
     }: {
       identifier: OrgKpiIdentifier;
       newScope: AnyKpiScope;
       newTarget?: string | null;
       cascadeForward: boolean;
+      seedMissing?: boolean;
     }): Promise<CascadeResponse> => {
       const { categoryId, kraName, kpiName, reviewPeriod, reviewYear } = identifier;
       const { data, error } = await supabase.rpc('change_org_kpi_scope_cascading', {
@@ -284,7 +286,9 @@ export function useScopeCascadePreview() {
         p_dry_run: true,
         p_triggered_by: null,
         p_new_target: newTarget,
+        p_seed_missing: seedMissing,
       } as never);
+
       if (error) throw error;
       return data as unknown as CascadeResponse;
     },
