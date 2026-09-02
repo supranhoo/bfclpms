@@ -196,15 +196,23 @@ export function deriveCycleOptionFromCycleStart(
   const startMonth = MONTH_ABBR_TO_NUM[startAbbr];
   if (!startMonth) return undefined;
 
-  // Build the cycle window starting at startMonth.
-  const cycleMonths: number[] = [];
-  for (let i = 0; i < cycleLength; i++) {
-    cycleMonths.push(((startMonth - 1 + i) % 12) + 1);
+  // ADR-347 — the anchor defines a repeating rhythm, not a single window.
+  // Enumerate EVERY cycle in the 12-month rotation so months that fall in a
+  // later window (e.g. Sep under a "Jul-Aug" bi-monthly anchor) are locked too.
+  // Previously only the first window was emitted, so those months looked open
+  // and the console dropped the "Not due" chip for them.
+  const NUM_TO_ABBR = Object.keys(MONTH_ABBR_TO_NUM);
+  const lockedMonths: Record<string, number[]> = {};
+  let terminalMonth = startMonth;
+  for (let c = 0; c * cycleLength < 12; c++) {
+    const window: number[] = [];
+    for (let i = 0; i < cycleLength; i++) {
+      window.push((((startMonth - 1 + c * cycleLength + i) % 12) + 12) % 12 + 1);
+    }
+    const label = `${NUM_TO_ABBR[window[0] - 1]}-${NUM_TO_ABBR[window[cycleLength - 1] - 1]}`;
+    lockedMonths[label] = window.slice(0, cycleLength - 1);
+    if (c === 0) terminalMonth = window[cycleLength - 1];
   }
-  const terminalMonth = cycleMonths[cycleLength - 1];
-  const lockedMonths: Record<string, number[]> = {
-    [cycleStart]: cycleMonths.slice(0, cycleLength - 1),
-  };
 
   return {
     value: cycleStart,
@@ -214,6 +222,7 @@ export function deriveCycleOptionFromCycleStart(
     lockedMonths,
     activeMonth: terminalMonth,
   };
+
 }
 
 /**
