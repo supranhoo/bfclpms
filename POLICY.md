@@ -7280,3 +7280,9 @@ A scope cascade must report each skipped period with its real reason
 (`period_locked` vs `no_org_kpi_rows`). Months without a row for the KPI are only
 created when the admin explicitly opts in ("create in remaining months"); locked
 periods are never written, seeded or otherwise.
+
+## §CONSOLE-TREE-WEIGHTAGE-DISPLAY (ADR-346)
+Per-employee weightage variance is drill-down detail shown only inside the expanded
+row (Open panel). The Performance Console tree Weightage column shows a number only
+when all mapped employees share one weightage; otherwise it stays neutral (`—`).
+Definition drift remains surfaced by the "N variants / Align" badges.

@@ -144,7 +144,7 @@ describe('Variant badge (ADR-315a)', () => {
   it('stays silent for a single definition, whatever the weightage spread', () => {
     renderTree({ variant_count: 1, weightage_values: [10, 12, 15] });
     expect(screen.queryByText(/variant/i)).toBeNull();
-    // ADR-345 — a weightage spread is drill-down detail, not a tree badge.
+    // ADR-346 — a weightage spread is drill-down detail, not a tree badge.
     expect(screen.queryByText('3 values')).toBeNull();
   });
 
