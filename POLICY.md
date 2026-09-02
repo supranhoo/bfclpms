@@ -7198,3 +7198,23 @@ A KPI row is **locked** for a name correction when it carries a final score
 (`review_submissions.final_score IS NOT NULL`) or its status has moved past
 `kra_set`. `preview_kpi_range_correction` and `correct_kpis_range` share this one
 predicate so the preview count and the applied skip count always agree.
+
+## §KPI-TIERED-TEMPLATE-LIBRARY (ADR-339, 2026-09-02)
+
+Tiered option sets built in the KPI scoring editor can be saved as reusable
+templates and re-applied from the same "Use template" list.
+
+1. **Storage.** Templates live in `public.kpi_scoring_scales` with
+   `scale_kind = 'tiered'` and the tiers in `qualitative_options`. No new table;
+   backup coverage is automatic via `get_backup_table_order()`.
+2. **Scope.** Templates are organisation-wide. Admins create, overwrite and
+   remove them; oversight roles (auditor, management, HR PMS) may read them.
+3. **Soft delete only.** Removal sets `is_active = false`; rows are never
+   deleted, so historical provenance survives.
+4. **Names are unique after normalisation.** Saving under an existing name
+   overwrites that template rather than creating a duplicate.
+5. **No retro-apply.** Applying or editing a template only seeds the in-form
+   option list. KPIs already saved keep their own `qualitative_options` until an
+   admin explicitly re-saves them. §88 immutability is unchanged.
+6. **Validation before save.** A set must pass `validateQualitativeOptions`
+   (≥ 2 tiers, unique labels, label + definition present, rating 0–5).

@@ -6,25 +6,35 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Sparkles } from 'lucide-react';
+import { Plus, Trash2, Sparkles, Save } from 'lucide-react';
 import {
   QualitativeOption,
   TIERED_TEMPLATES,
   TEMPLATE_LABELS,
   RATING_LABELS,
+  validateQualitativeOptions,
 } from '@/lib/qualitativeUom';
+import { useAuth } from '@/contexts/AuthContext';
+import { useDeleteTieredTemplate, useTieredTemplates } from '@/hooks/useTieredTemplates';
+import { SaveTieredTemplateDialog } from '@/components/admin/SaveTieredTemplateDialog';
+import { ConfirmDestructiveDialog } from '@/components/ui/ConfirmDestructiveDialog';
 
 interface TieredOptionsBuilderProps {
   options: QualitativeOption[];
   onChange: (options: QualitativeOption[]) => void;
   disabled?: boolean;
 }
+
+const SAVED_PREFIX = 'saved:';
+
 
 const ratingColors: Record<number, string> = {
   5: 'bg-blue-500',
@@ -41,6 +51,14 @@ export function TieredOptionsBuilder({
   disabled = false,
 }: TieredOptionsBuilderProps) {
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+
+  const { isAdmin } = useAuth();
+  const { data: savedTemplates = [] } = useTieredTemplates();
+  const deleteTemplate = useDeleteTieredTemplate();
+
+  const validationError = validateQualitativeOptions(options);
 
   const handleAddOption = () => {
     onChange([
@@ -64,7 +82,14 @@ export function TieredOptionsBuilder({
   };
 
   const handleApplyTemplate = (templateKey: string) => {
-    if (templateKey && TIERED_TEMPLATES[templateKey]) {
+    if (!templateKey) return;
+    if (templateKey.startsWith(SAVED_PREFIX)) {
+      const saved = savedTemplates.find((t) => t.id === templateKey.slice(SAVED_PREFIX.length));
+      if (saved) onChange(saved.options.map((o) => ({ ...o })));
+      setSelectedTemplate('');
+      return;
+    }
+    if (TIERED_TEMPLATES[templateKey]) {
       onChange([...TIERED_TEMPLATES[templateKey]]);
       setSelectedTemplate('');
     }
@@ -75,19 +100,64 @@ export function TieredOptionsBuilder({
       <div className="flex items-center justify-between">
         <Label className="text-sm font-medium">Tiered Options</Label>
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8"
+              disabled={disabled || !!validationError}
+              title={validationError ?? 'Save this tier set as a reusable template'}
+              onClick={() => setSaveOpen(true)}
+            >
+              <Save className="h-3 w-3 mr-1" />
+              Save as template
+            </Button>
+          )}
           <Select value={selectedTemplate} onValueChange={handleApplyTemplate}>
             <SelectTrigger className="w-[180px] h-8">
               <Sparkles className="h-3 w-3 mr-1" />
               <SelectValue placeholder="Use template" />
             </SelectTrigger>
             <SelectContent>
-              {Object.entries(TEMPLATE_LABELS).map(([key, label]) => (
-                <SelectItem key={key} value={key}>
-                  {label}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                <SelectLabel>Built-in</SelectLabel>
+                {Object.entries(TEMPLATE_LABELS).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+              {savedTemplates.length > 0 && (
+                <SelectGroup>
+                  <SelectLabel>Saved templates</SelectLabel>
+                  {savedTemplates.map((t) => (
+                    <div key={t.id} className="flex items-center">
+                      <SelectItem value={`${SAVED_PREFIX}${t.id}`} className="flex-1">
+                        {t.name}
+                      </SelectItem>
+                      {isAdmin && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 mr-1"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setPendingDelete({ id: t.id, name: t.name });
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </SelectGroup>
+              )}
             </SelectContent>
           </Select>
+
         </div>
       </div>
 
@@ -185,6 +255,22 @@ export function TieredOptionsBuilder({
             .join(' → ')}
         </div>
       )}
+
+      <SaveTieredTemplateDialog open={saveOpen} onOpenChange={setSaveOpen} options={options} />
+
+      <ConfirmDestructiveDialog
+        open={!!pendingDelete}
+        title="Remove template?"
+        description={`"${pendingDelete?.name ?? ''}" will no longer appear in the template list. KPIs already using these tiers are unaffected.`}
+        confirmLabel="Remove"
+        isLoading={deleteTemplate.isPending}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={async () => {
+          if (pendingDelete) await deleteTemplate.mutateAsync(pendingDelete.id).catch(() => {});
+          setPendingDelete(null);
+        }}
+      />
     </div>
+
   );
 }

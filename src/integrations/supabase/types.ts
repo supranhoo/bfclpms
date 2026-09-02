@@ -9299,6 +9299,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           criteria: string | null
+          description: string | null
           id: string
           is_active: boolean
           name: string
@@ -9309,6 +9310,7 @@ export type Database = {
           r3: string | null
           r4: string | null
           r5: string | null
+          scale_kind: string
           threshold_mode: string | null
           updated_at: string
         }
@@ -9316,6 +9318,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           criteria?: string | null
+          description?: string | null
           id?: string
           is_active?: boolean
           name: string
@@ -9326,6 +9329,7 @@ export type Database = {
           r3?: string | null
           r4?: string | null
           r5?: string | null
+          scale_kind?: string
           threshold_mode?: string | null
           updated_at?: string
         }
@@ -9333,6 +9337,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           criteria?: string | null
+          description?: string | null
           id?: string
           is_active?: boolean
           name?: string
@@ -9343,6 +9348,7 @@ export type Database = {
           r3?: string | null
           r4?: string | null
           r5?: string | null
+          scale_kind?: string
           threshold_mode?: string | null
           updated_at?: string
         }
