@@ -71,9 +71,12 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
   const scoringModel = resolveKpiScoringModel(def as any);
   const totalPages = data ? Math.max(1, Math.ceil(data.total / (data.page_size || 200))) : 1;
   const selectedIds = Object.keys(selected).filter((id) => selected[id]);
+  // ADR-341 — only a value-based KPI owns a target. A mixed group keeps the box
+  // but the run applies it to numeric rows only.
+  const groupOwnsTarget = mixedTypes || typeOwnsTarget(scoringModel.uomType);
   const bulkChanges: Record<string, string | null> = {};
   if (bulkWeightage.trim()) bulkChanges.weightage = bulkWeightage.trim();
-  if (bulkTarget.trim()) bulkChanges.target_value = bulkTarget.trim();
+  if (groupOwnsTarget && bulkTarget.trim()) bulkChanges.target_value = bulkTarget.trim();
   const canApplyBulk = selectedIds.length > 0 && Object.keys(bulkChanges).length > 0;
   // ADR-285 — a non-admin has nothing to act on when every row is still in KRA Set.
   const rows = data?.rows ?? [];
@@ -81,11 +84,20 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
     !isAdmin && rows.length > 0 && rows.every((r: any) => r.status === 'kra_set');
   const showGroupActions = !!data?.authorized && canWrite && !kraSetOnly;
 
+  const changesForRow = (kpiId: string): Record<string, string | null> => {
+    const row = rows.find((r: any) => String(r.kpi_id) === kpiId) as any;
+    if (bulkChanges.target_value == null || typeOwnsTarget(row?.uom_type)) return bulkChanges;
+    const { target_value: _drop, ...rest } = bulkChanges;
+    return rest;
+  };
+
   const applyBulk = () => {
     if (!canApplyBulk) return;
     bulkMut.mutate(
       {
-        rows: selectedIds.map((kpi_id) => ({ kpi_id, changes: bulkChanges })),
+        rows: selectedIds
+          .map((kpi_id) => ({ kpi_id, changes: changesForRow(kpi_id) }))
+          .filter((r) => Object.keys(r.changes).length > 0),
         allowLocked: bulkAllowLocked,
       },
       {
@@ -97,6 +109,7 @@ export function KpiDetailDrawer({ args, onPageChange, onClose, onSelectVariant }
       },
     );
   };
+
 
   return (
     <Dialog open={!!args} onOpenChange={(open) => !open && onClose()}>
