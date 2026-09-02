@@ -9539,3 +9539,42 @@ for every KPI because the template list was hardcoded — a zero-hardcoding gap.
 overwrite by name and soft-remove a template behind the destructive-confirm
 dialog. See POLICY §KPI-TIERED-TEMPLATE-LIBRARY and
 `src/tests/tieredTemplates.test.ts`.
+
+### v2.66.341 — Target belongs to value-based KPIs only (ADR-341)
+
+**What:** Yes/No and tiered KPIs no longer show, carry or export a Target. The
+field is hidden in the group definition editor, per-employee row override and
+KPI detail bulk tuning, suppressed on review scorecards and in KRA exports, and
+cleared automatically whenever a KPI's type moves to a qualitative one.
+
+**Why:** The Admin KPI Editor has always hidden Target for these types, but the
+Performance Console bulk tools did not, so ~745 qualitative rows carried a
+target that no scoring path reads — a visible contradiction between surfaces.
+
+**How:** `typeOwnsTarget()` in `src/lib/kpiScoringModel.ts` is the single
+predicate consumed by `groupEditModel`, `GroupDefinitionEditDialog`,
+`KpiDetailDrawer`, `rowOverrideModel`, `RowOverrideDialog`, `KpiMetricsSection`
+and `kraExport`. Trigger `enforce_target_is_value_based` on `public.kpis`
+enforces it for every write path including imports and rollover. A one-off
+cleanup nulled 219 rows from May 2026 onward, archived in
+`public.kpi_non_numeric_target_cleanup_2026_09` (admin-readable, reversible);
+earlier periods stay frozen. See POLICY §KPI-TARGET-IS-VALUE-BASED and
+`src/tests/targetIsValueBased.test.ts`.
+
+**Impact / rollback:** No workflow, score or weightage change — targets were
+never read for these types. Rollback = restore `target_value` from the archive
+table and drop the trigger.
+
+### v2.66.342 — Org KPI propagation resolver overload (ADR-342)
+
+**What:** Dropped the superseded 8-argument
+`public.resolve_org_kpi_target_kpis`, leaving the canonical 9-argument
+signature. Propagation of organisational KPI values works again.
+
+**Why:** ADR-322 added the scope-target parameter with `CREATE OR REPLACE`,
+which created a second overload; the client's 8 named arguments then matched
+both and PostgREST refused to choose.
+
+**How:** Migration drop plus POLICY §DB-FUNCTION-SIGNATURE-CHANGES, which
+requires an explicit `DROP FUNCTION` in any migration that changes a signature.
+Covered by `src/tests/targetIsValueBased.test.ts`.
