@@ -26,6 +26,14 @@ type MockKpi = { status: string; finalScore: number | null };
 const isRenameLocked = ({ status, finalScore }: MockKpi) =>
   finalScore !== null || status !== 'kra_set';
 
+const LOCK_CASES: Array<readonly [MockKpi, boolean]> = [
+  [{ status: 'kra_set', finalScore: null }, false],
+  [{ status: 'kra_set', finalScore: 0 }, true],
+  ...REVIEW_STATUS_VALUES.filter((status) => status !== 'kra_set').map(
+    (status): readonly [MockKpi, boolean] => [{ status, finalScore: null }, true],
+  ),
+];
+
 describe('KPI rename lock predicate (ADR-340)', () => {
   const sql = readFileSync(CORRECTIVE_MIGRATION, 'utf8');
   const hook = readFileSync(RANGE_HOOK, 'utf8');
@@ -53,13 +61,7 @@ describe('KPI rename lock predicate (ADR-340)', () => {
     expect(sql).toMatch(/final_score IS NOT NULL OR .*status::text <> 'kra_set'/);
   });
 
-  it.each([
-    [{ status: 'kra_set', finalScore: null }, false],
-    [{ status: 'kra_set', finalScore: 0 }, true],
-    ...REVIEW_STATUS_VALUES.filter((status) => status !== 'kra_set').map(
-      (status) => [{ status, finalScore: null }, true] as const,
-    ),
-  ])('classifies realistic KPI row %o as locked=%s', (row, expected) => {
+  it.each(LOCK_CASES)('classifies realistic KPI row %o as locked=%s', (row, expected) => {
     expect(isRenameLocked(row)).toBe(expected);
   });
 
