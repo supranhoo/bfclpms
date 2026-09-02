@@ -7286,3 +7286,6 @@ Per-employee weightage variance is drill-down detail shown only inside the expan
 row (Open panel). The Performance Console tree Weightage column shows a number only
 when all mapped employees share one weightage; otherwise it stays neutral (`—`).
 Definition drift remains surfaced by the "N variants / Align" badges.
+
+### §CONSOLE-FREQUENCY-DUE (amended, ADR-347)
+A multi-month KPI is locked in every month of its cycle except the terminal month, for ALL anchors — including anchors not present in the hardcoded cycle-option lists. Client-side lock resolution must mirror the DB trigger math for the whole 12-month rotation, never just the first window.

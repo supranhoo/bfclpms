@@ -9634,3 +9634,6 @@ renders as a number; a spread renders `—`, and the exact per-employee weightag
 available in the expanded "Open" people panel. Pure presentation: `weightage_values`
 remains in the payload untouched. Test: `consoleLayout.test.tsx` asserts the spread
 renders no badge. Rollback: revert the one-line value expression in `BuConsoleTree.tsx`.
+
+### v2.66.347 — ADR-347: derived cycle anchors lock every non-terminal month
+Off-list `frequency_cycle_start` anchors (e.g. Bi-Monthly `Jul-Aug`) previously synthesized only the first cycle window, so later non-terminal months (Sep) looked open and the Performance Console dropped the "Not due" chip. `deriveCycleOptionFromCycleStart` now enumerates the full 12-month rhythm, matching the DB trigger. See docs/adr/ADR-347.md.
