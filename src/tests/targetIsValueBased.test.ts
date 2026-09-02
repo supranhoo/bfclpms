@@ -64,8 +64,11 @@ describe('ADR-342 — propagation resolver overload', () => {
       'p_category_id', 'p_kra_name', 'p_kpi_name', 'p_review_period',
       'p_review_year', 'p_scope', 'p_department_id', 'p_employee_id', 'p_target_id',
     ];
-    const used = [...hook.matchAll(/\b(p_[a-z_]+):/g)].map((m) => m[1]);
+    const call = hook.slice(hook.indexOf("rpc('resolve_org_kpi_target_kpis'"));
+    const block = call.slice(0, call.indexOf('});'));
+    const used = [...block.matchAll(/\b(p_[a-z_]+):/g)].map((m) => m[1]);
     expect(used.length).toBeGreaterThan(0);
     used.forEach((arg) => expect(allowed).toContain(arg));
+
   });
 });
