@@ -1,6 +1,8 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-09-01 · **Version:** v2.66.335
+> **Last Updated:** 2026-09-02 · **Version:** v2.66.340
+>
+> **Version:** 2.66.340 — **Persistent KPI rename preview failure corrected (ADR-340, 2026-09-02).** RCA: ADR-338 replaced `preview_kpi_range_correction`, but the UI calls `correct_kpis_range_dry_run`; that deployed function still compared the `review_status` column to invalid `kpi_status` literals. CAPA: the exact UI-invoked RPC now uses the canonical final-score-or-past-`kra_set` predicate, with a read-only join to `review_submissions`; source-contract tests bind the hook RPC name to the corrective migration and exercise editable, in-review, approved, and final-scored mocks. No row data, RLS, role access, or backup scope changed. Rollback is function-only and requires no data restoration. See POLICY §KPI-RENAME-LOCK-PREDICATE.
 >
 > **Version:** 2.66.336 — **Performance Console is searchable by KRA, KPI and employee (ADR-336, 2026-09-01).** Gap: once a scope loaded there was no way to find one KRA, KPI or person other than scrolling. CAPA: a debounced toolbar search filters the already-loaded tree client-side, and `bu_console_run_snapshot` gains an optional `p_search` so the server-paged people list can be narrowed by employee name or code; the toolbar query seeds each KPI's “Find person” box. Additive, default-NULL, no schema change. Regression: `src/components/admin/bu-console/consoleSearch.test.ts` (7). See `docs/adr/ADR-336.md`.
 >
@@ -9496,6 +9498,31 @@ never ran and the skip-locked apply path would have failed too.
 canonical console lock rule — final score present, or status past `kra_set` —
 via a `review_submissions` join. See POLICY §KPI-RENAME-LOCK-PREDICATE and
 `src/tests/kpiRenameLockPredicate.test.ts`.
+
+### v2.66.340 — Persistent KPI rename preview correction (ADR-340)
+
+**What:** The group-definition editor's existing **Preview rename** action now
+returns monthly KPI, locked-row, and Org KPI counts without the
+`invalid input value for enum review_status: "locked"` failure.
+
+**Why / Five Whys:** (1) Preview failed because its RPC compared
+`review_status` with `locked`; (2) that comparison remained because ADR-338
+replaced a similarly named RPC; (3) the prior diagnosis did not trace the UI
+call to `correct_kpis_range_dry_run`; (4) its test inspected only the mistaken
+migration functions; (5) duplicated lock semantics lacked a UI-to-RPC contract
+test. The deployed definition confirmed the mismatch.
+
+**How / CAPA:** The exact `correct_kpis_range_dry_run` signature is replaced
+with the same canonical predicate as apply: a row is locked when a final score
+exists or its workflow has progressed past `kra_set`. Preview remains `STABLE`
+and read-only; Admin/HR PMS authorization, May-2026 floor, range validation,
+and monthly grouping are unchanged. `kpiRenameLockPredicate.test.ts` now binds
+the hook's RPC literal to this migration, rejects cross-enum literals, checks
+all valid workflow stages plus final-scored and empty/mixed-result cases.
+
+**Impact / rollback:** No schema, data, RLS, workflow, score, target, or backup
+change. Rollback is a function-body replacement only; no data restoration is
+required.
 
 ### v2.66.339 — Save tiered options as a template (ADR-339)
 
