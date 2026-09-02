@@ -109,13 +109,18 @@ export function KpiMetricsSection({ kpi }: KpiMetricsSectionProps) {
       <CardContent className="space-y-2 sm:space-y-3 px-3 sm:px-6 pb-3 sm:pb-6">
         {/* Metrics Grid — inline label:value to save vertical space */}
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <Target className="h-3 w-3 shrink-0 text-muted-foreground" />
-            <span className="text-muted-foreground">Target:</span>
-            <span className="font-medium whitespace-nowrap truncate">
-              {target !== null && target !== undefined ? `${target} ${uom}` : 'N/A'}
-            </span>
-          </div>
+          {/* ADR-341 — a Yes/No or tiered KPI is scored from its options and owns
+              no target, so the metric is not rendered for those types. */}
+          {!isQualitative && (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Target className="h-3 w-3 shrink-0 text-muted-foreground" />
+              <span className="text-muted-foreground">Target:</span>
+              <span className="font-medium whitespace-nowrap truncate">
+                {target !== null && target !== undefined ? `${target} ${uom}` : 'N/A'}
+              </span>
+            </div>
+          )}
+
           <div className="flex items-center gap-1.5 min-w-0">
             <Scale className="h-3 w-3 shrink-0 text-muted-foreground" />
             <span className="text-muted-foreground">Criteria:</span>
