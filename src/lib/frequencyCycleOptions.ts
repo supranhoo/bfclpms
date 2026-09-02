@@ -141,8 +141,20 @@ export const YEARLY_OPTIONS: CycleOption[] = [
   },
 ];
 
+/**
+ * ADR-343 — canonical KPI frequency list. Single source of truth for every
+ * frequency picker in the app; screens must never inline their own array.
+ * These strings are stored in `kpis.frequency` and used as a join key by
+ * scoring, rollover, cycle-anchor and reporting logic — do not re-spell them.
+ */
+export const FREQUENCY_OPTIONS = [
+  'Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly',
+] as const;
+
 /** Frequencies that support per-KPI cycle start override */
 export const MULTI_MONTH_FREQUENCIES = ['Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
+
+
 
 const MONTH_ABBR_TO_NUM: Record<string, number> = {
   Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6,
