@@ -238,11 +238,10 @@ function KpiRow({
           {
             label: 'Weightage',
             value:
-              weights.length === 0
-                ? '—'
-                : weights.length === 1
-                  ? Number(weights[0]).toFixed(2)
-                  : `${weights.length} values`,
+              // ADR-345 — a weightage spread is per-employee drill-down detail
+              // (visible in the Open panel); the tree shows only a single shared
+              // value and stays neutral otherwise.
+              weights.length === 1 ? Number(weights[0]).toFixed(2) : '—',
           },
           { label: 'Avg score', value: <ScorePill value={kpi.avg_score} /> },
         ]}
