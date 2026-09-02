@@ -8883,6 +8883,45 @@ export type Database = {
           },
         ]
       }
+      kpi_non_numeric_target_cleanup_2026_09: {
+        Row: {
+          cleaned_at: string
+          employee_id: string | null
+          id: string
+          kpi_id: string
+          kpi_name: string | null
+          kra_name: string | null
+          old_target_value: number | null
+          review_period: string | null
+          review_year: number | null
+          uom_type: string | null
+        }
+        Insert: {
+          cleaned_at?: string
+          employee_id?: string | null
+          id?: string
+          kpi_id: string
+          kpi_name?: string | null
+          kra_name?: string | null
+          old_target_value?: number | null
+          review_period?: string | null
+          review_year?: number | null
+          uom_type?: string | null
+        }
+        Update: {
+          cleaned_at?: string
+          employee_id?: string | null
+          id?: string
+          kpi_id?: string
+          kpi_name?: string | null
+          kra_name?: string | null
+          old_target_value?: number | null
+          review_period?: string | null
+          review_year?: number | null
+          uom_type?: string | null
+        }
+        Relationships: []
+      }
       kpi_observation_replies: {
         Row: {
           created_at: string
