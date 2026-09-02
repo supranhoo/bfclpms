@@ -29,7 +29,7 @@ import {
 } from '@/hooks/useBuConsole';
 import { KpiTextBlocks } from '@/components/kpi/KpiText';
 import { KpiScoringScale, KpiTypeBadge } from '@/components/review/KpiScoringScale';
-import { isMixedScoringGroup, resolveKpiScoringModel } from '@/lib/kpiScoringModel';
+import { isMixedScoringGroup, resolveKpiScoringModel, typeOwnsTarget } from '@/lib/kpiScoringModel';
 import { GroupValueEntryDialog } from './GroupValueEntryDialog';
 import { GroupApprovalDialog } from './GroupApprovalDialog';
 import { GroupDefinitionEditDialog } from './GroupDefinitionEditDialog';
