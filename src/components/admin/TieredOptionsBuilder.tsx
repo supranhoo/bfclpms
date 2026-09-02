@@ -255,6 +255,22 @@ export function TieredOptionsBuilder({
             .join(' → ')}
         </div>
       )}
+
+      <SaveTieredTemplateDialog open={saveOpen} onOpenChange={setSaveOpen} options={options} />
+
+      <ConfirmDestructiveDialog
+        open={!!pendingDelete}
+        title="Remove template?"
+        description={`"${pendingDelete?.name ?? ''}" will no longer appear in the template list. KPIs already using these tiers are unaffected.`}
+        confirmLabel="Remove"
+        isLoading={deleteTemplate.isPending}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={async () => {
+          if (pendingDelete) await deleteTemplate.mutateAsync(pendingDelete.id).catch(() => {});
+          setPendingDelete(null);
+        }}
+      />
     </div>
+
   );
 }
