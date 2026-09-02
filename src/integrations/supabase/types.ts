@@ -18795,6 +18795,22 @@ export type Database = {
             }
             Returns: Json
           }
+        | {
+            Args: {
+              p_base_period: string
+              p_base_year: number
+              p_cascade_forward?: boolean
+              p_category_id: string
+              p_dry_run?: boolean
+              p_kpi_name: string
+              p_kra_name: string
+              p_new_scope: string
+              p_new_target?: string
+              p_seed_missing?: boolean
+              p_triggered_by?: string
+            }
+            Returns: Json
+          }
       check_review_period_permission: {
         Args: {
           p_action: string
