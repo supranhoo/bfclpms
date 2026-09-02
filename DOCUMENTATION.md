@@ -9593,3 +9593,22 @@ build and typecheck passed, so only a browser render exposed it.
 surfaces must be exercised by this render/import test after any shared-helper
 extraction.
 
+
+### v2.66.344 — Uniform frequency options everywhere (ADR-343)
+
+**What:** The frequency list is now a single exported constant
+(`FREQUENCY_OPTIONS` in `src/lib/frequencyCycleOptions.ts`) rendered by one
+shared field, `src/components/admin/kpi-form/FrequencyField.tsx`. The Binary and
+Tiered branches of "Assign New KRA" previously offered only five options
+(missing Bi-Monthly and Half-Yearly) and no cycle anchor; all three branches now
+use the shared field, which also exposes the Cycle Start picker whenever a
+multi-month frequency is selected.
+
+**Why:** Each screen inlined its own literal array, so the lists silently
+drifted apart and multi-month KPIs could not be created as Yes/No or tiered.
+
+**How:** `AdminKpiCreateDialog`, `AdminKpiEditorForm`, `TemplateFormDialog`,
+`GroupDefinitionEditDialog` and `RowOverrideDialog` all import the shared
+constant; `src/tests/frequencyOptionsSsot.test.ts` fails if any of them
+re-introduces a local list or drops a branch's shared field. Stored values are
+unchanged — `Bi-Monthly` / `Half-Yearly` remain the canonical join keys.

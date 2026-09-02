@@ -7253,3 +7253,15 @@ not replace the function. Any migration that adds, removes or retypes a
 parameter MUST `DROP FUNCTION` the superseded signature in the same migration.
 Two live overloads make PostgREST named-argument calls ambiguous and break the
 feature at runtime (org KPI propagation, ADR-342).
+
+## §KPI-FREQUENCY-OPTIONS-SSOT (ADR-343, 2026-09-02)
+
+Every frequency picker in the application MUST render
+`FREQUENCY_OPTIONS` from `src/lib/frequencyCycleOptions.ts`: Daily, Weekly,
+Monthly, Bi-Monthly, Quarterly, Half-Yearly, Yearly. Inlining a frequency array
+in a component is forbidden — partial lists made multi-month KPIs
+unreachable for some scoring types. Wherever a multi-month frequency can be
+chosen, the cycle anchor (Cycle Start) MUST be offered alongside it, regardless
+of KPI type. The stored strings are join keys for scoring, rollover and
+reporting and MUST NOT be re-spelled for display without an explicit
+display-only mapping.
