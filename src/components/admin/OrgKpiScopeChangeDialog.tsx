@@ -206,6 +206,9 @@ export function OrgKpiScopeChangeDialog({
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-primary" />
                     <span className="font-medium">{p.period} {p.year}</span>
+                    {p.seeded && (
+                      <Badge variant="outline" className="text-[11px]">will be created</Badge>
+                    )}
                   </div>
                   <Badge variant="outline" className="text-[11px]">
                     {p.old_scope} → {p.new_scope}
@@ -218,12 +221,28 @@ export function OrgKpiScopeChangeDialog({
                   className="flex items-center justify-between px-3 py-2 text-sm text-muted-foreground"
                 >
                   <div className="flex items-center gap-2">
-                    <Lock className="h-4 w-4" />
+                    {s.reason === 'period_locked' ? (
+                      <Lock className="h-4 w-4" />
+                    ) : (
+                      <CircleSlash className="h-4 w-4" />
+                    )}
                     <span>{s.period} {s.year}</span>
                   </div>
-                  <Badge variant="secondary" className="text-[11px]">{s.reason}</Badge>
+                  <Badge variant="secondary" className="text-[11px]">
+                    {s.reason === 'period_locked'
+                      ? 'Period locked'
+                      : s.reason === 'no_org_kpi_rows'
+                        ? 'No rows for this KPI yet'
+                        : s.reason}
+                  </Badge>
                 </div>
               ))}
+              {skipSummaryText(preview.skipped) && (
+                <div className="px-3 py-2 text-xs text-muted-foreground">
+                  {skipSummaryText(preview.skipped)}
+                </div>
+              )}
+
             </div>
           ) : needsTarget && !newTarget ? (
             <div className="p-4 text-sm text-muted-foreground">
