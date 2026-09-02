@@ -111,11 +111,13 @@ export function RowOverrideDialog({ row, open, onOpenChange, onEditGroupDefiniti
           </DialogDescription>
         </DialogHeader>
 
-        <div className={`grid gap-3 ${qualitative ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
+        <div className={`grid gap-3 ${qualitative ? 'sm:grid-cols-1' : 'sm:grid-cols-3'}`}>
           <Field label="Weightage" k="weightage" form={form} setForm={setForm} />
-          <Field label="Target" k="target_value" form={form} setForm={setForm} />
+          {/* ADR-341 — target is value-based only. */}
+          {!qualitative && <Field label="Target" k="target_value" form={form} setForm={setForm} />}
           {!qualitative && <Field label="Unit" k="uom" form={form} setForm={setForm} />}
         </div>
+
 
         <div className={`grid gap-3 ${qualitative ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
           <div className="space-y-1">
