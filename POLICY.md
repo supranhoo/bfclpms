@@ -7188,7 +7188,7 @@ the administrator explicitly selected.
 
 - **v2.66.337 (2026-09-01):** §CONSOLE-EDIT-SPAN-CONTIGUITY introduced (ADR-337).
 
-## §KPI-RENAME-LOCK-PREDICATE (ADR-338, 2026-09-01)
+## §KPI-RENAME-LOCK-PREDICATE (ADR-338 / ADR-340, 2026-09-02)
 
 `public.kpis.status` is of enum type `review_status`. Any SQL that filters it must
 use only `review_status` values; the `kpi_status` vocabulary (`locked`,
@@ -7196,8 +7196,14 @@ use only `review_status` values; the `kpi_status` vocabulary (`locked`,
 
 A KPI row is **locked** for a name correction when it carries a final score
 (`review_submissions.final_score IS NOT NULL`) or its status has moved past
-`kra_set`. `preview_kpi_range_correction` and `correct_kpis_range` share this one
-predicate so the preview count and the applied skip count always agree.
+`kra_set`. The UI-invoked `correct_kpis_range_dry_run`, compatibility preview
+`preview_kpi_range_correction`, and apply RPC `correct_kpis_range` MUST share
+this one predicate so the preview count and the applied skip count always agree.
+Tests MUST bind the RPC literal in `useKpiRangeCorrection` to the migration that
+replaces it; checking a similarly named function is not sufficient.
+
+- **v2.66.340 (2026-09-02):** ADR-340 corrected the live dry-run RPC omitted by
+  ADR-338 and added UI-to-RPC contract coverage.
 
 ## §KPI-TIERED-TEMPLATE-LIBRARY (ADR-339, 2026-09-02)
 
