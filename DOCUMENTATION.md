@@ -9612,3 +9612,17 @@ drifted apart and multi-month KPIs could not be created as Yes/No or tiered.
 constant; `src/tests/frequencyOptionsSsot.test.ts` fails if any of them
 re-introduces a local list or drops a branch's shared field. Stored values are
 unchanged — `Bi-Monthly` / `Half-Yearly` remain the canonical join keys.
+
+### v2.66.345 — KPI range rename audit vocabulary (ADR-345)
+`public.correct_kpis_range` records its audit row as `rename_kpis_range`, a literal
+missing from `kpi_standardization_actions_action_type_check`. Because the audit
+insert runs inside the rename transaction, the constraint violation rolled back the
+whole correction and surfaced as "Correction failed…". The allowlist now carries the
+literal (`reverse_standardization_action` already handled it), and the constraint
+carries a comment binding it to POLICY §AUDIT-ACTION-VOCABULARY.
+
+### v2.66.344 — Org KPI scope change: truthful skips + opt-in seeding (ADR-344)
+New 11-arg `change_org_kpi_scope_cascading` overload with `p_seed_missing`,
+`src/lib/orgKpi/scopeCascadeSkips.ts` for reason-aware grouping, dialog preview rows
+labelled "Period locked" vs "No rows for this KPI yet", and a checkbox to create the
+KPI in the remaining months of the span. Tests: `src/tests/scopeCascadeSkips.test.ts`.
