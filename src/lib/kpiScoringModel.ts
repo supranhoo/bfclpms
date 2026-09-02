@@ -93,6 +93,24 @@ export function labelToRatingFromModel(model: KpiScoringModel, label: string | n
 }
 
 /**
+ * ADR-341 — a target belongs to a value-based KPI only.
+ *
+ * Yes/No and tiered KPIs are scored from `qualitative_options`; a numeric target
+ * there is never read by any scoring path and only contradicts the Admin KPI
+ * Editor, which has always hidden the field for those types. This is the single
+ * predicate every editor, renderer and export must consult.
+ */
+export function typeOwnsTarget(uomType: string | null | undefined): boolean {
+  return (uomType || 'numeric') === 'numeric';
+}
+
+/** Same rule, resolved from a whole KPI row. */
+export function kpiOwnsTarget(kpi: KpiScoringInput | null | undefined): boolean {
+  return typeOwnsTarget(kpi?.uom_type);
+}
+
+
+/**
  * True when a group of KPI rows sharing one title is set up with more than one
  * type. Group writes must refuse these — one value cannot mean both a number
  * and a Yes/No answer.
