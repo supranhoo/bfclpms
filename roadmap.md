@@ -5,3 +5,13 @@
 - [x] Add/apply reversible September incident repair and verify data restoration
 - [x] Deploy and verify the corrected rollover function
 - [x] Synchronize ADR, POLICY.md, and DOCUMENTATION.md
+
+## ADR-341 — Target is value-based only (in progress)
+- [x] Shared `typeOwnsTarget` predicate + group/row/drawer editor guards
+- [ ] Suppress Target on review/report surfaces
+- [ ] Server invariant in console validators + rollover/copy paths
+- [ ] Audited forward-only residue cleanup migration + tests + docs
+
+## ADR-342 — Org KPI propagation failure (ambiguous RPC overload)
+- [ ] RCA + 5 Whys for `resolve_org_kpi_target_kpis` overload ambiguity
+- [ ] Drop/disambiguate the stale overload, verify propagation, regression test, docs
