@@ -1,6 +1,6 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-09-02 · **Version:** v2.66.340
+> **Last Updated:** 2026-09-02 · **Version:** v2.66.343
 >
 > **Version:** 2.66.340 — **Persistent KPI rename preview failure corrected (ADR-340, 2026-09-02).** RCA: ADR-338 replaced `preview_kpi_range_correction`, but the UI calls `correct_kpis_range_dry_run`; that deployed function still compared the `review_status` column to invalid `kpi_status` literals. CAPA: the exact UI-invoked RPC now uses the canonical final-score-or-past-`kra_set` predicate, with a read-only join to `review_submissions`; source-contract tests bind the hook RPC name to the corrective migration and exercise editable, in-review, approved, and final-scored mocks. No row data, RLS, role access, or backup scope changed. Rollback is function-only and requires no data restoration. See POLICY §KPI-RENAME-LOCK-PREDICATE.
 >
