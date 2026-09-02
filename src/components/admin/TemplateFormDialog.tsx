@@ -26,6 +26,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { supabase } from '@/integrations/supabase/client';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CanAction } from '@/components/platform/CanAction';
+import { FREQUENCY_OPTIONS } from '@/lib/frequencyCycleOptions'; // ADR-343 — SSOT
 
 /** Structural fields that should be back-filled from a linked KPI when null on template */
 const BACKFILL_FIELDS = [
@@ -526,7 +527,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                         <SelectValue placeholder="Select frequency" />
                       </SelectTrigger>
                       <SelectContent>
-                        {['Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'].map((freq) => (
+                        {FREQUENCY_OPTIONS.map((freq) => (
                           <SelectItem key={freq} value={freq}>
                             {freq}
                           </SelectItem>
@@ -625,7 +626,7 @@ export function TemplateFormDialog({ isOpen, onClose, template }: TemplateFormDi
                         <SelectValue placeholder="Select frequency" />
                       </SelectTrigger>
                       <SelectContent>
-                        {['Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'].map((freq) => (
+                        {FREQUENCY_OPTIONS.map((freq) => (
                           <SelectItem key={freq} value={freq}>
                             {freq}
                           </SelectItem>

@@ -28,7 +28,7 @@ import { getCycleOptionsForFrequency, deriveCycleOptionFromCycleStart } from '@/
 import { KpiScoringScale, KpiTypeBadge } from '@/components/review/KpiScoringScale';
 import { rowEditableFields, isQualitativeKpi, scoringModelLockReason } from './rowOverrideModel';
 
-const FREQUENCY_OPTIONS = ['Daily', 'Weekly', 'Monthly', 'Bi-Monthly', 'Quarterly', 'Half-Yearly', 'Yearly'];
+import { FREQUENCY_OPTIONS } from '@/lib/frequencyCycleOptions'; // ADR-343 — SSOT
 
 const DAY_COUNT_OPTIONS = [
   { value: 'working_days', label: 'Working days only' },

@@ -19,7 +19,7 @@ import { TieredOptionsBuilder } from './TieredOptionsBuilder';
 import { UomType, QualitativeOption, BINARY_OPTIONS, BINARY_OPTIONS_INVERTED, isBinaryInverted } from '@/lib/qualitativeUom';
 import { Badge } from '@/components/ui/badge';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
-import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
+import { FrequencyField } from '@/components/admin/kpi-form/FrequencyField';
 import { getActiveMonthForCycle, buildCycleScopeLabel } from '@/lib/frequencyUtils';
 import { useKpiTemplates } from '@/hooks/useKpiTemplates';
 import { useAllKpis } from '@/hooks/useKpis';
@@ -1005,46 +1005,14 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Frequency</Label>
-                        <Select value={frequency} onValueChange={(v) => { setFrequency(v); setFrequencyCycleStart(''); }}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Daily">Daily</SelectItem>
-                            <SelectItem value="Weekly">Weekly</SelectItem>
-                            <SelectItem value="Monthly">Monthly</SelectItem>
-                            <SelectItem value="Bi-Monthly">Bi-Monthly</SelectItem>
-                            <SelectItem value="Quarterly">Quarterly</SelectItem>
-                            <SelectItem value="Half-Yearly">Half-Yearly</SelectItem>
-                            <SelectItem value="Yearly">Yearly</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {MULTI_MONTH_FREQUENCIES.includes(frequency) && (() => {
-                        const cycleOptions = getCycleOptionsForFrequency(frequency);
-                        if (!cycleOptions) return null;
-                        return (
-                          <div className="space-y-2">
-                            <Label className="text-sm font-medium">Cycle Start</Label>
-                            <Select value={frequencyCycleStart} onValueChange={setFrequencyCycleStart}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="(Use system default)" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="system_default">(Use system default)</SelectItem>
-                                {cycleOptions.map(opt => (
-                                  <SelectItem key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <p className="text-xs text-muted-foreground">Override the global cycle start for this KPI</p>
-                          </div>
-                        );
-                      })()}
+                      {/* ADR-343 — shared frequency + cycle anchor field */}
+                      <FrequencyField
+                        frequency={frequency}
+                        onFrequencyChange={(v) => { setFrequency(v); setFrequencyCycleStart(''); }}
+                        cycleStart={frequencyCycleStart}
+                        onCycleStartChange={setFrequencyCycleStart}
+                      />
+
                       {frequency === 'Daily' && (
                         <div className="space-y-2">
                           <Label className="text-sm font-medium">Day Count Type</Label>
@@ -1091,21 +1059,13 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                           max="100"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Frequency</Label>
-                        <Select value={frequency} onValueChange={setFrequency}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Daily">Daily</SelectItem>
-                            <SelectItem value="Weekly">Weekly</SelectItem>
-                            <SelectItem value="Monthly">Monthly</SelectItem>
-                            <SelectItem value="Quarterly">Quarterly</SelectItem>
-                            <SelectItem value="Yearly">Yearly</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      <FrequencyField
+                        frequency={frequency}
+                        onFrequencyChange={(v) => { setFrequency(v); setFrequencyCycleStart(''); }}
+                        cycleStart={frequencyCycleStart}
+                        onCycleStartChange={setFrequencyCycleStart}
+                      />
+
                       {frequency === 'Daily' && (
                         <div className="space-y-2 col-span-2">
                           <Label className="text-sm font-medium">Day Count Type</Label>
@@ -1141,21 +1101,13 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                           max="100"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Frequency</Label>
-                        <Select value={frequency} onValueChange={setFrequency}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Daily">Daily</SelectItem>
-                            <SelectItem value="Weekly">Weekly</SelectItem>
-                            <SelectItem value="Monthly">Monthly</SelectItem>
-                            <SelectItem value="Quarterly">Quarterly</SelectItem>
-                            <SelectItem value="Yearly">Yearly</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      <FrequencyField
+                        frequency={frequency}
+                        onFrequencyChange={(v) => { setFrequency(v); setFrequencyCycleStart(''); }}
+                        cycleStart={frequencyCycleStart}
+                        onCycleStartChange={setFrequencyCycleStart}
+                      />
+
                     </div>
                     {/* ADR-272 / ADR-271 — shared, type-aware scoring editor */}
                     <KpiScoringEditor value={scoringState} onChange={setScoring} />
