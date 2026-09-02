@@ -1,6 +1,6 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-09-02 · **Version:** v2.66.340
+> **Last Updated:** 2026-09-02 · **Version:** v2.66.343
 >
 > **Version:** 2.66.340 — **Persistent KPI rename preview failure corrected (ADR-340, 2026-09-02).** RCA: ADR-338 replaced `preview_kpi_range_correction`, but the UI calls `correct_kpis_range_dry_run`; that deployed function still compared the `review_status` column to invalid `kpi_status` literals. CAPA: the exact UI-invoked RPC now uses the canonical final-score-or-past-`kra_set` predicate, with a read-only join to `review_submissions`; source-contract tests bind the hook RPC name to the corrective migration and exercise editable, in-review, approved, and final-scored mocks. No row data, RLS, role access, or backup scope changed. Rollback is function-only and requires no data restoration. See POLICY §KPI-RENAME-LOCK-PREDICATE.
 >
@@ -9578,3 +9578,18 @@ both and PostgREST refused to choose.
 **How:** Migration drop plus POLICY §DB-FUNCTION-SIGNATURE-CHANGES, which
 requires an explicit `DROP FUNCTION` in any migration that changes a signature.
 Covered by `src/tests/targetIsValueBased.test.ts`.
+
+### v2.66.343 — Performance Console render crash (ADR-341 follow-up)
+
+**What:** `/admin/bu-console` showed "Something went wrong". `GroupDefinitionEditDialog`
+called `targetForType` without importing it, so the page threw
+`targetForType is not defined` on render. Import restored.
+
+**Why:** The ADR-341 extraction added the call site but not the named import;
+build and typecheck passed, so only a browser render exposed it.
+
+**How:** `src/tests/buConsoleModuleBindings.test.ts` now evaluates every
+`bu-console` module, turning unresolved bindings into a test failure. Console
+surfaces must be exercised by this render/import test after any shared-helper
+extraction.
+
