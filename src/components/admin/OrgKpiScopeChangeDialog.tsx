@@ -49,6 +49,8 @@ export function OrgKpiScopeChangeDialog({
   frequency,
 }: Props) {
   const [cascadeForward, setCascadeForward] = useState(false);
+  // ADR-344 — opt in to creating the KPI in months of the span that lack it.
+  const [seedMissing, setSeedMissing] = useState(false);
   // ADR-320 — a grouped scope must name the one target it moves to.
   const [newTarget, setNewTarget] = useState<string | null>(null);
   const needsTarget = scopeNeedsTarget(newScope) && newScope !== 'department' && newScope !== 'employee';
@@ -59,19 +61,21 @@ export function OrgKpiScopeChangeDialog({
   useEffect(() => {
     if (!open) return;
     if (needsTarget && !newTarget) return;
-    previewMutation.mutate({ identifier, newScope, newTarget, cascadeForward });
+    previewMutation.mutate({ identifier, newScope, newTarget, cascadeForward, seedMissing });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, cascadeForward, newTarget]);
+  }, [open, cascadeForward, newTarget, seedMissing]);
 
   const preview = previewMutation.data;
+  const skips = groupSkips(preview?.skipped);
 
   const handleApply = () => {
     const mode: ScopeCascadeMode = cascadeForward ? 'current_and_future' : 'current_only';
     applyMutation.mutate(
-      { identifier, newScope, newTarget, cascadeMode: mode },
+      { identifier, newScope, newTarget, cascadeMode: mode, seedMissing },
       { onSuccess: () => onClose() }
     );
   };
+
 
   const isAggregating =
     (currentScope === 'employee' && newScope !== 'employee') ||
