@@ -10,7 +10,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertTriangle, CheckCircle2, Lock } from 'lucide-react';
+import { Loader2, AlertTriangle, CheckCircle2, Lock, CircleSlash } from 'lucide-react';
+import { groupSkips, skipSummaryText } from '@/lib/orgKpi/scopeCascadeSkips';
 import {
   useChangeOrgKpiScope,
   useScopeCascadePreview,
