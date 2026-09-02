@@ -19,7 +19,6 @@ import { TieredOptionsBuilder } from './TieredOptionsBuilder';
 import { UomType, QualitativeOption, BINARY_OPTIONS, BINARY_OPTIONS_INVERTED, isBinaryInverted } from '@/lib/qualitativeUom';
 import { Badge } from '@/components/ui/badge';
 import { UOM_OPTIONS } from '@/lib/uomConstants';
-import { getCycleOptionsForFrequency, MULTI_MONTH_FREQUENCIES } from '@/lib/frequencyCycleOptions';
 import { FrequencyField } from '@/components/admin/kpi-form/FrequencyField';
 import { getActiveMonthForCycle, buildCycleScopeLabel } from '@/lib/frequencyUtils';
 import { useKpiTemplates } from '@/hooks/useKpiTemplates';
