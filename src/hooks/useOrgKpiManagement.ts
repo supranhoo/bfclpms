@@ -174,12 +174,16 @@ interface CascadePeriodResult {
   kpis_updated?: number;
   okv_migration?: { action: string; aggregated: number; split: number };
   preview?: boolean;
+  /** ADR-344 — the month had no rows and was created by this run. */
+  seeded?: boolean;
+  seeded_rows?: number;
 }
 
 interface CascadeResponse {
   dry_run: boolean;
   periods: CascadePeriodResult[];
-  skipped: Array<{ period: string; year: number; reason: string }>;
+  skipped: SkippedPeriod[];
+  skipped_summary?: { period_locked: number; no_org_kpi_rows: number };
 }
 
 /**
@@ -187,6 +191,10 @@ interface CascadeResponse {
  * When cascadeMode = 'current_and_future', applies the same change to all
  * unlocked open future periods within the same fiscal year (July→June) and
  * migrates org_kpi_values via aggregation/split.
+ *
+ * ADR-344 — `seedMissing` additionally creates the KPI in the months of the
+ * span that do not carry it yet, with the new scope already applied. Locked
+ * periods are never written.
  */
 export function useChangeOrgKpiScope() {
   const queryClient = useQueryClient();
@@ -198,6 +206,7 @@ export function useChangeOrgKpiScope() {
       newScope,
       newTarget = null,
       cascadeMode = 'current_only',
+      seedMissing = false,
     }: {
       identifier: OrgKpiIdentifier;
       // ADR-320 — every scope word the model ships, grouped ones included.
@@ -205,6 +214,7 @@ export function useChangeOrgKpiScope() {
       /** Required for a grouped scope: which BU / location / division / grade / level. */
       newTarget?: string | null;
       cascadeMode?: ScopeCascadeMode;
+      seedMissing?: boolean;
     }): Promise<CascadeResponse> => {
       const { categoryId, kraName, kpiName, reviewPeriod, reviewYear } = identifier;
       const { data: { user } } = await supabase.auth.getUser();
@@ -220,6 +230,7 @@ export function useChangeOrgKpiScope() {
         p_dry_run: false,
         p_triggered_by: user?.id ?? null,
         p_new_target: newTarget,
+        p_seed_missing: seedMissing,
       } as never);
 
       if (error) throw error;
@@ -228,11 +239,13 @@ export function useChangeOrgKpiScope() {
     onSuccess: (result, vars) => {
       queryClient.invalidateQueries({ queryKey: ['org-kpi-full-mapping'] });
       queryClient.invalidateQueries({ queryKey: ['org-level-kpis'] });
-      const periodsTouched = result.periods.length;
-      const skipped = result.skipped.length;
+      queryClient.invalidateQueries({ queryKey: ['bu-console-snapshot'] });
+      const seeded = result.periods.filter((p) => p.seeded).length;
       toast({
         title: 'Scope updated',
-        description: `Changed to "${vars.newScope}" across ${periodsTouched} period(s)${skipped ? ` · ${skipped} skipped (locked)` : ''}`,
+        description: scopeChangeSummary(
+          String(vars.newScope), result.periods.length, result.skipped, seeded,
+        ),
       });
     },
     onError: (error: Error) => {
@@ -240,6 +253,7 @@ export function useChangeOrgKpiScope() {
     },
   });
 }
+
 
 /**
  * Dry-run preview of a cascading scope change — returns affected periods
