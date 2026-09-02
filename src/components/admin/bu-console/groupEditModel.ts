@@ -6,6 +6,8 @@
  * value. Weightage impact is computed from the server dry-run so the admin
  * sees who leaves 100% before anything is written.
  */
+import { typeOwnsTarget } from '@/lib/kpiScoringModel';
+
 
 export type ChangeSet = Record<string, string | null>;
 
