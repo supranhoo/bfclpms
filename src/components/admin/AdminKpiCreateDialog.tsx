@@ -1109,21 +1109,13 @@ export function AdminKpiCreateDialog({ isOpen, onClose, defaultEmployeeId, defau
                           max="100"
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">Frequency</Label>
-                        <Select value={frequency} onValueChange={setFrequency}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Daily">Daily</SelectItem>
-                            <SelectItem value="Weekly">Weekly</SelectItem>
-                            <SelectItem value="Monthly">Monthly</SelectItem>
-                            <SelectItem value="Quarterly">Quarterly</SelectItem>
-                            <SelectItem value="Yearly">Yearly</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      <FrequencyField
+                        frequency={frequency}
+                        onFrequencyChange={(v) => { setFrequency(v); setFrequencyCycleStart(''); }}
+                        cycleStart={frequencyCycleStart}
+                        onCycleStartChange={setFrequencyCycleStart}
+                      />
+
                     </div>
                     {/* ADR-272 / ADR-271 — shared, type-aware scoring editor */}
                     <KpiScoringEditor value={scoringState} onChange={setScoring} />
