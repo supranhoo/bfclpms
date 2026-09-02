@@ -7,7 +7,7 @@
  * change how much the KPI counts and when it is measured. Mirrors
  * `public.bu_console_scoring_model_lock`.
  */
-import { resolveKpiScoringModel, type KpiScoringInput } from '@/lib/kpiScoringModel';
+import { resolveKpiScoringModel, typeOwnsTarget, type KpiScoringInput } from '@/lib/kpiScoringModel';
 
 /** Fields tunable for every KPI, whatever its scoring model. */
 export const ROW_SCOPE_FIELDS = [
@@ -31,12 +31,17 @@ export function isQualitativeKpi(kpi: KpiScoringInput | null | undefined): boole
   return t === 'binary' || t === 'tiered';
 }
 
-/** Editable field list for the tuning dialog, narrowed by the KPI's type. */
+/**
+ * Editable field list for the tuning dialog, narrowed by the KPI's type.
+ * ADR-341 — a Yes/No or tiered KPI owns no target, so the field is not tunable.
+ */
 export function rowEditableFields(kpi: KpiScoringInput | null | undefined): string[] {
-  return isQualitativeKpi(kpi)
-    ? [...ROW_SCOPE_FIELDS]
-    : [...ROW_SCOPE_FIELDS, ...ROW_NUMERIC_ONLY_FIELDS];
+  const scope = ROW_SCOPE_FIELDS.filter(
+    (f) => f !== 'target_value' || typeOwnsTarget(kpi?.uom_type),
+  );
+  return isQualitativeKpi(kpi) ? [...scope] : [...scope, ...ROW_NUMERIC_ONLY_FIELDS];
 }
+
 
 /**
  * Client mirror of the server guard: the reason a change set must not be saved
