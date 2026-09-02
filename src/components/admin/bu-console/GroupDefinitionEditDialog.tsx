@@ -322,7 +322,10 @@ export function GroupDefinitionEditDialog({ args, definition, open, onOpenChange
         r5: scoring.r5, r4: scoring.r4, r3: scoring.r3,
         r2: scoring.r2, r1: scoring.r1, r0: scoring.r0, uom,
       }),
-      target_value: target,
+      // ADR-341 — the target is value-based only; it clears on a move to
+      // Yes/No or tiered and never travels while the type stays qualitative.
+      target_value: targetForType(scoring.uom_type, target),
+
       weightage,
       category_id: categoryId,
       kra_name: kraName,
