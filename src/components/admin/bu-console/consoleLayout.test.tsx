@@ -144,8 +144,8 @@ describe('Variant badge (ADR-315a)', () => {
   it('stays silent for a single definition, whatever the weightage spread', () => {
     renderTree({ variant_count: 1, weightage_values: [10, 12, 15] });
     expect(screen.queryByText(/variant/i)).toBeNull();
-    // The weightage spread is still reported in its own column.
-    expect(screen.getByText('3 values')).toBeTruthy();
+    // ADR-346 — a weightage spread is drill-down detail, not a tree badge.
+    expect(screen.queryByText('3 values')).toBeNull();
   });
 
   it('stays silent when the KPI reports no variant count at all', () => {

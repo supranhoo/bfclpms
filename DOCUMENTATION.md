@@ -9626,3 +9626,11 @@ New 11-arg `change_org_kpi_scope_cascading` overload with `p_seed_missing`,
 `src/lib/orgKpi/scopeCascadeSkips.ts` for reason-aware grouping, dialog preview rows
 labelled "Period locked" vs "No rows for this KPI yet", and a checkbox to create the
 KPI in the remaining months of the span. Tests: `src/tests/scopeCascadeSkips.test.ts`.
+
+### v2.66.346 — Console tree weightage: drill-down detail, not a badge (ADR-346)
+The Performance Console tree Weightage column no longer renders "N values" when the
+employees behind one KPI row carry different weightages. A single shared value still
+renders as a number; a spread renders `—`, and the exact per-employee weightages stay
+available in the expanded "Open" people panel. Pure presentation: `weightage_values`
+remains in the payload untouched. Test: `consoleLayout.test.tsx` asserts the spread
+renders no badge. Rollback: revert the one-line value expression in `BuConsoleTree.tsx`.
