@@ -122,3 +122,13 @@ const BLANK_LADDER: LadderValues = { r5: '', r4: '', r3: '', r2: '', r1: '', r0:
 export function ladderForType(uomType: string | null | undefined, values: LadderValues): LadderValues {
   return uomType === 'numeric' ? values : { ...BLANK_LADDER };
 }
+
+/**
+ * ADR-341 — the target follows the same rule as the ladder: a Yes/No or tiered
+ * KPI has none, so the form value never travels and an existing stored target is
+ * cleared when the admin moves the group to a qualitative type.
+ */
+export function targetForType(uomType: string | null | undefined, target: string): string {
+  return typeOwnsTarget(uomType) ? target : '';
+}
+
