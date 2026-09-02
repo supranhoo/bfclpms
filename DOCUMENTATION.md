@@ -9496,3 +9496,19 @@ never ran and the skip-locked apply path would have failed too.
 canonical console lock rule — final score present, or status past `kra_set` —
 via a `review_submissions` join. See POLICY §KPI-RENAME-LOCK-PREDICATE and
 `src/tests/kpiRenameLockPredicate.test.ts`.
+
+### v2.66.339 — Save tiered options as a template (ADR-339)
+
+**What:** The Tiered Options builder gains a "Save as template" action. Saved
+sets appear in the "Use template" dropdown under a *Saved templates* group,
+alongside the built-in presets, on both Assign New KRA and the Admin KPI Editor.
+
+**Why:** Custom ladders (e.g. the Production Incentive tiers) had to be retyped
+for every KPI because the template list was hardcoded — a zero-hardcoding gap.
+
+**How:** Templates are stored in the existing `public.kpi_scoring_scales` table
+(`scale_kind = 'tiered'`, tiers in `qualitative_options`) through
+`src/services/kpi/tieredTemplateService.ts` and `useTieredTemplates`. Admins can
+overwrite by name and soft-remove a template behind the destructive-confirm
+dialog. See POLICY §KPI-TIERED-TEMPLATE-LIBRARY and
+`src/tests/tieredTemplates.test.ts`.
