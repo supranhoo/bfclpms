@@ -793,8 +793,15 @@ export default function KpiEmployeeMatrix() {
                                 {showWeightage && (
                                   <div className="text-xs opacity-80">Base Weightage: {row.weightage}%</div>
                                 )}
+                                {/* ADR-358 — structured blocks */}
                                 {row.description && (
-                                  <div className="text-xs opacity-80 mt-1 whitespace-pre-wrap">{row.description}</div>
+                                  <div className="text-xs opacity-80 mt-1 whitespace-pre-wrap"><span className="font-medium">Description: </span>{row.description}</div>
+                                )}
+                                {row.kpiFormula && (
+                                  <div className="text-xs opacity-80 mt-1 whitespace-pre-wrap"><span className="font-medium">Formula: </span>{row.kpiFormula}</div>
+                                )}
+                                {row.kpiScoringLogic && (
+                                  <div className="text-xs opacity-80 mt-1 whitespace-pre-wrap"><span className="font-medium">Scoring Logic: </span>{row.kpiScoringLogic}</div>
                                 )}
                               </TooltipContent>
                             </Tooltip>
