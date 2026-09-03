@@ -2611,6 +2611,26 @@ export function EmployeeSelectorGrid({
             const hasActiveFilters =
               !!searchQuery || !!selectedDepartment || !!selectedDesignation ||
               !!selectedGrade || !!selectedManager || statusFilter !== 'all';
+            // ADR-348 — the actionable queue legitimately resolves to zero when
+            // every review is cleared. Say so explicitly and offer the full
+            // downline instead of the misleading "No team members found".
+            if (isActionableQueueOn && (teamQueueCounts?.total ?? 0) > 0 && !hasActiveFilters) {
+              return (
+                <div className="text-center py-12 text-muted-foreground">
+                  <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-green-500/70" />
+                  <p className="font-medium text-foreground">All caught up</p>
+                  <p className="text-sm mt-1 max-w-md mx-auto">
+                    No team members have items pending your review for this period.
+                  </p>
+                  <div className="mt-4">
+                    <Button variant="outline" size="sm" onClick={() => setQueueFilter('all')}>
+                      <Users className="h-4 w-4 mr-1.5" />
+                      Show all team members
+                    </Button>
+                  </div>
+                </div>
+              );
+            }
             return (
               <div className="text-center py-12 text-muted-foreground">
                 <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
