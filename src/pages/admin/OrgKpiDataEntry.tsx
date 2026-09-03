@@ -757,6 +757,11 @@ export default function OrgKpiDataEntry() {
       categoryColor: catColor,
       kraName: kpi.kra_name,
       kpiName: kpi.kpi_name,
+      // ADR-351 — structured text for display only. Matching/keys stay on kpi_name.
+      kpiTitle: (kpi as any).kpi_title ?? null,
+      kpiDescription: (kpi as any).kpi_description ?? null,
+      kpiFormula: (kpi as any).kpi_formula ?? null,
+      kpiScoringLogic: (kpi as any).kpi_scoring_logic ?? null,
       targetValue: kpi.target_value,
       uom: kpi.uom,
       r5: kpi.r5 ?? null,

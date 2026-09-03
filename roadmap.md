@@ -44,3 +44,9 @@
 - [x] `employee_inactive` benign skip reason (preview, toast, dialog labels)
 - [x] Tests, ADR-349, POLICY §ORG-KPI-ACTIVE-POPULATION, DOCUMENTATION sync
 - [ ] Follow-up: same guard inside `propagate_org_kpi_value` / `diagnose_org_kpi_propagation_gap`
+
+## ADR-351 — Org KPI Data Entry structured KPI text (done)
+- [x] RCA: console writes structured fields; card printed legacy `kpi_name`
+- [x] Snapshot RPC returns kpi_title/description/formula/scoring_logic
+- [x] Card renders via KpiTitle / KpiTextBlocks; keys still on kpi_name
+- [x] Tests, ADR-351, POLICY §KPI-TEXT-DISPLAY-SSOT, DOCUMENTATION sync

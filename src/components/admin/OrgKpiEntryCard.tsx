@@ -39,6 +39,8 @@ import { OrgKpiEvidenceStatusChip } from '@/components/admin/OrgKpiEvidenceStatu
 import { OrgKpiParityBadge } from '@/components/admin/OrgKpiParityBadge';
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { Save } from 'lucide-react';
+// ADR-351 — KPI text SSOT: never print raw `kpi_name` on a display surface.
+import { KpiTitle, KpiTextBlocks } from '@/components/kpi/KpiText';
 // ADR-319 — one scope vocabulary shared with the console create dialog.
 import { KPI_SCOPE_COPY, PLANNED_KPI_SCOPE_LABELS, type AnyKpiScope } from '@/lib/review/kpiScope';
 
@@ -49,6 +51,14 @@ export interface OrgKpiCardData {
   categoryColor: string;
   kraName: string;
   kpiName: string;
+  /**
+   * ADR-351 — structured KPI text (ADR-269b). Display only; every lookup,
+   * grouping and propagation key still uses the raw `kpiName`.
+   */
+  kpiTitle?: string | null;
+  kpiDescription?: string | null;
+  kpiFormula?: string | null;
+  kpiScoringLogic?: string | null;
   targetValue: number | null;
   uom: string | null;
   r5: string | null;
@@ -754,6 +764,14 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
     : (statusConfig[aggregateStatus] ?? statusConfig.pending);
   const StatusIcon = statusInfo.icon;
   const ScopeIcon = scopeIcons[data.scope];
+  // ADR-351 — display-only projection for `resolveKpiText`.
+  const kpiTextRow = {
+    kpi_name: data.kpiName,
+    kpi_title: data.kpiTitle ?? null,
+    kpi_description: data.kpiDescription ?? null,
+    kpi_formula: data.kpiFormula ?? null,
+    kpi_scoring_logic: data.kpiScoringLogic ?? null,
+  };
 
   return (
     <>
@@ -766,7 +784,9 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
       <CardContent className="p-4 space-y-2">
         {/* HEADER — KPI identity + metadata */}
         <div className="space-y-1">
-          <h3 className="text-sm font-semibold whitespace-pre-wrap break-words">{data.kpiName}</h3>
+          {/* ADR-351 — structured rows render title + labelled blocks; legacy rows unchanged. */}
+          <KpiTitle kpi={kpiTextRow} as="h3" legacyFullText className="text-sm font-semibold break-words" />
+          <KpiTextBlocks kpi={kpiTextRow} collapsible hideLegacy className="break-words" />
           <p className="text-xs text-muted-foreground break-words">KRA: {data.kraName}</p>
 
           <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
