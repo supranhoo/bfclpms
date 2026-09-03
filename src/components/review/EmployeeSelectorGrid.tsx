@@ -15,6 +15,9 @@ import { useOrgKpiPeriodCounts } from '@/hooks/useOrgKpiPeriodCounts';
 import { resolvePendingStatuses, resolveReviewableStatuses, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { matchesTeamTile, type TeamTile } from '@/lib/teamReviewTileFilter';
 import { resolveReviewerRelationship } from '@/lib/review/resolveReviewerRelationship';
+import { isActionableForReviewer, normalizeTeamQueueFilter, DEFAULT_TEAM_QUEUE_FILTER } from '@/lib/review/actionableQueueFilter';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -182,6 +185,12 @@ export function EmployeeSelectorGrid({
   const [searchParams] = useSearchParams();
   const autoOpenKpiId = searchParams.get('kpi');
   const [statusFilter, setStatusFilter] = useUrlFilterState('status', 'all');
+  // ADR-348 / POLICY §129 — Team Reviews defaults to "Pending action only":
+  // only members with KPIs awaiting THIS reviewer are shown. ?queue=all reveals
+  // the full mapped downline. Default value never lands in the URL.
+  const [queueFilterRaw, setQueueFilter] = useUrlFilterState('queue', DEFAULT_TEAM_QUEUE_FILTER);
+  const queueFilter = normalizeTeamQueueFilter(queueFilterRaw);
+  const isActionableQueueOn = viewLevel === 'team' && queueFilter === 'actionable';
   const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
   const isExplorerCapable = viewLevel === 'audit' || viewLevel === 'management';
   const exploreParam = searchParams.get('explore');
