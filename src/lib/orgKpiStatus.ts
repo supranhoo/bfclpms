@@ -46,6 +46,24 @@ export function isAlreadyAdvancedPastKraSet(
   return mappedEmpIds.size > 0 && kraSetEmpIds.size === 0;
 }
 
+/**
+ * ADR-349 — defence in depth for POLICY §ORG-KPI-ACTIVE-POPULATION.
+ *
+ * `mappedEmpIds` is the active-employee population for the definition. Any
+ * `kra_set` id outside that population (e.g. an inactive employee whose child
+ * row was never advanced) is NOT a blocker: it can neither be counted in
+ * "7 of 7 entered" nor be a legitimate propagation target. Intersecting here
+ * means a stale or legacy payload can never flip a completed KPI to
+ * Stuck/Pending.
+ */
+export function activeKraSetEmpIds(
+  mappedEmpIds: Set<string>,
+  kraSetEmpIds: Set<string>,
+): Set<string> {
+  if (mappedEmpIds.size === 0) return new Set(kraSetEmpIds);
+  return new Set(Array.from(kraSetEmpIds).filter((id) => mappedEmpIds.has(id)));
+}
+
 /** Pull the trailing employee_id segment from a `${defKey}||dept||emp` row key. */
 function empIdFromKey(k: string): string {
   const parts = k.split('||');
@@ -57,8 +75,10 @@ function deptIdFromKey(k: string): string {
 }
 
 export function deriveOrgKpiTileStatus(input: DeriveTileStatusInput): OrgKpiTileStatus {
-  const { scope, okvRows, mappedEmpIds, kraSetEmpIds, empToDept } = input;
+  const { scope, okvRows, mappedEmpIds, empToDept } = input;
+  const kraSetEmpIds = activeKraSetEmpIds(mappedEmpIds, input.kraSetEmpIds);
   const everyChildAdvanced = isAlreadyAdvancedPastKraSet(mappedEmpIds, kraSetEmpIds);
+
 
   if (scope === 'organization') {
     const val = okvRows[0];
