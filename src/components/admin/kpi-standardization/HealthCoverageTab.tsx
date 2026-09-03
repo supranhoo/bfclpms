@@ -12,6 +12,8 @@ import { useRecentRegistryAudit } from '@/hooks/useDefinitionSplit';
 import { SplitDefinitionDialog } from './SplitDefinitionDialog';
 import { format } from 'date-fns';
 import { fetchApplyCoverage, type ApplyCoverage } from '@/hooks/useKpiRangeCorrection';
+import { SplitNameVariantsCard } from './SplitNameVariantsCard';
+
 
 /**
  * Phase 2c: Health & Coverage dashboard.
@@ -187,9 +189,14 @@ export function HealthCoverageTab() {
         </CardContent>
       </Card>
 
+      {/* ADR-352a — one KPI split across several legacy names */}
+      <SplitNameVariantsCard />
+
       {/* Unlinked queue */}
       <Card>
         <CardHeader>
+
+
           <CardTitle className="flex items-center gap-2 text-base">
             <Unlink className="h-4 w-4 text-amber-600" />
             Unlinked Signatures Queue

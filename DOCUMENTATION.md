@@ -2,7 +2,7 @@
 
 > **Last Updated:** 2026-09-03 · **Version:** v2.66.351
 >
-> **Version:** 2.66.352 — **Org KPI Data Entry: tiered rating dropdown no longer overflows its card (ADR-352, 2026-09-03).** RCA: `QualitativeSelect` hardcoded a 140px trigger with an unconstrained label span, so long tiered option text ("90% - 94.99% Achievement (of the 5% Incentive Target)") wrapped out of the control and painted over the status chips, Remark field and Save row. CAPA: the trigger is now container-driven (`w-full min-w-0` merged via `cn`, caller classes preserved), the selected label truncates with the full text in `title`, dropdown items wrap inside a capped popover, and the rating badge uses `text-primary-foreground` instead of hardcoded white. Display-only - `onChange(label, rating)` and all scoring paths unchanged. Regression: `src/test/qualitativeSelectLongLabel.test.tsx` (2). See `docs/adr/ADR-352.md`.
+> **Version:** 2.66.353 — **One KPI shown as several cards on Org KPI Data Entry (ADR-352a, 2026-09-03).** RCA: a Performance Console definition edit rewrites the structured columns but never the legacy `kpi_name` join key (ADR-334/337), while Org KPI Data Entry groups on `category_id + kra_name + kpi_name`; *Consumable cost* was stored under three different legacy names, so it rendered as three identical single-employee cards. CAPA: the open Aug/Sep 2026 rows were renamed to the canonical `Consumable cost.:` with a reversible `rename_kpis_range` audit record (locked and pre-May-2026 rows untouched, POLICY §88I), and a new read-only `list_split_kpi_name_variants()` powers a "Same KPI, Several Legacy Names" card on KPI Standardization -> Health with a one-click Normalise action running the existing `correct_kpis_range` engine. Regression: `src/test/splitKpiNameVariants.test.ts` (3). See `docs/adr/ADR-352a.md`.
 >
 > **Version:** 2.66.340 — **Persistent KPI rename preview failure corrected (ADR-340, 2026-09-02).** RCA: ADR-338 replaced `preview_kpi_range_correction`, but the UI calls `correct_kpis_range_dry_run`; that deployed function still compared the `review_status` column to invalid `kpi_status` literals. CAPA: the exact UI-invoked RPC now uses the canonical final-score-or-past-`kra_set` predicate, with a read-only join to `review_submissions`; source-contract tests bind the hook RPC name to the corrective migration and exercise editable, in-review, approved, and final-scored mocks. No row data, RLS, role access, or backup scope changed. Rollback is function-only and requires no data restoration. See POLICY §KPI-RENAME-LOCK-PREDICATE.
 >
@@ -9662,6 +9662,12 @@ Stuck/Pending. All snapshot aggregates now share one active population;
 Pending chip counts pending KPIs explicitly; `preview_org_kpi_propagation`
 reports `employee_inactive` as a benign skip. Tests:
 `src/test/orgKpiInactiveKraSet.test.ts`.
+
+### v2.66.353 - Duplicate Org KPI cards from split legacy names (ADR-352a)
+Detector `public.list_split_kpi_name_variants()` + `SplitNameVariantsCard` on KPI Standardization
+Health list every KPI title stored under several legacy names; Normalise reuses the reversible
+`correct_kpis_range` engine on open rows only. Consumable cost (Aug/Sep 2026) normalised.
+Tests: `src/test/splitKpiNameVariants.test.ts`. ADR: `docs/adr/ADR-352a.md`.
 
 ### v2.66.352 - QualitativeSelect container-driven width (ADR-352)
 Fixed overlapping tiered rating text on Org KPI Data Entry: `src/components/review/QualitativeSelect.tsx`
