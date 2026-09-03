@@ -54,14 +54,14 @@ export function QualitativeSelect({
 
   return (
     <Select value={value || ''} onValueChange={handleChange} disabled={disabled}>
-      <SelectTrigger className={`w-[140px] ${className}`}>
+      <SelectTrigger className={cn('w-full min-w-0', className)} title={selectedOption?.label}>
         <SelectValue placeholder={placeholder}>
           {selectedOption && (
-            <div className="flex items-center gap-2">
-              <span>{selectedOption.label}</span>
-              <Badge 
-                variant="secondary" 
-                className={`text-[10px] px-1 py-0 ${ratingColors[selectedLevel!]} text-white`}
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate">{selectedOption.label}</span>
+              <Badge
+                variant="secondary"
+                className={cn('shrink-0 px-1 py-0 text-[10px] text-primary-foreground', ratingColors[selectedLevel!])}
               >
                 R{selectedOption.rating}
               </Badge>
@@ -69,16 +69,16 @@ export function QualitativeSelect({
           )}
         </SelectValue>
       </SelectTrigger>
-      <SelectContent className="bg-popover">
+      <SelectContent className="max-w-[min(28rem,90vw)] bg-popover">
         {sortedOptions.map((option) => {
           const level = scoreToRatingLevel(option.rating);
           return (
             <SelectItem key={option.label} value={option.label}>
-              <div className="flex items-center gap-2">
-                <span>{option.label}</span>
-                <Badge 
-                  variant="secondary" 
-                  className={`text-[10px] px-1 py-0 ${ratingColors[level]} text-white`}
+              <div className="flex items-start gap-2">
+                <span className="whitespace-normal leading-snug">{option.label}</span>
+                <Badge
+                  variant="secondary"
+                  className={cn('shrink-0 px-1 py-0 text-[10px] text-primary-foreground', ratingColors[level])}
                 >
                   R{option.rating}
                 </Badge>
@@ -90,3 +90,4 @@ export function QualitativeSelect({
     </Select>
   );
 }
+
