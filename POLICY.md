@@ -7317,3 +7317,15 @@ KPIs that read "7 of 7 entered / propagated" while still being counted as
 Pending. The Pending chip must count `status === 'pending'` explicitly and must
 never be derived as `total − entered − propagated`, which silently re-labels
 `stuck` as Pending.
+
+## §MENU-OVERRIDE-ACTIONS (ADR-350)
+A row in `public.menu_access_user_overrides` grants visibility only. It MUST
+NOT be treated as authorization for add, update or delete unless the matching
+`can_add`, `can_update` or `can_delete` flag is explicitly `true`. The
+function `public.has_menu_write_access(_user_id, _menu_key, _action)` checks
+the action-scoped column before returning true. New overrides default to
+view-only (`false` for all actions). Existing overrides are backfilled to
+`true` for all actions so current behavior is preserved while the grant becomes
+explicit and auditable. The client `useMenuAccess.canPerform` helper mirrors
+this check so UI buttons are shown only when the matching action is authorized.
+
