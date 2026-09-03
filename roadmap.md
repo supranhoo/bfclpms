@@ -50,3 +50,9 @@
 - [x] Snapshot RPC returns kpi_title/description/formula/scoring_logic
 - [x] Card renders via KpiTitle / KpiTextBlocks; keys still on kpi_name
 - [x] Tests, ADR-351, POLICY §KPI-TEXT-DISPLAY-SSOT, DOCUMENTATION sync
+
+## ADR-352 - Org KPI Data Entry rating dropdown overflow (done)
+- [x] RCA: QualitativeSelect fixed-width trigger vs long tiered labels
+- [x] Container-driven width, truncation + title, wrapping dropdown items
+- [x] Semantic badge token instead of hardcoded white
+- [x] Test src/test/qualitativeSelectLongLabel.test.tsx, ADR-352, DOCUMENTATION sync
