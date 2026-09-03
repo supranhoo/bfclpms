@@ -1895,7 +1895,7 @@ export default function OrgKpiDataEntry() {
           <div className="flex flex-wrap gap-2">
             {([
               { key: 'all' as const, label: 'All', count: frequencyFilteredKpis.length },
-              { key: 'pending' as const, label: 'Pending', count: progressData.totalKpis - progressData.enteredKpis - progressData.propagatedKpis },
+              { key: 'pending' as const, label: 'Pending', count: progressData.pendingKpis },
               { key: 'entered' as const, label: 'Entered', count: progressData.enteredKpis },
               { key: 'propagated' as const, label: 'Propagated', count: progressData.propagatedKpis },
               { key: 'stuck' as const, label: 'Stuck (admin repair)', count: openWindowKpis.filter(k => getKpiStatus(k) === 'stuck').length },
