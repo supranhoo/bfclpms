@@ -15,6 +15,9 @@ import { useOrgKpiPeriodCounts } from '@/hooks/useOrgKpiPeriodCounts';
 import { resolvePendingStatuses, resolveReviewableStatuses, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { matchesTeamTile, type TeamTile } from '@/lib/teamReviewTileFilter';
 import { resolveReviewerRelationship } from '@/lib/review/resolveReviewerRelationship';
+import { isActionableForReviewer, normalizeTeamQueueFilter, DEFAULT_TEAM_QUEUE_FILTER } from '@/lib/review/actionableQueueFilter';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -182,6 +185,12 @@ export function EmployeeSelectorGrid({
   const [searchParams] = useSearchParams();
   const autoOpenKpiId = searchParams.get('kpi');
   const [statusFilter, setStatusFilter] = useUrlFilterState('status', 'all');
+  // ADR-348 / POLICY §129 — Team Reviews defaults to "Pending action only":
+  // only members with KPIs awaiting THIS reviewer are shown. ?queue=all reveals
+  // the full mapped downline. Default value never lands in the URL.
+  const [queueFilterRaw, setQueueFilter] = useUrlFilterState('queue', DEFAULT_TEAM_QUEUE_FILTER);
+  const queueFilter = normalizeTeamQueueFilter(queueFilterRaw);
+  const isActionableQueueOn = viewLevel === 'team' && queueFilter === 'actionable';
   const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
   const isExplorerCapable = viewLevel === 'audit' || viewLevel === 'management';
   const exploreParam = searchParams.get('explore');
@@ -998,6 +1007,16 @@ export function EmployeeSelectorGrid({
       filtered = filtered?.filter(m => employeeIds.has(m.id));
     }
 
+    // ADR-348 / POLICY §129 — default "Pending action only" queue (team view).
+    // Composes AFTER the status pipeline so tile/status picks still work within
+    // the actionable subset. `badge1` is the relationship-aware pending count
+    // (direct → self_review, indirect → skip-reviewable, functional → FM stage).
+    if (isActionableQueueOn) {
+      filtered = filtered?.filter(m =>
+        isActionableForReviewer(getEmployeeKpiStats(m.id, m.relationship))
+      );
+    }
+
     // Auto-sort by urgency: most pending KPIs first
     filtered?.sort((a, b) => {
       const statsA = getEmployeeKpiStats(a.id, a.relationship);
@@ -1023,7 +1042,7 @@ export function EmployeeSelectorGrid({
     });
 
     return filtered;
-  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipIdSet, directIdSet, myAssignedEmployeeIds, myKpiLevelData, auditorFilter, auditorWorkloadMap, unassignedStats]);
+  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipIdSet, directIdSet, myAssignedEmployeeIds, myKpiLevelData, auditorFilter, auditorWorkloadMap, unassignedStats, isActionableQueueOn]);
 
   // Split display members into assigned/others for audit view
   const { assignedMembers, otherMembers } = useMemo(() => {
@@ -1110,11 +1129,23 @@ export function EmployeeSelectorGrid({
     return count;
   }, [statusFilter, totalPages, displayMembers, completedFilterForView, getEmployeeKpiStats, viewLevel]);
 
+  // ADR-348 — "X of Y members have items pending" chip counts for the queue
+  // toggle. Computed over the demographic-filtered roster (independent of the
+  // status pipeline) so the chip stays stable while tiles are clicked.
+  const teamQueueCounts = useMemo(() => {
+    if (viewLevel !== 'team' || !demographicFilteredMembers) return null;
+    let actionable = 0;
+    for (const m of demographicFilteredMembers) {
+      if (isActionableForReviewer(getEmployeeKpiStats(m.id, m.relationship))) actionable++;
+    }
+    return { actionable, total: demographicFilteredMembers.length };
+  }, [viewLevel, demographicFilteredMembers, periodKpis, workflowMap]);
+
   // Reset to page 1 when filters/sort/view change so users never land on an empty page.
   useEffect(() => {
     if (currentPage !== 1) setPage('1');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, statusFilter, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, auditorFilter, viewLevel, pageSize]);
+  }, [searchQuery, statusFilter, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, auditorFilter, viewLevel, pageSize, queueFilter]);
 
   // Calculate stats using per-employee workflow-aware resolution
   const stats = useMemo(() => {
@@ -2357,6 +2388,40 @@ export function EmployeeSelectorGrid({
         onMoreFiltersOpen={() => setGradesEnabled(true)}
       />
 
+      {/* ADR-348 / POLICY §129 — Pending-action queue toggle (Team Reviews) */}
+      {viewLevel === 'team' && (
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-md border border-border bg-muted/40 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="team-queue-toggle"
+              checked={isActionableQueueOn}
+              onCheckedChange={(checked) => setQueueFilter(checked ? 'actionable' : 'all')}
+              aria-label="Pending action only"
+            />
+            <Label htmlFor="team-queue-toggle" className="text-xs sm:text-sm font-medium cursor-pointer">
+              Pending action only
+            </Label>
+          </div>
+          {teamQueueCounts && (
+            <span className="text-xs text-muted-foreground">
+              {isActionableQueueOn ? (
+                <>
+                  Showing <span className="font-medium text-foreground">{teamQueueCounts.actionable}</span> of{' '}
+                  <span className="font-medium text-foreground">{teamQueueCounts.total}</span> team members with items
+                  awaiting your review — switch off to see your full downline
+                </>
+              ) : (
+                <>
+                  Showing all <span className="font-medium text-foreground">{teamQueueCounts.total}</span> mapped team
+                  members ({teamQueueCounts.actionable} with pending items)
+                </>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+
+
       {/* Employees Grid */}
       <Card>
         <CardHeader className="pb-3 sm:pb-6">
@@ -2546,6 +2611,26 @@ export function EmployeeSelectorGrid({
             const hasActiveFilters =
               !!searchQuery || !!selectedDepartment || !!selectedDesignation ||
               !!selectedGrade || !!selectedManager || statusFilter !== 'all';
+            // ADR-348 — the actionable queue legitimately resolves to zero when
+            // every review is cleared. Say so explicitly and offer the full
+            // downline instead of the misleading "No team members found".
+            if (isActionableQueueOn && (teamQueueCounts?.total ?? 0) > 0 && !hasActiveFilters) {
+              return (
+                <div className="text-center py-12 text-muted-foreground">
+                  <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-green-500/70" />
+                  <p className="font-medium text-foreground">All caught up</p>
+                  <p className="text-sm mt-1 max-w-md mx-auto">
+                    No team members have items pending your review for this period.
+                  </p>
+                  <div className="mt-4">
+                    <Button variant="outline" size="sm" onClick={() => setQueueFilter('all')}>
+                      <Users className="h-4 w-4 mr-1.5" />
+                      Show all team members
+                    </Button>
+                  </div>
+                </div>
+              );
+            }
             return (
               <div className="text-center py-12 text-muted-foreground">
                 <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />

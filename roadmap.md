@@ -26,3 +26,12 @@
 - [x] RCA/5-Why: `correct_kpis_range` logs `rename_kpis_range`, CHECK allowlist lacked it
 - [x] Allowlist extended; constraint comment ties vocabulary to POLICY §AUDIT-ACTION-VOCABULARY
 - [ ] Vocabulary drift guard test + POLICY/DOCUMENTATION sync
+
+## ADR-348 — Team Reviews default "Pending action only" filter (in progress)
+- [x] `actionableQueueFilter` predicate + unit tests
+- [x] `queue` URL filter + pipeline step in EmployeeSelectorGrid (team view)
+- [x] Toggle UI, X-of-Y chip, caught-up empty state, page reset, Clear All wiring
+- [x] POLICY + DOCUMENTATION + ADR-348 sync
+
+## Q — Structured KPI shown as plain text in View KPI Details
+- [x] RCA + fix: canonical blob precedence over structured title (ADR-348b)
