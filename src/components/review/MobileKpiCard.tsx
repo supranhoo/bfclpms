@@ -6,12 +6,14 @@
  * ADR-356 — presentation pass: one status badge per card (header only),
  * readable type scale, aligned metric grid, semantic colour tokens,
  * >=44px hit areas on every interactive element.
+ * ADR-357 — declutter pass: KRA eyebrow suppressed when it duplicates the KPI
+ * title, org-scope tooltip icon removed from the header (redundant with the
+ * org info line), Org KPI badge row merged into a single muted text line.
  */
 
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { KPI, ReviewSubmission } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
