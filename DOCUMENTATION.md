@@ -1,6 +1,6 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-09-03 · **Version:** v2.66.351
+> **Last Updated:** 2026-09-03 · **Version:** v2.66.354
 >
 > **Version:** 2.66.353 — **One KPI shown as several cards on Org KPI Data Entry (ADR-352a, 2026-09-03).** RCA: a Performance Console definition edit rewrites the structured columns but never the legacy `kpi_name` join key (ADR-334/337), while Org KPI Data Entry groups on `category_id + kra_name + kpi_name`; *Consumable cost* was stored under three different legacy names, so it rendered as three identical single-employee cards. CAPA: the open Aug/Sep 2026 rows were renamed to the canonical `Consumable cost.:` with a reversible `rename_kpis_range` audit record (locked and pre-May-2026 rows untouched, POLICY §88I), and a new read-only `list_split_kpi_name_variants()` powers a "Same KPI, Several Legacy Names" card on KPI Standardization -> Health with a one-click Normalise action running the existing `correct_kpis_range` engine. Regression: `src/test/splitKpiNameVariants.test.ts` (3). See `docs/adr/ADR-352a.md`.
 >
@@ -9662,6 +9662,16 @@ Stuck/Pending. All snapshot aggregates now share one active population;
 Pending chip counts pending KPIs explicitly; `preview_org_kpi_propagation`
 reports `employee_inactive` as a benign skip. Tests:
 `src/test/orgKpiInactiveKraSet.test.ts`.
+
+### v2.66.354 - One KPI split across categories (ADR-354)
+"Power generation from 8 MWh" rendered as two Org KPI Data Entry cards: 3 open legacy
+`kpi_name` variants across 2 categories, all sharing one `kpi_title`. The 18 open
+Jul-Oct 2026 rows were renamed to the canonical name and moved to Production &
+Operations with a reversible `rename_kpis_range` audit row (approved months untouched).
+New read-only `public.list_cross_category_kpi_title_splits()` + `CrossCategorySplitsCard`
+("Same KPI, Two Categories") on KPI Standardization Health surface the shape the
+ADR-352a per-category detector could not see. Tests:
+`src/test/splitKpiNameVariants.test.ts`. ADR: `docs/adr/ADR-354.md`.
 
 ### v2.66.353 - Duplicate Org KPI cards from split legacy names (ADR-352a)
 Detector `public.list_split_kpi_name_variants()` + `SplitNameVariantsCard` on KPI Standardization

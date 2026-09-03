@@ -49,3 +49,31 @@ describe('split KPI name variants', () => {
     expect(nonCanonicalVariants(g)).toHaveLength(0);
   });
 });
+
+/**
+ * ADR-354 — the same title split across two categories cannot be fixed by a
+ * rename; the dominant (largest) category is the one to keep.
+ */
+import { dominantCategory, type CrossCategorySplitGroup } from '@/hooks/useSplitKpiNameVariants';
+
+describe('cross-category KPI title splits', () => {
+  const g: CrossCategorySplitGroup = {
+    kra_name: "Achieve organization's production target",
+    kpi_title: 'Power generation from 8 MWh',
+    category_count: 2,
+    open_rows: 19,
+    total_rows: 19,
+    categories: [
+      { category_id: 'prod-ops', category_name: 'Production & Operations', rows: 17, open_rows: 17, name_variants: 2 },
+      { category_id: 'prod', category_name: 'Production', rows: 2, open_rows: 2, name_variants: 1 },
+    ],
+  };
+
+  it('picks the category holding the most rows', () => {
+    expect(dominantCategory(g)?.category_id).toBe('prod-ops');
+  });
+
+  it('returns null when there are no categories', () => {
+    expect(dominantCategory({ ...g, categories: [] })).toBeNull();
+  });
+});
