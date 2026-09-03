@@ -239,99 +239,19 @@ export function MobileKpiCard({
           <span className="text-xs text-muted-foreground truncate max-w-[60%]">
             {kpi.kra_categories?.name || 'Uncategorized'}
           </span>
-          {kpi.is_org_level && (
-            <Tooltip>
-              <TooltipTrigger
-                aria-label={`Organisation-level KPI, ${scope} scope`}
-                className="inline-flex items-center justify-center h-11 w-8 -my-3 shrink-0"
-              >
-                {scope === 'organization' ? (
-                  <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                ) : scope === 'department' ? (
-                  <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                ) : (
-                  <User className="h-3.5 w-3.5 text-muted-foreground" />
-                )}
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Org-level ({scope})</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
           <FrequencyBadge frequency={kpi.frequency} size="xs" />
-          {sentBackKpiIds?.has(kpi.id) && kpi.status === 'audit' && (
-            <Badge variant="warning" className="text-xs gap-1 shrink-0">
-              <Undo2 className="h-3 w-3" aria-hidden="true" />
-              Sent Back
-            </Badge>
-          )}
-          {(observationCount ?? 0) > 0 && (
-            <span
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0"
-              aria-label={`${observationCount} observations`}
-            >
-              <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
-              {observationCount}
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
-          {renderStateBadges()}
-          {kpi.status ? (
-            <Badge className={cn(statusColors[kpi.status], "text-xs")}>
-              {statusLabels[kpi.status]}
-            </Badge>
-          ) : (
-            <Badge
-              variant="warning"
-              className="text-xs"
-              title="POLICY §106 — kpis.status is NULL."
-            >
-              Status Missing
-            </Badge>
-          )}
-        </div>
-      </div>
-
-      {/* Org KPI Badge Row */}
-      {kpi.is_org_level && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant="secondary" className="text-xs gap-1">
-            {scope === 'organization' ? (
-              <Building2 className="h-3 w-3" aria-hidden="true" />
-            ) : scope === 'department' ? (
-              <Users className="h-3 w-3" aria-hidden="true" />
-            ) : (
-              <User className="h-3 w-3" aria-hidden="true" />
-            )}
-            Org KPI
-          </Badge>
-          {(() => {
-            const ownerKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}`;
-            const owners = dataOwnerNames?.get(ownerKey);
-            return owners && owners.length > 0 ? (
-              <Badge variant="outline" className="text-xs font-normal">
-                Data Owner: {owners.join(', ')}
-              </Badge>
-            ) : orgValue?.entered_by_name ? (
-              <Badge variant="outline" className="text-xs font-normal" title="Last person who entered a value for this KPI. Not necessarily the assigned Data Owner.">
-                Entered by: {orgValue.entered_by_name}
-              </Badge>
-            ) : null;
-          })()}
-        </div>
-      )}
-
-      {/* Row 2: KPI title is the primary line; KRA is the eyebrow */}
+...
+      {/* Row 2: KPI title is the primary line; KRA is the eyebrow (suppressed when it duplicates the title) */}
       <button
         onClick={() => onShowLogic?.(kpi)}
         className="text-left w-full group rounded-md py-1 -my-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label="Show KPI scoring logic"
       >
-        <p className="text-xs text-muted-foreground line-clamp-1 whitespace-pre-wrap">
-          {renderBoldKpiText(kpi.kra_name)}
-        </p>
+        {!kraDuplicatesTitle && (
+          <p className="text-xs text-muted-foreground line-clamp-1 whitespace-pre-wrap">
+            {renderBoldKpiText(kpi.kra_name)}
+          </p>
+        )}
         <div className="flex items-start gap-1.5">
           <KpiTitle
             kpi={kpi}
