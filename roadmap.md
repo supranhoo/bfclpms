@@ -91,3 +91,10 @@
 - [x] >=44px touch targets and aria-labels on every control
 - [x] Two-column card grid at >=768px
 - [x] Tests, ADR-356, POLICY §REVIEW-CARD-PRESENTATION, DOCUMENTATION sync
+
+## ADR-357 — Declutter reviewer KPI card list (2026-09-03)
+- [x] Card grid `md:grid-cols-2` → `lg:grid-cols-2` (single column on iPad portrait)
+- [x] KRA eyebrow suppressed when duplicating KPI title
+- [x] Org-scope header tooltip removed; Org KPI info merged to one muted line
+- [x] Scorecard toolbar wraps — no viewport overflow
+- [x] Tests (21/21), ADR-357, POLICY §REVIEW-CARD-PRESENTATION addendum, DOCUMENTATION v2.66.357

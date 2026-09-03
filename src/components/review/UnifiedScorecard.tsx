@@ -1777,7 +1777,7 @@ export function UnifiedScorecard({
               <CardTitle>KPI Details</CardTitle>
               <CardDescription>Click on a KPI to review and update scores</CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {headerAction}
               {lastSelfReviewDate && (
                 <span className="hidden sm:inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -1833,7 +1833,7 @@ export function UnifiedScorecard({
         </CardHeader>
         <CardContent className="px-3 sm:px-6">
           {isMobile ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
               {sortedKpis.map(kpi => {
                 const submission = submissionMap.get(kpi.id);
                 const selfReviewHandler = (k: KPI) => { setSelfAutoOpenQueryHistory(false); setSelectedKpiForSelfReview(k); };
@@ -1855,7 +1855,7 @@ export function UnifiedScorecard({
                 );
               })}
               {sortedKpis.length === 0 && (
-                <div className="md:col-span-2">
+                <div className="lg:col-span-2">
                   <NoKpisPeriodHint
                     employeeId={employee.id}
                     selectedPeriod={selectedPeriod}

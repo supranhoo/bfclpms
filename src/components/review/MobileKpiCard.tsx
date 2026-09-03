@@ -6,12 +6,14 @@
  * ADR-356 — presentation pass: one status badge per card (header only),
  * readable type scale, aligned metric grid, semantic colour tokens,
  * >=44px hit areas on every interactive element.
+ * ADR-357 — declutter pass: KRA eyebrow suppressed when it duplicates the KPI
+ * title, org-scope tooltip icon removed from the header (redundant with the
+ * org info line), Org KPI badge row merged into a single muted text line.
  */
 
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { KPI, ReviewSubmission } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
@@ -220,6 +222,26 @@ export function MobileKpiCard({
     ? kpi.uom
     : null;
 
+  /**
+   * ADR-357 — when the KRA name and the resolved KPI title start with the same
+   * words, the eyebrow line is pure repetition; render the title only.
+   */
+  const kraDuplicatesTitle = (() => {
+    const norm = (s: string | null | undefined) =>
+      (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const kra = norm(kpi.kra_name);
+    const title = norm(kpi.kpi_title || kpi.kpi_name);
+    if (!kra || !title) return false;
+    const head = kra.slice(0, 40);
+    return title.startsWith(head) || kra.startsWith(title.slice(0, 40));
+  })();
+
+  const scopeIcon = scope === 'organization'
+    ? <Building2 className="h-3 w-3" aria-hidden="true" />
+    : scope === 'department'
+      ? <Users className="h-3 w-3" aria-hidden="true" />
+      : <User className="h-3 w-3" aria-hidden="true" />;
+
   return (
     <Card className={cn(
       "p-4 flex flex-col gap-3",
@@ -237,25 +259,6 @@ export function MobileKpiCard({
           <span className="text-xs text-muted-foreground truncate max-w-[60%]">
             {kpi.kra_categories?.name || 'Uncategorized'}
           </span>
-          {kpi.is_org_level && (
-            <Tooltip>
-              <TooltipTrigger
-                aria-label={`Organisation-level KPI, ${scope} scope`}
-                className="inline-flex items-center justify-center h-11 w-8 -my-3 shrink-0"
-              >
-                {scope === 'organization' ? (
-                  <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                ) : scope === 'department' ? (
-                  <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                ) : (
-                  <User className="h-3.5 w-3.5 text-muted-foreground" />
-                )}
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Org-level ({scope})</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
           <FrequencyBadge frequency={kpi.frequency} size="xs" />
           {sentBackKpiIds?.has(kpi.id) && kpi.status === 'audit' && (
             <Badge variant="warning" className="text-xs gap-1 shrink-0">
@@ -292,44 +295,38 @@ export function MobileKpiCard({
         </div>
       </div>
 
-      {/* Org KPI Badge Row */}
+      {/* Org KPI info — single muted line (ADR-357; replaces the old two-badge row) */}
       {kpi.is_org_level && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant="secondary" className="text-xs gap-1">
-            {scope === 'organization' ? (
-              <Building2 className="h-3 w-3" aria-hidden="true" />
-            ) : scope === 'department' ? (
-              <Users className="h-3 w-3" aria-hidden="true" />
-            ) : (
-              <User className="h-3 w-3" aria-hidden="true" />
-            )}
-            Org KPI
-          </Badge>
-          {(() => {
-            const ownerKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}`;
-            const owners = dataOwnerNames?.get(ownerKey);
-            return owners && owners.length > 0 ? (
-              <Badge variant="outline" className="text-xs font-normal">
-                Data Owner: {owners.join(', ')}
-              </Badge>
-            ) : orgValue?.entered_by_name ? (
-              <Badge variant="outline" className="text-xs font-normal" title="Last person who entered a value for this KPI. Not necessarily the assigned Data Owner.">
-                Entered by: {orgValue.entered_by_name}
-              </Badge>
-            ) : null;
-          })()}
-        </div>
+        (() => {
+          const ownerKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}`;
+          const owners = dataOwnerNames?.get(ownerKey);
+          const detail = owners && owners.length > 0
+            ? `Data owner: ${owners.join(', ')}`
+            : orgValue?.entered_by_name
+              ? `Entered by ${orgValue.entered_by_name}`
+              : null;
+          return (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+              {scopeIcon}
+              <span className="truncate">
+                Org KPI{detail ? ` · ${detail}` : ''}
+              </span>
+            </p>
+          );
+        })()
       )}
 
-      {/* Row 2: KPI title is the primary line; KRA is the eyebrow */}
+      {/* Row 2: KPI title is the primary line; KRA is the eyebrow (suppressed when it duplicates the title) */}
       <button
         onClick={() => onShowLogic?.(kpi)}
         className="text-left w-full group rounded-md py-1 -my-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label="Show KPI scoring logic"
       >
-        <p className="text-xs text-muted-foreground line-clamp-1 whitespace-pre-wrap">
-          {renderBoldKpiText(kpi.kra_name)}
-        </p>
+        {!kraDuplicatesTitle && (
+          <p className="text-xs text-muted-foreground line-clamp-1 whitespace-pre-wrap">
+            {renderBoldKpiText(kpi.kra_name)}
+          </p>
+        )}
         <div className="flex items-start gap-1.5">
           <KpiTitle
             kpi={kpi}
