@@ -49,6 +49,14 @@ export interface OrgKpiCardData {
   categoryColor: string;
   kraName: string;
   kpiName: string;
+  /**
+   * ADR-351 — structured KPI text (ADR-269b). Display only; every lookup,
+   * grouping and propagation key still uses the raw `kpiName`.
+   */
+  kpiTitle?: string | null;
+  kpiDescription?: string | null;
+  kpiFormula?: string | null;
+  kpiScoringLogic?: string | null;
   targetValue: number | null;
   uom: string | null;
   r5: string | null;
