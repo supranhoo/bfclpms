@@ -1,6 +1,11 @@
 /**
- * Reusable Mobile KPI Card Component
- * Touch-friendly card layout for KPIs on mobile devices
+ * Reusable Mobile / Tablet KPI Card Component
+ * Touch-friendly card layout for KPIs on small and medium viewports.
+ *
+ * ADR-355 — every read-only state keeps a labelled, touch-sized View control.
+ * ADR-356 — presentation pass: one status badge per card (header only),
+ * readable type scale, aligned metric grid, semantic colour tokens,
+ * >=44px hit areas on every interactive element.
  */
 
 import { Card } from '@/components/ui/card';
@@ -10,17 +15,22 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { KPI, ReviewSubmission } from '@/hooks/useKpis';
 import { statusColors, statusLabels } from '@/lib/reviewConstants';
 import { renderBoldKpiText } from '@/components/ui/FormattedText';
-import { getKpiSummaryText } from '@/lib/textFormatting';
 import { KpiTitle } from '@/components/kpi/KpiText';
 import { cn } from '@/lib/utils';
 import { canReviewKpi } from '@/lib/workflowEngine';
 import { FrequencyBadge } from '@/components/review/FrequencyBadge';
-import { 
-  Lock, Info, Building2, Users, User, CheckCircle2, Eye, Calendar, 
-  Undo2, ChevronDown, ChevronUp, Clock 
+import {
+  Lock, Info, Building2, Users, User, Eye, Calendar,
+  Undo2, ChevronDown, ChevronUp, MessageSquare,
 } from 'lucide-react';
 
 export type MobileKpiViewType = 'my-kpis' | 'dashboard' | 'team-review' | 'functional-manager-review' | 'audit' | 'management' | 'skip-level-review' | 'hr-pms-review';
+
+/** Rating scale used across every review surface (see ratingOptions). */
+const MAX_RATING_SCORE = 5;
+
+/** Unit strings that describe the value type rather than a printable unit. */
+const NON_PRINTABLE_UOMS = new Set(['number', 'date', 'count', 'nos', 'no']);
 
 interface MobileKpiCardProps {
   kpi: KPI;
@@ -86,47 +96,53 @@ export function MobileKpiCard({
     return canReviewKpi(kpi.status || 'kra_set', viewType, workflowStages);
   };
 
-  // Get action button content
+  const viewButton = (label = 'View') =>
+    onView ? (
+      <Button
+        size="sm"
+        variant="outline"
+        className="min-h-[44px] px-4"
+        aria-label={`${label} KPI details`}
+        onClick={() => onView(kpi)}
+      >
+        <Eye className="h-4 w-4 mr-1.5" />
+        {label}
+      </Button>
+    ) : null;
+
+  /**
+   * Action row holds controls only — state is communicated once, by the
+   * header badge (ADR-356). No duplicate Fwd / Done pills here.
+   */
   const getActionContent = () => {
     if (isLocked && viewType === 'my-kpis') {
-      return (
-        <Badge variant="outline" className="text-muted-foreground text-xs">
-          <Lock className="h-3 w-3 mr-1" />
-          Locked
-        </Badge>
-      );
+      return viewButton();
     }
 
     if (isNaKpi) {
-      return (
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-300 text-xs">
-            N/A
-          </Badge>
-          {onView && (
-            <Button size="sm" variant="outline" className="min-h-[44px] px-3" onClick={() => onView(kpi)}>
-              <Eye className="h-4 w-4 mr-1" />
-              View
-              </Button>
-          )}
-        </div>
-      );
+      return viewButton();
     }
 
     const isApproved = kpi.status === 'approved';
     const isForwarded = viewType === 'audit' && (kpi.status === 'management_review' || kpi.status === 'approved');
-    const isTeamReviewPastStage = viewType === 'team-review' && 
+    const isTeamReviewPastStage = viewType === 'team-review' &&
       ['manager_check', 'audit', 'management_review', 'approved'].includes(kpi.status || '');
 
     if (canReview()) {
       return (
         <div className="flex items-center gap-2">
-          <Button size="sm" className="h-8" onClick={() => onAction?.(kpi)}>
+          <Button size="sm" className="min-h-[44px] px-4" onClick={() => onAction?.(kpi)}>
             {viewType === 'audit' && kpi.status === 'audit' ? 'Continue' : 'Review'}
           </Button>
           {(viewType === 'team-review' || viewType === 'audit' || viewType === 'management') && onSendBack && (
-            <Button size="sm" variant="outline" className="h-8 px-2" onClick={() => onSendBack(kpi)}>
-              <Undo2 className="h-3.5 w-3.5" />
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-[44px] min-w-[44px] px-3"
+              aria-label="Send back for rework"
+              onClick={() => onSendBack(kpi)}
+            >
+              <Undo2 className="h-4 w-4" />
             </Button>
           )}
         </div>
@@ -134,117 +150,105 @@ export function MobileKpiCard({
     }
 
     if (isApproved && viewType === 'management') {
-      return (
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 text-xs">
-            <CheckCircle2 className="h-3 w-3 mr-1" />
-            Done
-          </Badge>
-          {onView && (
-            <Button size="sm" variant="outline" className="min-h-[44px] px-3" onClick={() => onView(kpi)}>
-              <Eye className="h-4 w-4 mr-1" />
-              View
-              </Button>
-          )}
-        </div>
-      );
+      return viewButton();
     }
 
     if (isForwarded) {
       // ADR-355 — a forwarded KPI must stay reopenable read-only.
-      return (
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 text-xs">
-            <CheckCircle2 className="h-3 w-3 mr-1" />
-            Fwd
-          </Badge>
-          {onView && (
-            <Button size="sm" variant="outline" className="min-h-[44px] px-3" onClick={() => onView(kpi)}>
-              <Eye className="h-4 w-4 mr-1" />
-              View
-            </Button>
-          )}
-        </div>
-      );
-    }
-
-    // Check if KPI is drafted at management level (score saved but not approved)
-    const isMgmtDrafted = (viewType === 'team-review' || viewType === 'skip-level-review' || viewType === 'hr-pms-review') && 
-      kpi.status === 'management_review' && 
-      submission?.management_score !== null && submission?.management_score !== undefined;
-
-    if (isMgmtDrafted) {
-      return (
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400 border-amber-300 text-xs">
-            <Clock className="h-3 w-3 mr-1" />
-            Draft (Mgmt)
-          </Badge>
-          {onView && (
-            <Button size="sm" variant="outline" className="min-h-[44px] px-3" onClick={() => onView(kpi)}>
-              <Eye className="h-4 w-4 mr-1" />
-              View
-              </Button>
-          )}
-        </div>
-      );
+      return onView ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="min-h-[44px] px-4"
+          aria-label="View forwarded KPI details"
+          onClick={() => onView(kpi)}
+        >
+          <Eye className="h-4 w-4 mr-1.5" />
+          View
+        </Button>
+      ) : null;
     }
 
     if (isTeamReviewPastStage) {
       // ADR-355 — reviewed KPIs stay reopenable read-only.
-      return (
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 text-xs">
-            <CheckCircle2 className="h-3 w-3 mr-1" />
-            Done
-          </Badge>
-          {onView && (
-            <Button size="sm" variant="outline" className="min-h-[44px] px-3" onClick={() => onView(kpi)}>
-              <Eye className="h-4 w-4 mr-1" />
-              View
-            </Button>
-          )}
-        </div>
-      );
-    }
-
-    if (onView) {
-      return (
-        <Button size="sm" variant="outline" className="h-8" onClick={() => onView(kpi)}>
-          <Eye className="h-4 w-4 mr-1" />
+      return onView ? (
+        <Button
+          size="sm"
+          variant="outline"
+          className="min-h-[44px] px-4"
+          aria-label="View reviewed KPI details"
+          onClick={() => onView(kpi)}
+        >
+          <Eye className="h-4 w-4 mr-1.5" />
           View
         </Button>
-      );
+      ) : null;
     }
 
-    return null;
+    return viewButton();
   };
+
+  /** Supplementary state that the workflow status badge cannot express. */
+  const renderStateBadges = () => {
+    const badges: React.ReactNode[] = [];
+
+    if (isNaKpi) {
+      badges.push(
+        <Badge key="na" variant="warning" className="text-xs">N/A</Badge>
+      );
+    }
+    if (isLocked && viewType === 'my-kpis') {
+      badges.push(
+        <Badge key="locked" variant="outline" className="text-xs text-muted-foreground">
+          <Lock className="h-3 w-3 mr-1" aria-hidden="true" />
+          Locked
+        </Badge>
+      );
+    }
+    const isMgmtDrafted = (viewType === 'team-review' || viewType === 'skip-level-review' || viewType === 'hr-pms-review') &&
+      kpi.status === 'management_review' &&
+      submission?.management_score !== null && submission?.management_score !== undefined;
+    if (isMgmtDrafted) {
+      badges.push(
+        <Badge key="draft" variant="warning" className="text-xs">Draft (Mgmt)</Badge>
+      );
+    }
+    return badges;
+  };
+
+  const printableUom = kpi.uom && !NON_PRINTABLE_UOMS.has(kpi.uom.trim().toLowerCase())
+    ? kpi.uom
+    : null;
 
   return (
     <Card className={cn(
-      "p-3",
+      "p-4 flex flex-col gap-3",
       isLocked && "opacity-60",
-      isNaKpi && "opacity-60 bg-muted/20"
+      isNaKpi && "opacity-70 bg-muted/20"
     )}>
       {/* Row 1: Category + Status */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 flex-wrap">
           <div
             className="w-2 h-2 rounded-full shrink-0"
             style={{ backgroundColor: kpi.kra_categories?.color || 'hsl(var(--primary))' }}
+            aria-hidden="true"
           />
-          <span className="text-[10px] text-muted-foreground truncate">
+          <span className="text-xs text-muted-foreground truncate max-w-[60%]">
             {kpi.kra_categories?.name || 'Uncategorized'}
           </span>
           {kpi.is_org_level && (
             <Tooltip>
-              <TooltipTrigger>
+              <TooltipTrigger
+                aria-label={`Organisation-level KPI, ${scope} scope`}
+                className="inline-flex items-center justify-center h-11 w-8 -my-3 shrink-0"
+              >
                 {scope === 'organization' ? (
-                  <Building2 className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
                 ) : scope === 'department' ? (
-                  <Users className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <Users className="h-3.5 w-3.5 text-muted-foreground" />
                 ) : (
-                  <User className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <User className="h-3.5 w-3.5 text-muted-foreground" />
                 )}
               </TooltipTrigger>
               <TooltipContent>
@@ -254,41 +258,50 @@ export function MobileKpiCard({
           )}
           <FrequencyBadge frequency={kpi.frequency} size="xs" />
           {sentBackKpiIds?.has(kpi.id) && kpi.status === 'audit' && (
-            <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0 border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-600 dark:bg-amber-900/20 dark:text-amber-400 gap-0.5">
-              <Undo2 className="h-2.5 w-2.5" />
+            <Badge variant="warning" className="text-xs gap-1 shrink-0">
+              <Undo2 className="h-3 w-3" aria-hidden="true" />
               Sent Back
             </Badge>
           )}
+          {(observationCount ?? 0) > 0 && (
+            <span
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0"
+              aria-label={`${observationCount} observations`}
+            >
+              <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+              {observationCount}
+            </span>
+          )}
         </div>
-        {kpi.status ? (
-          <Badge className={cn(statusColors[kpi.status], "text-[10px] shrink-0 ml-1.5")}>
-            {statusLabels[kpi.status]}
-          </Badge>
-        ) : (
-          <Badge
-            className="text-[10px] shrink-0 ml-1.5 bg-amber-100 text-amber-800 border border-amber-300"
-            title="POLICY §106 — kpis.status is NULL."
-          >
-            Status Missing
-          </Badge>
-        )}
-        {(observationCount ?? 0) > 0 && (
-          <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400 shrink-0">
-            <Eye className="h-3 w-3" />{observationCount}
-          </span>
-        )}
+
+        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+          {renderStateBadges()}
+          {kpi.status ? (
+            <Badge className={cn(statusColors[kpi.status], "text-xs")}>
+              {statusLabels[kpi.status]}
+            </Badge>
+          ) : (
+            <Badge
+              variant="warning"
+              className="text-xs"
+              title="POLICY §106 — kpis.status is NULL."
+            >
+              Status Missing
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Org KPI Badge Row */}
       {kpi.is_org_level && (
-        <div className="flex flex-wrap items-center gap-1 mb-1.5">
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 gap-0.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant="secondary" className="text-xs gap-1">
             {scope === 'organization' ? (
-              <Building2 className="h-2.5 w-2.5" />
+              <Building2 className="h-3 w-3" aria-hidden="true" />
             ) : scope === 'department' ? (
-              <Users className="h-2.5 w-2.5" />
+              <Users className="h-3 w-3" aria-hidden="true" />
             ) : (
-              <User className="h-2.5 w-2.5" />
+              <User className="h-3 w-3" aria-hidden="true" />
             )}
             Org KPI
           </Badge>
@@ -296,11 +309,11 @@ export function MobileKpiCard({
             const ownerKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}`;
             const owners = dataOwnerNames?.get(ownerKey);
             return owners && owners.length > 0 ? (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              <Badge variant="outline" className="text-xs font-normal">
                 Data Owner: {owners.join(', ')}
               </Badge>
             ) : orgValue?.entered_by_name ? (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0" title="Last person who entered a value for this KPI. Not necessarily the assigned Data Owner.">
+              <Badge variant="outline" className="text-xs font-normal" title="Last person who entered a value for this KPI. Not necessarily the assigned Data Owner.">
                 Entered by: {orgValue.entered_by_name}
               </Badge>
             ) : null;
@@ -308,59 +321,69 @@ export function MobileKpiCard({
         </div>
       )}
 
-      {/* Row 2: KRA/KPI Names - Clickable for logic */}
+      {/* Row 2: KPI title is the primary line; KRA is the eyebrow */}
       <button
         onClick={() => onShowLogic?.(kpi)}
-        className="text-left w-full mb-2 group"
+        className="text-left w-full group rounded-md py-1 -my-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label="Show KPI scoring logic"
       >
-        <p className="font-medium text-xs line-clamp-1 whitespace-pre-wrap group-hover:text-primary transition-colors">
+        <p className="text-xs text-muted-foreground line-clamp-1 whitespace-pre-wrap">
           {renderBoldKpiText(kpi.kra_name)}
         </p>
-        <div className="flex items-start gap-1">
+        <div className="flex items-start gap-1.5">
           <KpiTitle
             kpi={kpi}
             as="p"
-            className="text-[10px] text-muted-foreground line-clamp-2 flex-1 min-w-0"
+            className="text-sm font-medium leading-snug line-clamp-2 flex-1 min-w-0 group-hover:text-primary transition-colors"
           />
-          <Info className="h-2.5 w-2.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
+          <Info className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5 text-muted-foreground" />
         </div>
       </button>
 
       {/* Row 3: Metrics + Actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex gap-3 text-[10px]">
-          <div>
-            <span className="text-muted-foreground block text-[9px]">Target</span>
-            <span className="font-mono font-medium text-xs">{kpi.target_value ?? '-'}</span>
-            {kpi.uom && <span className="text-muted-foreground ml-0.5 text-[9px]">{kpi.uom}</span>}
+      <div className="flex items-end justify-between gap-3">
+        <dl className="grid grid-cols-3 gap-x-4 flex-1 min-w-0">
+          <div className="min-w-0">
+            <dt className="text-[11px] text-muted-foreground">Target</dt>
+            <dd className="text-sm font-medium tabular-nums truncate">
+              {kpi.target_value ?? '—'}
+              {printableUom && <span className="text-[11px] text-muted-foreground ml-1">{printableUom}</span>}
+            </dd>
           </div>
-          <div>
-            <span className="text-muted-foreground block text-[9px]">Weight</span>
-            <span className="font-medium text-xs">{kpi.weightage}%</span>
+          <div className="min-w-0">
+            <dt className="text-[11px] text-muted-foreground">Weight</dt>
+            <dd className="text-sm font-medium tabular-nums">{kpi.weightage}%</dd>
           </div>
-          {displayScore !== null && !isNaKpi && (
-            <div>
-              <span className="text-muted-foreground block text-[9px]">Score</span>
-              <span className="font-medium text-xs">{displayScore}</span>
-            </div>
-          )}
-        </div>
+          <div className="min-w-0">
+            <dt className="text-[11px] text-muted-foreground">Score</dt>
+            <dd className="text-sm font-medium tabular-nums">
+              {displayScore !== null && !isNaKpi ? (
+                <>
+                  {displayScore}
+                  <span className="text-[11px] text-muted-foreground"> / {MAX_RATING_SCORE}</span>
+                </>
+              ) : '—'}
+            </dd>
+          </div>
+        </dl>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2 shrink-0">
           {getActionContent()}
-          
+
           {isDailyKpi && !isNaKpi && onToggleExpand && (
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onToggleExpand(kpi.id)}
-              className="h-8 px-2"
+              className="min-h-[44px] min-w-[44px] px-2"
+              aria-label={isExpanded ? 'Collapse daily entries' : 'Expand daily entries'}
+              aria-expanded={isExpanded}
             >
-              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+              <Calendar className="h-4 w-4 text-muted-foreground" />
               {isExpanded ? (
-                <ChevronUp className="h-3 w-3 ml-0.5" />
+                <ChevronUp className="h-3.5 w-3.5 ml-0.5" />
               ) : (
-                <ChevronDown className="h-3 w-3 ml-0.5" />
+                <ChevronDown className="h-3.5 w-3.5 ml-0.5" />
               )}
             </Button>
           )}

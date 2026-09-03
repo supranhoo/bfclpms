@@ -81,3 +81,13 @@
 - [x] Labelled 44px View control on all completed-state reviewer rows
 - [x] statusFilter cleared on every AuditScorecard submit success + stage-naming toast
 - [x] Tests, ADR-355, POLICY §REVIEW-REOPEN-AFFORDANCE, DOCUMENTATION sync
+
+
+## ADR-356 - Reviewer KPI card UI assessment (done)
+- [x] One status badge in header; Fwd/Done pills removed from action row
+- [x] Type scale >=11px, KPI title promoted, KRA as eyebrow
+- [x] Tabular Target/Weight/Score grid, `n / 5` score, unit artefacts suppressed
+- [x] Semantic success/warning/info badge variants + `--info` token
+- [x] >=44px touch targets and aria-labels on every control
+- [x] Two-column card grid at >=768px
+- [x] Tests, ADR-356, POLICY §REVIEW-CARD-PRESENTATION, DOCUMENTATION sync
