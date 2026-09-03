@@ -28,6 +28,7 @@ const REASON_LABEL: Record<string, string> = {
   self_review_existing: 'Already in self-review',
   kpi_not_found: 'KPI row missing',
   approved_immutable: 'Approved — immutable',
+  employee_inactive: 'Employee inactive — not a target',
 };
 
 function fmt(v: number | null | undefined) {

@@ -1085,7 +1085,8 @@ export default function OrgKpiDataEntry() {
             s.reason === 'not_in_kra_set' ||
             s.reason === 'reviewer_locked' ||
             s.reason === 'no_target_rows' ||
-            s.reason === 'approved_immutable'
+            s.reason === 'approved_immutable' ||
+            s.reason === 'employee_inactive'
           ) {
             totalSkippedBenign++;
           } else if (s.reason === 'not_authorized') {

@@ -13,7 +13,8 @@ export interface PropagationPreviewBreakdownItem {
     | 'kpi_not_found'
     | 'reviewer_locked'
     | 'self_review_existing'
-    | 'approved_immutable';
+    | 'approved_immutable'
+    | 'employee_inactive';
   current_achieved?: number | null;
   current_self_score?: number | null;
   new_achieved?: number | null;
