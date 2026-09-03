@@ -9660,3 +9660,16 @@ Stuck/Pending. All snapshot aggregates now share one active population;
 Pending chip counts pending KPIs explicitly; `preview_org_kpi_propagation`
 reports `employee_inactive` as a benign skip. Tests:
 `src/test/orgKpiInactiveKraSet.test.ts`.
+
+### v2.66.350 — Action-aware menu access user overrides (ADR-350)
+`public.menu_access_user_overrides` now carries `can_add`, `can_update`, and
+`can_delete` columns. Existing rows are backfilled to `true` for all actions so
+current access is preserved; new defaults are `false`, making new overrides
+view-only unless an admin explicitly grants write actions.
+`public.has_menu_write_access` now checks the action-scoped column, and the
+client `useMenuAccess.canPerform` helper mirrors the same rule so the UI only
+renders action buttons when authorized. `grantUserMenuAccess` accepts explicit
+`canAdd`/`canUpdate`/`canDelete` flags. Tests:
+`src/test/menu/menu-override-action-aware.test.ts`. ADR: `docs/adr/ADR-350.md`.
+Policy: POLICY.md §MENU-OVERRIDE-ACTIONS.
+
