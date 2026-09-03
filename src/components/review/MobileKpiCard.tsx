@@ -260,7 +260,62 @@ export function MobileKpiCard({
             {kpi.kra_categories?.name || 'Uncategorized'}
           </span>
           <FrequencyBadge frequency={kpi.frequency} size="xs" />
-...
+          {sentBackKpiIds?.has(kpi.id) && kpi.status === 'audit' && (
+            <Badge variant="warning" className="text-xs gap-1 shrink-0">
+              <Undo2 className="h-3 w-3" aria-hidden="true" />
+              Sent Back
+            </Badge>
+          )}
+          {(observationCount ?? 0) > 0 && (
+            <span
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0"
+              aria-label={`${observationCount} observations`}
+            >
+              <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+              {observationCount}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+          {renderStateBadges()}
+          {kpi.status ? (
+            <Badge className={cn(statusColors[kpi.status], "text-xs")}>
+              {statusLabels[kpi.status]}
+            </Badge>
+          ) : (
+            <Badge
+              variant="warning"
+              className="text-xs"
+              title="POLICY §106 — kpis.status is NULL."
+            >
+              Status Missing
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {/* Org KPI info — single muted line (ADR-357; replaces the old two-badge row) */}
+      {kpi.is_org_level && (
+        (() => {
+          const ownerKey = `${kpi.category_id}||${kpi.kra_name.toLowerCase()}||${kpi.kpi_name.toLowerCase()}`;
+          const owners = dataOwnerNames?.get(ownerKey);
+          const detail = owners && owners.length > 0
+            ? `Data owner: ${owners.join(', ')}`
+            : orgValue?.entered_by_name
+              ? `Entered by ${orgValue.entered_by_name}`
+              : null;
+          return (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+              {scopeIcon}
+              <span className="truncate">
+                Org KPI{detail ? ` · ${detail}` : ''}
+              </span>
+            </p>
+          );
+        })()
+      )}
+
       {/* Row 2: KPI title is the primary line; KRA is the eyebrow (suppressed when it duplicates the title) */}
       <button
         onClick={() => onShowLogic?.(kpi)}
