@@ -190,8 +190,13 @@ export function HealthCoverageTab() {
       </Card>
 
       {/* Unlinked queue */}
+      {/* ADR-352a — one KPI split across several legacy names */}
+      <SplitNameVariantsCard />
+
+      {/* Unlinked queue */}
       <Card>
         <CardHeader>
+
           <CardTitle className="flex items-center gap-2 text-base">
             <Unlink className="h-4 w-4 text-amber-600" />
             Unlinked Signatures Queue
