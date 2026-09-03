@@ -56,11 +56,18 @@ export function KpiHeaderSection({ kpi, selectedPeriod, selectedYear, onOpenTime
   const { data: variantPairs = [] } = useCanonicalVariantPairs(kpi);
   const canonical = canonicalPair(variantPairs);
   const displayKra = canonical?.kra_name ?? kpi.kra_name;
-  // ADR-269b precedence: canonical registry name > structured title > raw text.
+  // ADR-269b precedence (corrected, ADR-348b): for STRUCTURED rows the
+  // canonical registry `kpi_name` is the full composed blob (title +
+  // description + formula + scoring) because `kpi_name` is a live matching key
+  // that is never rewritten. Printing it above the structured blocks duplicated
+  // Formula/Scoring Logic and made a structured KPI look unstructured in the
+  // View KPI Details dialog. Structured rows therefore render their title here;
+  // the canonical override applies only to legacy (unstructured) rows.
   const structuredParts = resolveKpiText(kpi);
   const displayKpi =
-    canonical?.kpi_name ??
-    (structuredParts.isStructured && structuredParts.title ? structuredParts.title : kpi.kpi_name);
+    structuredParts.isStructured && structuredParts.title
+      ? structuredParts.title
+      : (canonical?.kpi_name ?? kpi.kpi_name);
 
   const categoryName = kpi.kra_categories?.name || 'Uncategorized';
   const categoryColor = kpi.kra_categories?.color || '#6B7280';
