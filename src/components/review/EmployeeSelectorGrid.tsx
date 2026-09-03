@@ -2248,11 +2248,21 @@ export function EmployeeSelectorGrid({
             </div>
           ) : <span />}
           {!(viewLevel === 'audit' && (auditorWorkloadStats.length > 0 || unassignedStats)) && (
-            <EmployeeStatusFilter
-              syncToUrl={false}
-              value={empStatus}
-              onChange={(mode) => setEmpStatusRaw(mode)}
-            />
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+              <EmployeeStatusFilter
+                syncToUrl={false}
+                value={empStatus}
+                onChange={(mode) => setEmpStatusRaw(mode)}
+              />
+              {viewLevel === 'team' && (
+                <TeamQueueToggle
+                  checked={isActionableQueueOn}
+                  onCheckedChange={(checked) => setQueueFilter(checked ? 'actionable' : 'all')}
+                  actionableCount={teamQueueCounts?.actionable}
+                  totalCount={teamQueueCounts?.total}
+                />
+              )}
+            </div>
           )}
         </div>
       )}
