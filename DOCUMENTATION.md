@@ -9651,3 +9651,12 @@ Tests: `src/tests/actionableQueueFilter.test.ts`.
 structured title; for structured rows that name is the full composed text, so
 Formula/Scoring Logic appeared twice (raw + structured blocks) in View KPI
 Details. Structured rows now render their title; canonical override is legacy-only.
+
+### v2.66.349 — Org KPI "Pending" despite every active employee done (ADR-349)
+`get_org_kpi_data_entry_snapshot` filtered `is_active` only for mapping
+aggregates, so an inactive employee stuck at `kra_set` kept a completed KPI in
+Stuck/Pending. All snapshot aggregates now share one active population;
+`activeKraSetEmpIds()` intersects the set client-side as defence in depth; the
+Pending chip counts pending KPIs explicitly; `preview_org_kpi_propagation`
+reports `employee_inactive` as a benign skip. Tests:
+`src/test/orgKpiInactiveKraSet.test.ts`.

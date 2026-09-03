@@ -346,7 +346,7 @@ export function usePropagateOrgKpiValue() {
         // immutability). This is NOT a failure — surface as informational.
         const skipped = result.skipped || [];
         const allBenign = skipped.length > 0 && skipped.every(
-          s => s.reason === 'not_in_kra_set' || s.reason === 'reviewer_locked'
+          s => s.reason === 'not_in_kra_set' || s.reason === 'reviewer_locked' || s.reason === 'employee_inactive'
         );
         if (allBenign) {
           toast({
@@ -444,7 +444,7 @@ export function useBulkPropagateOrgKpiValues() {
         // v2.66.8 — see usePropagateOrgKpiValue.onSuccess for rationale.
         const skipped = result.skipped || [];
         const allBenign = skipped.length > 0 && skipped.every(
-          s => s.reason === 'not_in_kra_set' || s.reason === 'reviewer_locked'
+          s => s.reason === 'not_in_kra_set' || s.reason === 'reviewer_locked' || s.reason === 'employee_inactive'
         );
         if (allBenign) {
           toast({
