@@ -1833,7 +1833,7 @@ export function UnifiedScorecard({
         </CardHeader>
         <CardContent className="px-3 sm:px-6">
           {isMobile ? (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
               {sortedKpis.map(kpi => {
                 const submission = submissionMap.get(kpi.id);
                 const selfReviewHandler = (k: KPI) => { setSelfAutoOpenQueryHistory(false); setSelectedKpiForSelfReview(k); };
