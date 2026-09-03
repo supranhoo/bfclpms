@@ -239,6 +239,31 @@ export function KpiDetailsTable({
     return workflowCanReview(kpi.status || 'kra_set', viewType, effectiveStages);
   };
 
+  /**
+   * ADR-355 — touch-safe read-only reopen control.
+   * Post-submit rows used to expose an icon-only ghost eye button, which is
+   * undiscoverable and below the 44px tap target on iPad (the >=768px table
+   * path). Reviewers reported being unable to reopen a KRA after submitting.
+   */
+  const renderViewButton = (
+    kpi: KPI,
+    label = 'View',
+    title = 'View KPI Details',
+  ): React.ReactNode =>
+    onView ? (
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-9 min-h-[44px] sm:min-h-0 px-3"
+        onClick={() => onView(kpi)}
+        title={title}
+      >
+        <Eye className="h-4 w-4 mr-1" />
+        {label}
+      </Button>
+    ) : null;
+
+
   const getActionButton = (kpi: KPI): React.ReactNode => {
     const submission = submissionMap.get(kpi.id);
     const isNaKpi = submission?.is_na || false;
