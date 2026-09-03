@@ -9723,3 +9723,20 @@ submit path while the toast names the new stage. Presentation and local UI
 state only — no schema, RPC, RLS or workflow change.
 ADR: `docs/adr/ADR-355.md`. Policy: §REVIEW-REOPEN-AFFORDANCE.
 Tests: `src/tests/reviewerReopenAffordance.test.tsx`.
+
+## v2.66.356 — Reviewer KPI card presentation pass (ADR-356)
+A UI assessment of the reviewer KPI card list at tablet width found duplicated
+state signalling (header "Approved" badge plus an action-row "Fwd" pill),
+9–10px type, an inverted KRA/KPI hierarchy, unaligned metrics with unit
+artefacts ("0 Date", "16 Number"), hardcoded palette utilities, sub-44px touch
+targets and a single-column layout on an 834px viewport. `MobileKpiCard` now
+carries one status badge in the header and controls only in the action row,
+promotes the KPI title to 14px with the KRA as a muted eyebrow, renders
+Target/Weight/Score as a three-column `tabular-nums` grid with `n / 5` scoring
+and suppressed type-descriptor units, uses new semantic `success` / `warning` /
+`info` badge variants (new `--info` token in both themes), and gives every
+control a >=44px hit area with `aria-label`s. `UnifiedScorecard` renders the
+cards as `grid-cols-1 md:grid-cols-2`. Presentation only — no props,
+permissions, workflow, scoring, RPC, RLS or schema change.
+ADR: `docs/adr/ADR-356.md`. Policy: §REVIEW-CARD-PRESENTATION.
+Tests: `src/tests/mobileKpiCardPresentation.test.ts`.

@@ -7353,3 +7353,15 @@ forbidden there. A successful submit MUST NOT hide the row it just acted on:
 any active status-chip filter is cleared on success and the toast names the
 stage the KPI moved to. This is a presentation guarantee only — it never widens
 who may edit; write permission stays with `canReviewKpi` / `workflowCanReview`.
+
+## §REVIEW-CARD-PRESENTATION (ADR-356)
+Reviewer KPI cards MUST communicate workflow state exactly once, through the
+header status badge; the action row carries controls only. Supporting text on
+these cards MUST NOT fall below 11px and the KPI title MUST outrank the KRA
+line. Target / Weight / Score MUST render in a fixed, `tabular-nums` grid so
+values align across cards, with the rating scale shown (`n / 5`) and
+type-descriptor units (Number, Date, Count, Nos) suppressed. State colours MUST
+use semantic tokens/variants (`success`, `warning`, `info`, `destructive`) —
+raw palette utilities are forbidden on these surfaces. Every interactive
+element MUST have a >=44px touch target and, when icon-only, an `aria-label`.
+This section governs presentation only; it never alters who may edit a KPI.
