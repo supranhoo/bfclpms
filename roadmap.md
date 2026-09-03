@@ -68,3 +68,10 @@
 - [x] Reverted all 136 items from stored before-images with conflict guard
 - [x] Audit entries + runs stamped undone; verified restored values
 - [x] ADR-353, DOCUMENTATION sync
+
+## ADR-354 - One KPI split across categories, "Power generation from 8 MWh" (done)
+- [x] RCA: 3 legacy kpi_name variants across 2 categories, one shared kpi_title
+- [x] 18 open Jul-Oct 2026 rows renamed + recategorised with reversible audit row
+- [x] list_cross_category_kpi_title_splits() + "Same KPI, Two Categories" health card
+- [x] Tests, ADR-354, POLICY §88I clause 17, DOCUMENTATION sync
+
