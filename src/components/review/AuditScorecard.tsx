@@ -361,9 +361,15 @@ export function AuditScorecard({
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
-      toast({ 
-        title: variables.approve ? 'Forwarded to Management Review' : 'Audit review saved'
+      toast({
+        title: variables.approve ? 'Forwarded to Management Review' : 'Audit review saved',
+        description: variables.approve
+          ? 'The KPI moved out of the audit stage. It stays listed as "Forwarded" — tap View to reopen it read-only.'
+          : undefined,
       });
+      // ADR-355: a status chip filter would hide the row the auditor just
+      // submitted, making the KRA look unopenable. Clear it on success.
+      setStatusFilter(null);
       setReviewSheetOpen(false);
     },
     onError: (error: Error) => {
