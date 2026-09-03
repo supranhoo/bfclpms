@@ -258,14 +258,25 @@ export default function OrgKpiDataEntry() {
 
   // Per-definition set of employee_ids whose child kpis row is still 'kra_set'.
   // Used together with OKV.status to compute genuine "stuck" rows.
+  //
+  // ADR-349 / POLICY §ORG-KPI-ACTIVE-POPULATION: the set is intersected with the
+  // active mapped population (`mappedEmployeesMap`). An inactive employee left at
+  // `kra_set` is neither counted in "N of N entered" nor a legal propagation
+  // target, so it must not make a completed KPI read as Stuck/Pending.
   const kraSetEmpIdsByKey = useMemo(() => {
     const map = new Map<string, Set<string>>();
     const raw = (orgLevelData as any)?.kraSetEmpIdsByKey || {};
     Object.entries(raw).forEach(([k, ids]) => {
-      map.set(k, new Set(ids as string[]));
+      const mapped = mappedEmployeesMap.get(k);
+      const all = ids as string[];
+      map.set(
+        k,
+        new Set(mapped && mapped.size > 0 ? all.filter((id) => mapped.has(id)) : all),
+      );
     });
     return map;
-  }, [orgLevelData]);
+  }, [orgLevelData, mappedEmployeesMap]);
+
 
   // Tile status is derived by the shared helper in src/lib/orgKpiStatus.ts so
   // that this page and PropagationPreviewDialog cannot drift apart again
