@@ -1007,6 +1007,16 @@ export function EmployeeSelectorGrid({
       filtered = filtered?.filter(m => employeeIds.has(m.id));
     }
 
+    // ADR-348 / POLICY §129 — default "Pending action only" queue (team view).
+    // Composes AFTER the status pipeline so tile/status picks still work within
+    // the actionable subset. `badge1` is the relationship-aware pending count
+    // (direct → self_review, indirect → skip-reviewable, functional → FM stage).
+    if (isActionableQueueOn) {
+      filtered = filtered?.filter(m =>
+        isActionableForReviewer(getEmployeeKpiStats(m.id, m.relationship))
+      );
+    }
+
     // Auto-sort by urgency: most pending KPIs first
     filtered?.sort((a, b) => {
       const statsA = getEmployeeKpiStats(a.id, a.relationship);
@@ -1032,7 +1042,7 @@ export function EmployeeSelectorGrid({
     });
 
     return filtered;
-  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipIdSet, directIdSet, myAssignedEmployeeIds, myKpiLevelData, auditorFilter, auditorWorkloadMap, unassignedStats]);
+  }, [demographicFilteredMembers, statusFilter, periodKpis, viewLevel, workflowMap, skipIdSet, directIdSet, myAssignedEmployeeIds, myKpiLevelData, auditorFilter, auditorWorkloadMap, unassignedStats, isActionableQueueOn]);
 
   // Split display members into assigned/others for audit view
   const { assignedMembers, otherMembers } = useMemo(() => {
@@ -1123,7 +1133,7 @@ export function EmployeeSelectorGrid({
   useEffect(() => {
     if (currentPage !== 1) setPage('1');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, statusFilter, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, auditorFilter, viewLevel, pageSize]);
+  }, [searchQuery, statusFilter, selectedDepartment, selectedDesignation, selectedGrade, selectedManager, auditorFilter, viewLevel, pageSize, queueFilter]);
 
   // Calculate stats using per-employee workflow-aware resolution
   const stats = useMemo(() => {
