@@ -468,6 +468,9 @@ export default function OrgKpiDataEntry() {
     const totalKpis = progressScopedKpis.length;
     let enteredKpis = 0;
     let propagatedKpis = 0;
+    // ADR-349: counted explicitly. Deriving pending as
+    // `total - entered - propagated` silently folded `stuck` KPIs into Pending.
+    let pendingKpis = 0;
     const categoryMap = new Map<string, { total: number; entered: number; propagated: number }>();
 
     progressScopedKpis.forEach(kpi => {
@@ -483,6 +486,8 @@ export default function OrgKpiDataEntry() {
       } else if (status === 'entered') {
         enteredKpis++;
         cat.entered++;
+      } else if (status === 'pending') {
+        pendingKpis++;
       }
       categoryMap.set(catId, cat);
     });
@@ -496,8 +501,9 @@ export default function OrgKpiDataEntry() {
       propagated: categoryMap.get(cat.id)?.propagated || 0,
     }));
 
-    return { totalKpis, enteredKpis, propagatedKpis, categoryProgress };
+    return { totalKpis, enteredKpis, propagatedKpis, pendingKpis, categoryProgress };
   }, [progressScopedKpis, getKpiStatus, orgLevelCategories]);
+
 
   // Build card data for a KPI
   const buildCardData = useCallback((kpi: typeof filteredKpis[0]): OrgKpiCardData => {
