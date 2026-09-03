@@ -235,13 +235,28 @@ export function useMenuAccess() {
   });
 
   const grantUserMenuAccess = useMutation({
-    mutationFn: async ({ menuKey, userId }: { menuKey: string; userId: string }) => {
+    mutationFn: async ({
+      menuKey,
+      userId,
+      canAdd = false,
+      canUpdate = false,
+      canDelete = false,
+    }: {
+      menuKey: string;
+      userId: string;
+      canAdd?: boolean;
+      canUpdate?: boolean;
+      canDelete?: boolean;
+    }) => {
       const { error } = await supabase
         .from('menu_access_user_overrides')
         .upsert({
           menu_key: menuKey,
           user_id: userId,
           granted_by: user?.id,
+          can_add: canAdd,
+          can_update: canUpdate,
+          can_delete: canDelete,
         }, { onConflict: 'menu_key,user_id' });
       if (error) throw error;
     },
