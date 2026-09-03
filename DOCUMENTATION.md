@@ -9637,3 +9637,17 @@ renders no badge. Rollback: revert the one-line value expression in `BuConsoleTr
 
 ### v2.66.347 — ADR-347: derived cycle anchors lock every non-terminal month
 Off-list `frequency_cycle_start` anchors (e.g. Bi-Monthly `Jul-Aug`) previously synthesized only the first cycle window, so later non-terminal months (Sep) looked open and the Performance Console dropped the "Not due" chip. `deriveCycleOptionFromCycleStart` now enumerates the full 12-month rhythm, matching the DB trigger. See docs/adr/ADR-347.md.
+
+### v2.66.348 — Team Reviews: default "Pending action only" queue (ADR-348)
+Team Reviews now defaults to showing only members with KPIs awaiting the
+signed-in reviewer (`badge1 > 0`, relationship-aware). A "Pending action only"
+switch reveals the full mapped downline (`?queue=all`, default never written to
+URL, Clear All restores the default). Includes an "All caught up" empty state
+and an X-of-Y caption chip. SSOT predicate: `src/lib/review/actionableQueueFilter.ts`.
+Tests: `src/tests/actionableQueueFilter.test.ts`.
+
+### v2.66.348b — Structured KPI no longer prints the legacy blob (ADR-348b)
+`KpiHeaderSection` used to prefer the canonical registry `kpi_name` over the
+structured title; for structured rows that name is the full composed text, so
+Formula/Scoring Logic appeared twice (raw + structured blocks) in View KPI
+Details. Structured rows now render their title; canonical override is legacy-only.
