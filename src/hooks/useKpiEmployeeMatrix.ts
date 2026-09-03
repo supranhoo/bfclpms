@@ -274,11 +274,14 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters, options?: { enabled
           });
         }
 
+        // ADR-358 — resolve structured text (legacy split fallback)
+        const text = resolveMatrixKpiText(kpi);
+
         // Build KPI row key — canonical mode collapses registry variants
         const canonical = canonicalMap?.get(aliasKey(kpi.category_id, kpi.kra_name, kpi.kpi_name));
         const displayKra = canonical?.kra ?? kpi.kra_name;
-        const displayKpi = canonical?.kpi ?? kpi.kpi_name;
-        const rowKey = `${displayKra}|${displayKpi}`;
+        const displayKpi = canonical?.kpi ?? text.title ?? kpi.kpi_name;
+        const rowKey = matrixRowKey(kpi.category_id, displayKra, displayKpi);
         if (!kpiRowMap.has(rowKey)) {
           kpiRowMap.set(rowKey, {
             key: rowKey,
@@ -286,13 +289,18 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters, options?: { enabled
             categoryId: kpi.category_id || '',
             kraName: displayKra,
             kpiName: displayKpi,
-            description: (kpi.description || '').toString(),
+            rawKpiName: kpi.kpi_name,
+            kpiTitle: text.title,
+            kpiFormula: text.formula,
+            kpiScoringLogic: text.scoringLogic,
+            description: text.description,
             weightage: Number(kpi.weightage) || 0,
             employeeWeightages: {},
             employeeScores: {},
             employeeCount: 0,
           });
         }
+
 
         const row = kpiRowMap.get(rowKey)!;
 
