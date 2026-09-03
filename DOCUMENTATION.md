@@ -9687,3 +9687,15 @@ renders action buttons when authorized. `grantUserMenuAccess` accepts explicit
 `src/test/menu/menu-override-action-aware.test.ts`. ADR: `docs/adr/ADR-350.md`.
 Policy: POLICY.md §MENU-OVERRIDE-ACTIONS.
 
+
+### v2.66.353 — Rollback of accidental "Power generation from 8 MWh" edits (ADR-353)
+Three Performance Console group-definition edits made on 3 Sep 2026 against
+*Power generation from 8 MWh* (description 16:06, category move 16:10, scoring
+logic 16:16 — 11 runs, 136 rows across Jul–Oct 2026) were reverted from the
+stored before-images in `bu_console_edit_items`, using the same guards as
+`bu_console_undo_edit_run`: a field is restored only when it still holds the
+value the run wrote, each restored row gets a `BU_CONSOLE_EDIT_UNDO`
+`kpi_audit_logs` entry with `performed_by = NULL`, and every run is stamped
+`undone_at`. Only `kpi_description`, `kpi_scoring_logic` and `category_id` were
+written — no scores, targets, weightages or workflow statuses.
+ADR: `docs/adr/ADR-353.md`. Policy: unchanged.

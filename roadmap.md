@@ -62,3 +62,9 @@
 - [x] Consumable cost open rows normalised with reversible audit record
 - [x] list_split_kpi_name_variants() detector + Normalise action on Standardization Health
 - [x] Tests, ADR-352a, DOCUMENTATION sync
+
+## ADR-353 - Accidental "Power generation from 8 MWh" edits rolled back (done)
+- [x] Identified the 11 edit runs (description / category / scoring logic, Jul-Oct 2026)
+- [x] Reverted all 136 items from stored before-images with conflict guard
+- [x] Audit entries + runs stamped undone; verified restored values
+- [x] ADR-353, DOCUMENTATION sync
