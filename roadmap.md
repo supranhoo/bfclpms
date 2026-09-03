@@ -75,3 +75,9 @@
 - [x] list_cross_category_kpi_title_splits() + "Same KPI, Two Categories" health card
 - [x] Tests, ADR-354, POLICY §88I clause 17, DOCUMENTATION sync
 
+
+## ADR-355 - Reopen a submitted KRA on iPad (done)
+- [x] RCA/5-Why: icon-only ghost reopen button + no mobile control + self-hiding status filter
+- [x] Labelled 44px View control on all completed-state reviewer rows
+- [x] statusFilter cleared on every AuditScorecard submit success + stage-naming toast
+- [x] Tests, ADR-355, POLICY §REVIEW-REOPEN-AFFORDANCE, DOCUMENTATION sync

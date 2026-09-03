@@ -9709,3 +9709,17 @@ value the run wrote, each restored row gets a `BU_CONSOLE_EDIT_UNDO`
 `undone_at`. Only `kpi_description`, `kpi_scoring_logic` and `category_id` were
 written — no scores, targets, weightages or workflow statuses.
 ADR: `docs/adr/ADR-353.md`. Policy: unchanged.
+
+### v2.66.355 — Reviewers can reopen a submitted KRA on iPad (ADR-355)
+iPad (~834px) renders the desktop reviewer table, where post-submit rows had
+degraded to a badge plus an icon-only ghost eye button — and, on the mobile
+card, to a badge with no reopen control at all. Combined with an active status
+chip filter, a just-forwarded KPI could disappear from the list entirely.
+`KpiDetailsTable` now routes every completed/forwarded/N/A branch through one
+`renderViewButton()` helper (labelled, outlined, `min-h-[44px]`),
+`MobileKpiCard` gained the same labelled View button on forwarded and
+past-stage rows, and `AuditScorecard` clears `statusFilter` on every successful
+submit path while the toast names the new stage. Presentation and local UI
+state only — no schema, RPC, RLS or workflow change.
+ADR: `docs/adr/ADR-355.md`. Policy: §REVIEW-REOPEN-AFFORDANCE.
+Tests: `src/tests/reviewerReopenAffordance.test.tsx`.

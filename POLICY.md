@@ -7342,3 +7342,14 @@ history, reports, duplicate constraint) and is never rewritten implicitly —
 changing the stored name is the explicit, reversible `correct_kpis_range`
 operation. Any RPC that feeds a KPI display surface must return `kpi_title`,
 `kpi_description`, `kpi_formula` and `kpi_scoring_logic` alongside `kpi_name`.
+
+## §REVIEW-REOPEN-AFFORDANCE (ADR-355)
+A reviewer must always be able to reopen a KPI they have already acted on.
+Completed-state rows (Forwarded, Reviewed, Draft (Mgmt), Completed, N/A) on
+every reviewer surface — `KpiDetailsTable` (desktop and tablet) and
+`MobileKpiCard` — MUST expose a **labelled** read-only View control with a
+touch target of at least 44px; icon-only ghost buttons and badge-only rows are
+forbidden there. A successful submit MUST NOT hide the row it just acted on:
+any active status-chip filter is cleared on success and the toast names the
+stage the KPI moved to. This is a presentation guarantee only — it never widens
+who may edit; write permission stays with `canReviewKpi` / `workflowCanReview`.
