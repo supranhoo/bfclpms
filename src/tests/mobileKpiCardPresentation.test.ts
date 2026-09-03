@@ -54,4 +54,34 @@ describe('MobileKpiCard presentation', () => {
     expect(src).toContain('aria-label="Send back for rework"');
     expect(src).toContain('aria-label="Show KPI scoring logic"');
   });
+
+  // ADR-357 — declutter pass
+  it('suppresses the KRA eyebrow when it duplicates the KPI title', () => {
+    expect(src).toContain('kraDuplicatesTitle');
+    expect(src).toContain('{!kraDuplicatesTitle && (');
+  });
+
+  it('does not render a redundant org-scope tooltip in the header', () => {
+    expect(src).not.toContain('TooltipTrigger');
+    expect(src).not.toContain('Org-level ({scope})');
+  });
+
+  it('renders org KPI info as a single muted line instead of two badges', () => {
+    expect(src).toContain('Org KPI{detail ? ` · ${detail}` : \'\'}');
+    expect(src).not.toContain('Data Owner: ');
+    expect(src).not.toContain('Entered by: ');
+  });
+});
+
+describe('UnifiedScorecard card list layout (ADR-357)', () => {
+  const scorecardSrc = readFileSync(join(process.cwd(), 'src/components/review/UnifiedScorecard.tsx'), 'utf8');
+
+  it('uses a two-column card grid only at lg and above', () => {
+    expect(scorecardSrc).toContain('grid grid-cols-1 lg:grid-cols-2 gap-3 items-start');
+    expect(scorecardSrc).not.toContain('grid grid-cols-1 md:grid-cols-2 gap-3 items-start');
+  });
+
+  it('lets the scorecard toolbar wrap instead of overflowing the viewport', () => {
+    expect(scorecardSrc).toContain('flex flex-wrap items-center gap-2');
+  });
 });
