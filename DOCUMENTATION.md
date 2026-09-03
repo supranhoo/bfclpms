@@ -2,7 +2,7 @@
 
 > **Last Updated:** 2026-09-03 · **Version:** v2.66.351
 >
-> **Version:** 2.66.351 — **Org KPI Data Entry shows the updated KPI wording (ADR-351, 2026-09-03).** RCA: a Performance Console definition update writes the structured columns (`kpi_title`/`kpi_description`/`kpi_formula`/`kpi_scoring_logic`) but never the legacy `kpi_name` join key (ADR-334/337); the Org KPI Data Entry card printed `kpi_name` verbatim and `get_org_kpi_data_entry_snapshot` did not even return the structured columns, so the page kept showing the old pasted blob. CAPA: the snapshot RPC now selects the four structured columns (read-only, additive, keys unchanged) and `OrgKpiEntryCard` renders through `KpiTitle`/`KpiTextBlocks` — structured rows get a title plus labelled Description / Formula / Scoring Logic blocks, legacy rows render exactly as before. Regression: `src/test/orgKpiStructuredText.test.ts` (4); Org KPI suites 197 pass. See POLICY §KPI-TEXT-DISPLAY-SSOT and `docs/adr/ADR-351.md`.
+> **Version:** 2.66.352 — **Org KPI Data Entry: tiered rating dropdown no longer overflows its card (ADR-352, 2026-09-03).** RCA: `QualitativeSelect` hardcoded a 140px trigger with an unconstrained label span, so long tiered option text ("90% - 94.99% Achievement (of the 5% Incentive Target)") wrapped out of the control and painted over the status chips, Remark field and Save row. CAPA: the trigger is now container-driven (`w-full min-w-0` merged via `cn`, caller classes preserved), the selected label truncates with the full text in `title`, dropdown items wrap inside a capped popover, and the rating badge uses `text-primary-foreground` instead of hardcoded white. Display-only - `onChange(label, rating)` and all scoring paths unchanged. Regression: `src/test/qualitativeSelectLongLabel.test.tsx` (2). See `docs/adr/ADR-352.md`.
 >
 > **Version:** 2.66.340 — **Persistent KPI rename preview failure corrected (ADR-340, 2026-09-02).** RCA: ADR-338 replaced `preview_kpi_range_correction`, but the UI calls `correct_kpis_range_dry_run`; that deployed function still compared the `review_status` column to invalid `kpi_status` literals. CAPA: the exact UI-invoked RPC now uses the canonical final-score-or-past-`kra_set` predicate, with a read-only join to `review_submissions`; source-contract tests bind the hook RPC name to the corrective migration and exercise editable, in-review, approved, and final-scored mocks. No row data, RLS, role access, or backup scope changed. Rollback is function-only and requires no data restoration. See POLICY §KPI-RENAME-LOCK-PREDICATE.
 >
@@ -9662,6 +9662,12 @@ Stuck/Pending. All snapshot aggregates now share one active population;
 Pending chip counts pending KPIs explicitly; `preview_org_kpi_propagation`
 reports `employee_inactive` as a benign skip. Tests:
 `src/test/orgKpiInactiveKraSet.test.ts`.
+
+### v2.66.352 - QualitativeSelect container-driven width (ADR-352)
+Fixed overlapping tiered rating text on Org KPI Data Entry: `src/components/review/QualitativeSelect.tsx`
+drops the hardcoded fixed-width trigger, truncates the selected label (full text in `title`), wraps
+dropdown items in a capped popover and uses semantic badge tokens.
+Tests: `src/test/qualitativeSelectLongLabel.test.tsx`. ADR: `docs/adr/ADR-352.md`.
 
 ### v2.66.350 — Action-aware menu access user overrides (ADR-350)
 `public.menu_access_user_overrides` now carries `can_add`, `can_update`, and
