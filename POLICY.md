@@ -7343,6 +7343,15 @@ changing the stored name is the explicit, reversible `correct_kpis_range`
 operation. Any RPC that feeds a KPI display surface must return `kpi_title`,
 `kpi_description`, `kpi_formula` and `kpi_scoring_logic` alongside `kpi_name`.
 
+**Addendum (ADR-358) — reports.** Report surfaces are covered by this policy.
+The KPI-Employee Matrix (`rpc_kpi_employee_matrix_rows` → `useKpiEmployeeMatrix`
+→ `KpiEmployeeMatrix.tsx`) resolves display text through `resolveKpiText`, and
+pivots rows on `category + KRA + resolved title` so legacy name variants of one
+KPI collapse into a single row. Rows without structured fields fall back to the
+legacy `kpi_name` split, then to the raw name — never blank. Grouping is a
+display concern only; no stored name, score, weightage or key is rewritten.
+
+
 ## §REVIEW-REOPEN-AFFORDANCE (ADR-355)
 A reviewer must always be able to reopen a KPI they have already acted on.
 Completed-state rows (Forwarded, Reviewed, Draft (Mgmt), Completed, N/A) on

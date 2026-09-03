@@ -21435,8 +21435,12 @@ export type Database = {
           category_name: string
           description: string
           employee_id: string
+          kpi_description: string
+          kpi_formula: string
           kpi_id: string
           kpi_name: string
+          kpi_scoring_logic: string
+          kpi_title: string
           kra_name: string
           weightage: number
         }[]

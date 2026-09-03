@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { resolveMatrixKpiText, matrixRowKey } from '@/lib/reports/kpiMatrixText';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -17,14 +18,22 @@ export interface MatrixEmployee {
 }
 
 export interface MatrixKpiRow {
-  /** Composite key: kra_name + kpi_name (distinct regardless of employee) */
+  /** Composite key: category + KRA + resolved display title (ADR-358) */
   key: string;
   categoryName: string;
   categoryId: string;
   kraName: string;
+  /** Display name — resolved structured title when present, else legacy kpi_name */
   kpiName: string;
-  /** Short criteria/description text from kpis.criteria (first occurrence) */
+  /** Raw legacy `kpi_name` of the first contributing row (matching key) */
+  rawKpiName: string;
+  /** ADR-358 structured blocks (resolved, with legacy split fallback) */
+  kpiTitle: string;
+  kpiFormula: string;
+  kpiScoringLogic: string;
+  /** Structured description, else the legacy criteria text */
   description: string;
+
   /** Base weightage (first occurrence) */
   weightage: number;
   /** employee_id → assigned weightage % */
@@ -210,6 +219,8 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters, options?: { enabled
         kpi_id: string; employee_id: string; kra_name: string; kpi_name: string;
         description: string | null;
         weightage: number | null; category_id: string | null; category_name: string | null;
+        kpi_title?: string | null; kpi_description?: string | null;
+        kpi_formula?: string | null; kpi_scoring_logic?: string | null;
       }> = [];
       for (let i = 0; i < employeeIds.length; i += 500) {
         const batch = employeeIds.slice(i, i + 500);
@@ -264,11 +275,14 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters, options?: { enabled
           });
         }
 
+        // ADR-358 — resolve structured text (legacy split fallback)
+        const text = resolveMatrixKpiText(kpi);
+
         // Build KPI row key — canonical mode collapses registry variants
         const canonical = canonicalMap?.get(aliasKey(kpi.category_id, kpi.kra_name, kpi.kpi_name));
         const displayKra = canonical?.kra ?? kpi.kra_name;
-        const displayKpi = canonical?.kpi ?? kpi.kpi_name;
-        const rowKey = `${displayKra}|${displayKpi}`;
+        const displayKpi = canonical?.kpi ?? text.title ?? kpi.kpi_name;
+        const rowKey = matrixRowKey(kpi.category_id, displayKra, displayKpi);
         if (!kpiRowMap.has(rowKey)) {
           kpiRowMap.set(rowKey, {
             key: rowKey,
@@ -276,7 +290,11 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters, options?: { enabled
             categoryId: kpi.category_id || '',
             kraName: displayKra,
             kpiName: displayKpi,
-            description: (kpi.description || '').toString(),
+            rawKpiName: kpi.kpi_name,
+            kpiTitle: text.title,
+            kpiFormula: text.formula,
+            kpiScoringLogic: text.scoringLogic,
+            description: text.description,
             weightage: Number(kpi.weightage) || 0,
             employeeWeightages: {},
             employeeScores: {},
@@ -284,7 +302,14 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters, options?: { enabled
           });
         }
 
+
         const row = kpiRowMap.get(rowKey)!;
+
+        // Enrich blocks from later variants when the first row had none
+        if (!row.description && text.description) row.description = text.description;
+        if (!row.kpiFormula && text.formula) row.kpiFormula = text.formula;
+        if (!row.kpiScoringLogic && text.scoringLogic) row.kpiScoringLogic = text.scoringLogic;
+
 
         // Calculate weighted score
         const sub = subMap.get(kpi.kpi_id);

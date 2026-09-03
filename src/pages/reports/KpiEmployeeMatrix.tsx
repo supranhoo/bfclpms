@@ -25,13 +25,19 @@ import * as XLSX from 'xlsx';
 import { useResolvedReportFields } from '@/hooks/useResolvedReportFields';
 
 const MAT_DEFAULT_FIELDS = [
-  { field_key: 'sr_no',          default_label: 'Sr. No.',        default_sort: 10, is_required: true },
-  { field_key: 'category',       default_label: 'Category',       default_sort: 20 },
-  { field_key: 'kra',            default_label: 'KRA',            default_sort: 30 },
-  { field_key: 'kpi',            default_label: 'KPI',            default_sort: 40, is_required: true },
-  { field_key: 'weightage',      default_label: 'Weightage',      default_sort: 50 },
-  { field_key: 'employee_count', default_label: 'Employee Count', default_sort: 60 },
+  { field_key: 'sr_no',              default_label: 'Sr. No.',            default_sort: 10, is_required: true },
+  { field_key: 'category',           default_label: 'Category',           default_sort: 20 },
+  { field_key: 'kra',                default_label: 'KRA',                default_sort: 30 },
+  { field_key: 'kpi',                default_label: 'KPI',                default_sort: 40, is_required: true },
+  // ADR-358 — structured KPI text columns (fallback to legacy split)
+  { field_key: 'kpi_title',          default_label: 'KPI Title',          default_sort: 42 },
+  { field_key: 'kpi_description',    default_label: 'KPI Description',    default_sort: 44 },
+  { field_key: 'kpi_formula',        default_label: 'KPI Formula',        default_sort: 46 },
+  { field_key: 'kpi_scoring_logic',  default_label: 'KPI Scoring Logic',  default_sort: 48 },
+  { field_key: 'weightage',          default_label: 'Weightage',          default_sort: 50 },
+  { field_key: 'employee_count',     default_label: 'Employee Count',     default_sort: 60 },
 ] as const;
+
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const ROW_PAGE_OPTIONS = [25, 50, 100] as const;
@@ -231,7 +237,12 @@ export default function KpiEmployeeMatrix() {
         case 'sr_no':          return idx + 1;
         case 'category':       return row.categoryName;
         case 'kra':            return row.kraName;
-        case 'kpi':            return row.kpiName;
+        case 'kpi':               return row.kpiName;
+        // ADR-358 — structured text columns
+        case 'kpi_title':         return row.kpiTitle || row.kpiName;
+        case 'kpi_description':   return row.description;
+        case 'kpi_formula':       return row.kpiFormula;
+        case 'kpi_scoring_logic': return row.kpiScoringLogic;
         case 'weightage':      return row.weightage;
         case 'employee_count': return row.employeeCount;
         default:               return '';
@@ -782,8 +793,15 @@ export default function KpiEmployeeMatrix() {
                                 {showWeightage && (
                                   <div className="text-xs opacity-80">Base Weightage: {row.weightage}%</div>
                                 )}
+                                {/* ADR-358 — structured blocks */}
                                 {row.description && (
-                                  <div className="text-xs opacity-80 mt-1 whitespace-pre-wrap">{row.description}</div>
+                                  <div className="text-xs opacity-80 mt-1 whitespace-pre-wrap"><span className="font-medium">Description: </span>{row.description}</div>
+                                )}
+                                {row.kpiFormula && (
+                                  <div className="text-xs opacity-80 mt-1 whitespace-pre-wrap"><span className="font-medium">Formula: </span>{row.kpiFormula}</div>
+                                )}
+                                {row.kpiScoringLogic && (
+                                  <div className="text-xs opacity-80 mt-1 whitespace-pre-wrap"><span className="font-medium">Scoring Logic: </span>{row.kpiScoringLogic}</div>
                                 )}
                               </TooltipContent>
                             </Tooltip>

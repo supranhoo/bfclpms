@@ -9751,3 +9751,18 @@ never overflows the viewport. Presentation only — no props, permissions,
 workflow, scoring, RPC, RLS or schema change.
 ADR: `docs/adr/ADR-357.md`. Policy: §REVIEW-CARD-PRESENTATION.
 Tests: `src/tests/mobileKpiCardPresentation.test.ts` (14) + ADR-355 guard (7) — 21/21 green.
+
+## v2.66.358 — KPI-Employee Matrix shows updated KRA/KPI text (ADR-358)
+`rpc_kpi_employee_matrix_rows` now also returns `kpi_title`, `kpi_description`,
+`kpi_formula` and `kpi_scoring_logic` (read-only widening, same arguments).
+New pure helper `src/lib/reports/kpiMatrixText.ts` resolves display text
+(structured columns → legacy `splitKpiText` → raw `kpi_name`; description falls
+back to `criteria`) and builds the row key as
+`category | normalized KRA | normalized resolved title`, so legacy name variants
+of one KPI collapse into a single row. `useKpiEmployeeMatrix` carries
+`kpiTitle` / `description` / `kpiFormula` / `kpiScoringLogic` / `rawKpiName`;
+the report gains four registry columns (renamable, hideable, exported) and a
+tooltip with labelled Description / Formula / Scoring Logic blocks.
+No schema, RLS, grant, scoring, workflow or write-path change.
+ADR: `docs/adr/ADR-358.md`. Policy: §KPI-TEXT-DISPLAY-SSOT (ADR-358 addendum).
+Tests: `src/tests/kpiEmployeeMatrixStructuredText.test.ts` (6/6 green).
