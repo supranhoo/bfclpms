@@ -13,6 +13,7 @@ import { SplitDefinitionDialog } from './SplitDefinitionDialog';
 import { format } from 'date-fns';
 import { fetchApplyCoverage, type ApplyCoverage } from '@/hooks/useKpiRangeCorrection';
 import { SplitNameVariantsCard } from './SplitNameVariantsCard';
+import { CrossCategorySplitsCard } from './CrossCategorySplitsCard';
 
 
 /**
