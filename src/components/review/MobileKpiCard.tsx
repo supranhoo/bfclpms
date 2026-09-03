@@ -188,11 +188,20 @@ export function MobileKpiCard({
     }
 
     if (isTeamReviewPastStage) {
+      // ADR-355 — reviewed KPIs stay reopenable read-only.
       return (
-        <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 text-xs">
-          <CheckCircle2 className="h-3 w-3 mr-1" />
-          Done
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 text-xs">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Done
+          </Badge>
+          {onView && (
+            <Button size="sm" variant="outline" className="min-h-[44px] px-3" onClick={() => onView(kpi)}>
+              <Eye className="h-4 w-4 mr-1" />
+              View
+            </Button>
+          )}
+        </div>
       );
     }
 
