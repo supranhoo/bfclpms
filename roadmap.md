@@ -98,3 +98,10 @@
 - [x] Org-scope header tooltip removed; Org KPI info merged to one muted line
 - [x] Scorecard toolbar wraps — no viewport overflow
 - [x] Tests (21/21), ADR-357, POLICY §REVIEW-CARD-PRESENTATION addendum, DOCUMENTATION v2.66.357
+
+## ADR-358 — KPI-Employee Matrix structured KRA/KPI text (2026-09-03)
+- [x] RPC widened with kpi_title / description / formula / scoring_logic
+- [x] Shared resolver helper with legacy split + raw-name fallback
+- [x] Rows pivoted on category + KRA + resolved title (variant de-duplication)
+- [x] Four exportable registry columns + labelled tooltip blocks
+- [x] Tests (6/6), ADR-358, POLICY §KPI-TEXT-DISPLAY-SSOT addendum, DOCUMENTATION v2.66.358
