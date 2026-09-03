@@ -149,11 +149,20 @@ export function MobileKpiCard({
     }
 
     if (isForwarded) {
+      // ADR-355 — a forwarded KPI must stay reopenable read-only.
       return (
-        <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 text-xs">
-          <CheckCircle2 className="h-3 w-3 mr-1" />
-          Fwd
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 text-xs">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Fwd
+          </Badge>
+          {onView && (
+            <Button size="sm" variant="outline" className="min-h-[44px] px-3" onClick={() => onView(kpi)}>
+              <Eye className="h-4 w-4 mr-1" />
+              View
+            </Button>
+          )}
+        </div>
       );
     }
 
