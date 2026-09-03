@@ -222,6 +222,26 @@ export function MobileKpiCard({
     ? kpi.uom
     : null;
 
+  /**
+   * ADR-357 — when the KRA name and the resolved KPI title start with the same
+   * words, the eyebrow line is pure repetition; render the title only.
+   */
+  const kraDuplicatesTitle = (() => {
+    const norm = (s: string | null | undefined) =>
+      (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const kra = norm(kpi.kra_name);
+    const title = norm(kpi.kpi_title || kpi.kpi_name);
+    if (!kra || !title) return false;
+    const head = kra.slice(0, 40);
+    return title.startsWith(head) || kra.startsWith(title.slice(0, 40));
+  })();
+
+  const scopeIcon = scope === 'organization'
+    ? <Building2 className="h-3 w-3" aria-hidden="true" />
+    : scope === 'department'
+      ? <Users className="h-3 w-3" aria-hidden="true" />
+      : <User className="h-3 w-3" aria-hidden="true" />;
+
   return (
     <Card className={cn(
       "p-4 flex flex-col gap-3",
