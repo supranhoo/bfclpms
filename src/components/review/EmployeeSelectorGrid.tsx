@@ -16,8 +16,7 @@ import { resolvePendingStatuses, resolveReviewableStatuses, DEFAULT_WORKFLOW_STA
 import { matchesTeamTile, type TeamTile } from '@/lib/teamReviewTileFilter';
 import { resolveReviewerRelationship } from '@/lib/review/resolveReviewerRelationship';
 import { isActionableForReviewer, normalizeTeamQueueFilter, DEFAULT_TEAM_QUEUE_FILTER } from '@/lib/review/actionableQueueFilter';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
+import { TeamQueueToggle } from '@/components/review/TeamQueueToggle';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -2249,11 +2248,21 @@ export function EmployeeSelectorGrid({
             </div>
           ) : <span />}
           {!(viewLevel === 'audit' && (auditorWorkloadStats.length > 0 || unassignedStats)) && (
-            <EmployeeStatusFilter
-              syncToUrl={false}
-              value={empStatus}
-              onChange={(mode) => setEmpStatusRaw(mode)}
-            />
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+              <EmployeeStatusFilter
+                syncToUrl={false}
+                value={empStatus}
+                onChange={(mode) => setEmpStatusRaw(mode)}
+              />
+              {viewLevel === 'team' && (
+                <TeamQueueToggle
+                  checked={isActionableQueueOn}
+                  onCheckedChange={(checked) => setQueueFilter(checked ? 'actionable' : 'all')}
+                  actionableCount={teamQueueCounts?.actionable}
+                  totalCount={teamQueueCounts?.total}
+                />
+              )}
+            </div>
           )}
         </div>
       )}
@@ -2387,40 +2396,6 @@ export function EmployeeSelectorGrid({
         statusOptions={isExploreMode ? [] : statusOptions}
         onMoreFiltersOpen={() => setGradesEnabled(true)}
       />
-
-      {/* ADR-348 / POLICY §129 — Pending-action queue toggle (Team Reviews) */}
-      {viewLevel === 'team' && (
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-md border border-border bg-muted/40 px-3 py-2">
-          <div className="flex items-center gap-2">
-            <Switch
-              id="team-queue-toggle"
-              checked={isActionableQueueOn}
-              onCheckedChange={(checked) => setQueueFilter(checked ? 'actionable' : 'all')}
-              aria-label="Pending action only"
-            />
-            <Label htmlFor="team-queue-toggle" className="text-xs sm:text-sm font-medium cursor-pointer">
-              Pending action only
-            </Label>
-          </div>
-          {teamQueueCounts && (
-            <span className="text-xs text-muted-foreground">
-              {isActionableQueueOn ? (
-                <>
-                  Showing <span className="font-medium text-foreground">{teamQueueCounts.actionable}</span> of{' '}
-                  <span className="font-medium text-foreground">{teamQueueCounts.total}</span> team members with items
-                  awaiting your review — switch off to see your full downline
-                </>
-              ) : (
-                <>
-                  Showing all <span className="font-medium text-foreground">{teamQueueCounts.total}</span> mapped team
-                  members ({teamQueueCounts.actionable} with pending items)
-                </>
-              )}
-            </span>
-          )}
-        </div>
-      )}
-
 
       {/* Employees Grid */}
       <Card>
