@@ -7304,3 +7304,16 @@ For structured KPI rows the header paragraph renders the structured title only.
 The canonical registry name override applies exclusively to legacy
 (unstructured) rows, because for structured rows the registry `kpi_name` is the
 full composed matching text, not a display string.
+
+## §ORG-KPI-ACTIVE-POPULATION (ADR-349)
+Every Org KPI surface — tile chip, progress counters, Pending Report, scoped
+rows, propagation preview and propagation targets — must derive from ONE
+active-employee population for the definition/period. Inactive employees
+(`profiles.is_active = false`) are excluded from counts, from "is anything left
+to do" predicates and from propagation targets alike; a skip caused by
+inactivity is reported as the benign reason `employee_inactive`. Applying
+`is_active` per aggregate (some filtered, some not) is forbidden: it produced
+KPIs that read "7 of 7 entered / propagated" while still being counted as
+Pending. The Pending chip must count `status === 'pending'` explicitly and must
+never be derived as `total − entered − propagated`, which silently re-labels
+`stuck` as Pending.

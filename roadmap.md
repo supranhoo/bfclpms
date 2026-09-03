@@ -35,3 +35,11 @@
 
 ## Q — Structured KPI shown as plain text in View KPI Details
 - [x] RCA + fix: canonical blob precedence over structured title (ADR-348b)
+
+## ADR-349 — Org KPI Pending vs inactive employees (done)
+- [x] RCA / 5-Why: snapshot RPC filtered `is_active` per aggregate, not once
+- [x] RPC fix: one active population for every aggregate
+- [x] Client: `activeKraSetEmpIds` intersection + explicit Pending chip count
+- [x] `employee_inactive` benign skip reason (preview, toast, dialog labels)
+- [x] Tests, ADR-349, POLICY §ORG-KPI-ACTIVE-POPULATION, DOCUMENTATION sync
+- [ ] Follow-up: same guard inside `propagate_org_kpi_value` / `diagnose_org_kpi_propagation_gap`
