@@ -239,6 +239,31 @@ export function KpiDetailsTable({
     return workflowCanReview(kpi.status || 'kra_set', viewType, effectiveStages);
   };
 
+  /**
+   * ADR-355 — touch-safe read-only reopen control.
+   * Post-submit rows used to expose an icon-only ghost eye button, which is
+   * undiscoverable and below the 44px tap target on iPad (the >=768px table
+   * path). Reviewers reported being unable to reopen a KRA after submitting.
+   */
+  const renderViewButton = (
+    kpi: KPI,
+    label = 'View',
+    title = 'View KPI Details',
+  ): React.ReactNode =>
+    onView ? (
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-9 min-h-[44px] sm:min-h-0 px-3"
+        onClick={() => onView(kpi)}
+        title={title}
+      >
+        <Eye className="h-4 w-4 mr-1" />
+        {label}
+      </Button>
+    ) : null;
+
+
   const getActionButton = (kpi: KPI): React.ReactNode => {
     const submission = submissionMap.get(kpi.id);
     const isNaKpi = submission?.is_na || false;
@@ -287,11 +312,7 @@ export function KpiDetailsTable({
               <CheckCircle2 className="h-3 w-3 mr-1" />
               Completed
             </Badge>
-            {onView && (
-              <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View KPI Details">
-                <Eye className="h-4 w-4" />
-              </Button>
-            )}
+            {renderViewButton(kpi)}
           </>
         ) : isForwarded ? (
           <>
@@ -299,11 +320,7 @@ export function KpiDetailsTable({
               <CheckCircle2 className="h-3 w-3 mr-1" />
               Forwarded
             </Badge>
-            {onView && (
-              <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View KPI Details">
-                <Eye className="h-4 w-4" />
-              </Button>
-            )}
+            {renderViewButton(kpi)}
           </>
         ) : (
           // Check if KPI is drafted at management level before showing "Reviewed"
@@ -316,11 +333,7 @@ export function KpiDetailsTable({
               <Clock className="h-3 w-3 mr-1" />
               Draft (Mgmt)
             </Badge>
-            {onView && (
-              <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View KPI Details">
-                <Eye className="h-4 w-4" />
-              </Button>
-            )}
+            {renderViewButton(kpi)}
           </>
         ) : isTeamReviewPastStage ? (
           <>
@@ -328,11 +341,7 @@ export function KpiDetailsTable({
               <CheckCircle2 className="h-3 w-3 mr-1" />
               Reviewed
             </Badge>
-            {onView && (
-              <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View KPI Details">
-                <Eye className="h-4 w-4" />
-              </Button>
-            )}
+            {renderViewButton(kpi)}
           </>
         ) : isNaKpi ? (
           <div className="flex items-center gap-1">
@@ -345,18 +354,11 @@ export function KpiDetailsTable({
                 </span>
               )}
             </Badge>
-            {onView && (
-              <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View N/A Details">
-                <Eye className="h-4 w-4" />
-              </Button>
-            )}
+            {renderViewButton(kpi, 'View', 'View N/A Details')}
           </div>
-        ) : onView ? (
-          <Button size="sm" variant="outline" onClick={() => onView(kpi)}>
-            <Eye className="h-4 w-4 mr-1" />
-            View
-          </Button>
-        ) : null}
+        ) : (
+          renderViewButton(kpi)
+        )}
         
         {isDailyKpi && !isNaKpi && onToggleExpand && (
           <Button
