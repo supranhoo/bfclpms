@@ -20453,6 +20453,17 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      list_cross_category_kpi_title_splits: {
+        Args: never
+        Returns: {
+          categories: Json
+          category_count: number
+          kpi_title: string
+          kra_name: string
+          open_rows: number
+          total_rows: number
+        }[]
+      }
       list_profile_grade_level_orphans: {
         Args: never
         Returns: {
