@@ -152,7 +152,11 @@ const ALREADY_DONE_REASONS = new Set([
   'not_in_kra_set',
   'reviewer_locked',
   'self_review_existing',
+  // ADR-349: inactive employees are never propagation targets; skipping them
+  // is a benign outcome, not a name-mismatch failure.
+  'employee_inactive',
 ]);
+
 
 export function summarisePropagationPreview(rows: PreviewBreakdownRow[]): PreviewVerdict {
   const total = rows.length;
