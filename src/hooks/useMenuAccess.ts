@@ -182,7 +182,7 @@ export function useMenuAccess() {
     return effectiveRole === 'admin';
   };
 
-  /** Granular CRUD check: does the user have a specific action right via profile? */
+  /** Granular CRUD check: does the user have a specific action right via profile or override? */
   const canPerform = (menuKey: string, action: 'view' | 'add' | 'update' | 'delete'): boolean => {
     // Admin can do everything
     if (effectiveRole === 'admin') return true;
@@ -200,6 +200,18 @@ export function useMenuAccess() {
 
     // Fallback: if user has role-based or override access, they can view
     if (action === 'view') return canAccess(menuKey);
+
+    // Action-scoped user override (must match the requested action)
+    if (user) {
+      const override = userOverrides.find(o => o.menu_key === menuKey && o.user_id === user.id);
+      if (override) {
+        switch (action) {
+          case 'add': return override.can_add;
+          case 'update': return override.can_update;
+          case 'delete': return override.can_delete;
+        }
+      }
+    }
 
     return false;
   };
