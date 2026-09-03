@@ -104,9 +104,10 @@ export function MobileKpiCard({
             N/A
           </Badge>
           {onView && (
-            <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => onView(kpi)}>
-              <Eye className="h-4 w-4" />
-            </Button>
+            <Button size="sm" variant="outline" className="min-h-[44px] px-3" onClick={() => onView(kpi)}>
+              <Eye className="h-4 w-4 mr-1" />
+              View
+              </Button>
           )}
         </div>
       );
@@ -140,9 +141,10 @@ export function MobileKpiCard({
             Done
           </Badge>
           {onView && (
-            <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => onView(kpi)}>
-              <Eye className="h-4 w-4" />
-            </Button>
+            <Button size="sm" variant="outline" className="min-h-[44px] px-3" onClick={() => onView(kpi)}>
+              <Eye className="h-4 w-4 mr-1" />
+              View
+              </Button>
           )}
         </div>
       );
@@ -179,9 +181,10 @@ export function MobileKpiCard({
             Draft (Mgmt)
           </Badge>
           {onView && (
-            <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => onView(kpi)}>
-              <Eye className="h-4 w-4" />
-            </Button>
+            <Button size="sm" variant="outline" className="min-h-[44px] px-3" onClick={() => onView(kpi)}>
+              <Eye className="h-4 w-4 mr-1" />
+              View
+              </Button>
           )}
         </div>
       );
