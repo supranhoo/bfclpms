@@ -354,11 +354,7 @@ export function KpiDetailsTable({
                 </span>
               )}
             </Badge>
-            {onView && (
-              <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View N/A Details">
-                <Eye className="h-4 w-4" />
-              </Button>
-            )}
+            {renderViewButton(kpi, 'View', 'View N/A Details')}
           </div>
         ) : onView ? (
           <Button size="sm" variant="outline" onClick={() => onView(kpi)}>
