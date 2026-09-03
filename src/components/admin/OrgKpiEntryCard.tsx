@@ -764,6 +764,14 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
     : (statusConfig[aggregateStatus] ?? statusConfig.pending);
   const StatusIcon = statusInfo.icon;
   const ScopeIcon = scopeIcons[data.scope];
+  // ADR-351 — display-only projection for `resolveKpiText`.
+  const kpiTextRow = {
+    kpi_name: data.kpiName,
+    kpi_title: data.kpiTitle ?? null,
+    kpi_description: data.kpiDescription ?? null,
+    kpi_formula: data.kpiFormula ?? null,
+    kpi_scoring_logic: data.kpiScoringLogic ?? null,
+  };
 
   return (
     <>
