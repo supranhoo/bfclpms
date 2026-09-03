@@ -9740,3 +9740,14 @@ cards as `grid-cols-1 md:grid-cols-2`. Presentation only — no props,
 permissions, workflow, scoring, RPC, RLS or schema change.
 ADR: `docs/adr/ADR-356.md`. Policy: §REVIEW-CARD-PRESENTATION.
 Tests: `src/tests/mobileKpiCardPresentation.test.ts`.
+
+## v2.66.357 — Declutter reviewer KPI card list (ADR-357)
+Follow-up to ADR-356 after user feedback that 834px felt more cluttered.
+Card grid breakpoint raised `md`→`lg` (single column below 1024px); KRA
+eyebrow suppressed when it duplicates the KPI title (`kraDuplicatesTitle`);
+org-scope header tooltip removed; Org KPI two-badge row merged into one muted
+line (`Org KPI · Entered by …`); scorecard toolbar wraps (`flex-wrap`) so it
+never overflows the viewport. Presentation only — no props, permissions,
+workflow, scoring, RPC, RLS or schema change.
+ADR: `docs/adr/ADR-357.md`. Policy: §REVIEW-CARD-PRESENTATION.
+Tests: `src/tests/mobileKpiCardPresentation.test.ts` (14) + ADR-355 guard (7) — 21/21 green.

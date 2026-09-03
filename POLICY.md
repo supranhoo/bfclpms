@@ -7365,3 +7365,11 @@ use semantic tokens/variants (`success`, `warning`, `info`, `destructive`) —
 raw palette utilities are forbidden on these surfaces. Every interactive
 element MUST have a >=44px touch target and, when icon-only, an `aria-label`.
 This section governs presentation only; it never alters who may edit a KPI.
+
+### §REVIEW-CARD-PRESENTATION — addendum (ADR-357, 2026-09-03)
+The reviewer card list MUST use a two-column grid only at `lg` (>=1024px);
+below that cards render single-column. A surface MUST NOT render the KRA name
+and KPI title as separate lines when one duplicates the other (normalised
+40-char prefix match). Org-level provenance MUST be a single muted line, not
+stacked badges, and MUST NOT be duplicated by a header tooltip icon. Toolbars
+above card lists MUST wrap rather than overflow the viewport.
