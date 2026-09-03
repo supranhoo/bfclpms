@@ -20474,6 +20474,20 @@ export type Database = {
           profile_id: string
         }[]
       }
+      list_split_kpi_name_variants: {
+        Args: never
+        Returns: {
+          canonical_kpi_name: string
+          category_id: string
+          category_name: string
+          kpi_title: string
+          kra_name: string
+          open_rows: number
+          total_rows: number
+          variant_count: number
+          variants: Json
+        }[]
+      }
       log_standardization_action: {
         Args: {
           p_action_type: string
