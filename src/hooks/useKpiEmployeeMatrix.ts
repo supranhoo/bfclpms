@@ -17,14 +17,22 @@ export interface MatrixEmployee {
 }
 
 export interface MatrixKpiRow {
-  /** Composite key: kra_name + kpi_name (distinct regardless of employee) */
+  /** Composite key: category + KRA + resolved display title (ADR-358) */
   key: string;
   categoryName: string;
   categoryId: string;
   kraName: string;
+  /** Display name — resolved structured title when present, else legacy kpi_name */
   kpiName: string;
-  /** Short criteria/description text from kpis.criteria (first occurrence) */
+  /** Raw legacy `kpi_name` of the first contributing row (matching key) */
+  rawKpiName: string;
+  /** ADR-358 structured blocks (resolved, with legacy split fallback) */
+  kpiTitle: string;
+  kpiFormula: string;
+  kpiScoringLogic: string;
+  /** Structured description, else the legacy criteria text */
   description: string;
+
   /** Base weightage (first occurrence) */
   weightage: number;
   /** employee_id → assigned weightage % */
