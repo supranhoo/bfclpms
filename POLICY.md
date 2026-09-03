@@ -7329,3 +7329,14 @@ view-only (`false` for all actions). Existing overrides are backfilled to
 explicit and auditable. The client `useMenuAccess.canPerform` helper mirrors
 this check so UI buttons are shown only when the matching action is authorized.
 
+
+## §KPI-TEXT-DISPLAY-SSOT (ADR-351)
+Every surface that displays a KPI to a user MUST render its text through
+`resolveKpiText` (`KpiTitle` / `KpiTextBlocks`). Printing the raw `kpi_name`
+column is forbidden on display surfaces: for structured rows it shows the
+superseded pasted blob and makes a completed Performance Console edit look
+like it failed. `kpi_name` remains the SSOT **matching key** (Org KPI joins,
+history, reports, duplicate constraint) and is never rewritten implicitly —
+changing the stored name is the explicit, reversible `correct_kpis_range`
+operation. Any RPC that feeds a KPI display surface must return `kpi_title`,
+`kpi_description`, `kpi_formula` and `kpi_scoring_logic` alongside `kpi_name`.
