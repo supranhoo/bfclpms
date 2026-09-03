@@ -1855,13 +1855,15 @@ export function UnifiedScorecard({
                 );
               })}
               {sortedKpis.length === 0 && (
-                <NoKpisPeriodHint
-                  employeeId={employee.id}
-                  selectedPeriod={selectedPeriod}
-                  selectedYear={selectedYear}
-                  periodSelection={periodSelection}
-                  onPeriodSelectionChange={onPeriodSelectionChange}
-                />
+                <div className="md:col-span-2">
+                  <NoKpisPeriodHint
+                    employeeId={employee.id}
+                    selectedPeriod={selectedPeriod}
+                    selectedYear={selectedYear}
+                    periodSelection={periodSelection}
+                    onPeriodSelectionChange={onPeriodSelectionChange}
+                  />
+                </div>
               )}
             </div>
           ) : (
