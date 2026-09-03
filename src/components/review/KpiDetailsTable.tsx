@@ -333,11 +333,7 @@ export function KpiDetailsTable({
               <Clock className="h-3 w-3 mr-1" />
               Draft (Mgmt)
             </Badge>
-            {onView && (
-              <Button size="sm" variant="ghost" onClick={() => onView(kpi)} title="View KPI Details">
-                <Eye className="h-4 w-4" />
-              </Button>
-            )}
+            {renderViewButton(kpi)}
           </>
         ) : isTeamReviewPastStage ? (
           <>
