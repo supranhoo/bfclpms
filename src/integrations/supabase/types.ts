@@ -10167,6 +10167,9 @@ export type Database = {
       }
       menu_access_user_overrides: {
         Row: {
+          can_add: boolean
+          can_delete: boolean
+          can_update: boolean
           created_at: string | null
           granted_by: string | null
           id: string
@@ -10174,6 +10177,9 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          can_add?: boolean
+          can_delete?: boolean
+          can_update?: boolean
           created_at?: string | null
           granted_by?: string | null
           id?: string
@@ -10181,6 +10187,9 @@ export type Database = {
           user_id: string
         }
         Update: {
+          can_add?: boolean
+          can_delete?: boolean
+          can_update?: boolean
           created_at?: string | null
           granted_by?: string | null
           id?: string
