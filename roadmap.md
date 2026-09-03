@@ -28,10 +28,10 @@
 - [ ] Vocabulary drift guard test + POLICY/DOCUMENTATION sync
 
 ## ADR-348 — Team Reviews default "Pending action only" filter (in progress)
-- [ ] `actionableQueueFilter` predicate + unit tests
-- [ ] `queue` URL filter + pipeline step in EmployeeSelectorGrid (team view)
-- [ ] Toggle UI, "X of Y" chip, caught-up empty state, page reset, Clear All wiring
-- [ ] POLICY + DOCUMENTATION + ADR-348 sync
+- [x] `actionableQueueFilter` predicate + unit tests
+- [x] `queue` URL filter + pipeline step in EmployeeSelectorGrid (team view)
+- [x] Toggle UI, X-of-Y chip, caught-up empty state, page reset, Clear All wiring
+- [x] POLICY + DOCUMENTATION + ADR-348 sync
 
 ## Q — Structured KPI shown as plain text in View KPI Details
-- [ ] RCA: why structured formula/scoring render as raw text in the details dialog
+- [x] RCA + fix: canonical blob precedence over structured title (ADR-348b)
