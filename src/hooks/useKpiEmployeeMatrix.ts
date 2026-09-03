@@ -218,6 +218,8 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters, options?: { enabled
         kpi_id: string; employee_id: string; kra_name: string; kpi_name: string;
         description: string | null;
         weightage: number | null; category_id: string | null; category_name: string | null;
+        kpi_title?: string | null; kpi_description?: string | null;
+        kpi_formula?: string | null; kpi_scoring_logic?: string | null;
       }> = [];
       for (let i = 0; i < employeeIds.length; i += 500) {
         const batch = employeeIds.slice(i, i + 500);
