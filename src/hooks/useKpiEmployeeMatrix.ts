@@ -304,6 +304,12 @@ export function useKpiEmployeeMatrix(filters: MatrixFilters, options?: { enabled
 
         const row = kpiRowMap.get(rowKey)!;
 
+        // Enrich blocks from later variants when the first row had none
+        if (!row.description && text.description) row.description = text.description;
+        if (!row.kpiFormula && text.formula) row.kpiFormula = text.formula;
+        if (!row.kpiScoringLogic && text.scoringLogic) row.kpiScoringLogic = text.scoringLogic;
+
+
         // Calculate weighted score
         const sub = subMap.get(kpi.kpi_id);
         let cellValue: number | null = null;
