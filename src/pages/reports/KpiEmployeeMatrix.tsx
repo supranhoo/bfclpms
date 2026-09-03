@@ -237,7 +237,12 @@ export default function KpiEmployeeMatrix() {
         case 'sr_no':          return idx + 1;
         case 'category':       return row.categoryName;
         case 'kra':            return row.kraName;
-        case 'kpi':            return row.kpiName;
+        case 'kpi':               return row.kpiName;
+        // ADR-358 — structured text columns
+        case 'kpi_title':         return row.kpiTitle || row.kpiName;
+        case 'kpi_description':   return row.description;
+        case 'kpi_formula':       return row.kpiFormula;
+        case 'kpi_scoring_logic': return row.kpiScoringLogic;
         case 'weightage':      return row.weightage;
         case 'employee_count': return row.employeeCount;
         default:               return '';
