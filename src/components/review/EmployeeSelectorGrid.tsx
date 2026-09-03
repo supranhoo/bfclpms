@@ -16,8 +16,7 @@ import { resolvePendingStatuses, resolveReviewableStatuses, DEFAULT_WORKFLOW_STA
 import { matchesTeamTile, type TeamTile } from '@/lib/teamReviewTileFilter';
 import { resolveReviewerRelationship } from '@/lib/review/resolveReviewerRelationship';
 import { isActionableForReviewer, normalizeTeamQueueFilter, DEFAULT_TEAM_QUEUE_FILTER } from '@/lib/review/actionableQueueFilter';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
+import { TeamQueueToggle } from '@/components/review/TeamQueueToggle';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
