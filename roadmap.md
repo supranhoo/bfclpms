@@ -56,3 +56,9 @@
 - [x] Container-driven width, truncation + title, wrapping dropdown items
 - [x] Semantic badge token instead of hardcoded white
 - [x] Test src/test/qualitativeSelectLongLabel.test.tsx, ADR-352, DOCUMENTATION sync
+
+## ADR-352a - One KPI split across several legacy names (done)
+- [x] RCA: console rewrites structured text, not kpi_name; cards group on kpi_name
+- [x] Consumable cost open rows normalised with reversible audit record
+- [x] list_split_kpi_name_variants() detector + Normalise action on Standardization Health
+- [x] Tests, ADR-352a, DOCUMENTATION sync
