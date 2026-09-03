@@ -2397,40 +2397,6 @@ export function EmployeeSelectorGrid({
         onMoreFiltersOpen={() => setGradesEnabled(true)}
       />
 
-      {/* ADR-348 / POLICY §129 — Pending-action queue toggle (Team Reviews) */}
-      {viewLevel === 'team' && (
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-md border border-border bg-muted/40 px-3 py-2">
-          <div className="flex items-center gap-2">
-            <Switch
-              id="team-queue-toggle"
-              checked={isActionableQueueOn}
-              onCheckedChange={(checked) => setQueueFilter(checked ? 'actionable' : 'all')}
-              aria-label="Pending action only"
-            />
-            <Label htmlFor="team-queue-toggle" className="text-xs sm:text-sm font-medium cursor-pointer">
-              Pending action only
-            </Label>
-          </div>
-          {teamQueueCounts && (
-            <span className="text-xs text-muted-foreground">
-              {isActionableQueueOn ? (
-                <>
-                  Showing <span className="font-medium text-foreground">{teamQueueCounts.actionable}</span> of{' '}
-                  <span className="font-medium text-foreground">{teamQueueCounts.total}</span> team members with items
-                  awaiting your review — switch off to see your full downline
-                </>
-              ) : (
-                <>
-                  Showing all <span className="font-medium text-foreground">{teamQueueCounts.total}</span> mapped team
-                  members ({teamQueueCounts.actionable} with pending items)
-                </>
-              )}
-            </span>
-          )}
-        </div>
-      )}
-
-
       {/* Employees Grid */}
       <Card>
         <CardHeader className="pb-3 sm:pb-6">
