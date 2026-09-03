@@ -20,6 +20,9 @@ export interface MenuAccessUserOverride {
   menu_key: string;
   user_id: string;
   granted_by: string | null;
+  can_add: boolean;
+  can_update: boolean;
+  can_delete: boolean;
   created_at: string;
 }
 
