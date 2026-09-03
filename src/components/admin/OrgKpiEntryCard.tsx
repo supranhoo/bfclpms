@@ -775,7 +775,7 @@ export function OrgKpiEntryCard({ data, reviewPeriod, reviewYear, isAdmin, gover
         {/* HEADER — KPI identity + metadata */}
         <div className="space-y-1">
           {/* ADR-351 — structured rows render title + labelled blocks; legacy rows unchanged. */}
-          <KpiTitle kpi={kpiTextRow} as="h3" className="text-sm font-semibold break-words" />
+          <KpiTitle kpi={kpiTextRow} as="h3" legacyFullText className="text-sm font-semibold break-words" />
           <KpiTextBlocks kpi={kpiTextRow} collapsible hideLegacy className="break-words" />
           <p className="text-xs text-muted-foreground break-words">KRA: {data.kraName}</p>
 
