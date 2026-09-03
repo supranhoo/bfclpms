@@ -509,7 +509,7 @@ export function AuditScorecard({
         if (kpiError) { toast({ title: 'Failed to update status', description: kpiError.message, variant: 'destructive' }); return; }
         if (user?.id) { await supabase.from('kpi_audit_logs').insert({ kpi_id: selectedKpi.id, action: 'AUDITOR_NA_OVERRIDDEN', performed_by: user.id, new_value: { override_remarks: overrideNaRemarks, score: auditorScore }, metadata: { overridden_at: new Date().toISOString() } }); }
         queryClient.invalidateQueries({ queryKey: ['kpis'] }); queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
-        toast({ title: 'N/A overridden — KPI scored and forwarded' }); setReviewSheetOpen(false); return;
+        toast({ title: 'N/A overridden — KPI scored and forwarded' }); setStatusFilter(null); setReviewSheetOpen(false); return;
       }
       if (!naConfirmed) return;
       if (user?.id) {
@@ -526,7 +526,7 @@ export function AuditScorecard({
       const { error: kpiError } = await supabase.from('kpis').update({ status: newStatus as any }).eq('id', selectedKpi.id);
       if (kpiError) { toast({ title: 'Failed to process N/A KPI', description: kpiError.message, variant: 'destructive' }); return; }
       queryClient.invalidateQueries({ queryKey: ['kpis'] }); queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
-      toast({ title: approve ? 'N/A KPI forwarded to Management' : 'N/A KPI confirmed' }); setReviewSheetOpen(false); return;
+      toast({ title: approve ? 'N/A KPI forwarded to Management' : 'N/A KPI confirmed' }); setStatusFilter(null); setReviewSheetOpen(false); return;
     }
     
     // Reviewer-initiated N/A flow
@@ -574,6 +574,7 @@ export function AuditScorecard({
       queryClient.invalidateQueries({ queryKey: ['kpis'] });
       queryClient.invalidateQueries({ queryKey: ['review-submissions'] });
       toast({ title: approve ? 'Marked N/A & forwarded to Management' : 'Marked as N/A' });
+      setStatusFilter(null);
       setReviewSheetOpen(false);
       return;
     }
