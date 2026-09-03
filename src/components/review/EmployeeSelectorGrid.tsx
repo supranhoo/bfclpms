@@ -1129,6 +1129,18 @@ export function EmployeeSelectorGrid({
     return count;
   }, [statusFilter, totalPages, displayMembers, completedFilterForView, getEmployeeKpiStats, viewLevel]);
 
+  // ADR-348 — "X of Y members have items pending" chip counts for the queue
+  // toggle. Computed over the demographic-filtered roster (independent of the
+  // status pipeline) so the chip stays stable while tiles are clicked.
+  const teamQueueCounts = useMemo(() => {
+    if (viewLevel !== 'team' || !demographicFilteredMembers) return null;
+    let actionable = 0;
+    for (const m of demographicFilteredMembers) {
+      if (isActionableForReviewer(getEmployeeKpiStats(m.id, m.relationship))) actionable++;
+    }
+    return { actionable, total: demographicFilteredMembers.length };
+  }, [viewLevel, demographicFilteredMembers, periodKpis, workflowMap]);
+
   // Reset to page 1 when filters/sort/view change so users never land on an empty page.
   useEffect(() => {
     if (currentPage !== 1) setPage('1');
@@ -2375,6 +2387,40 @@ export function EmployeeSelectorGrid({
         statusOptions={isExploreMode ? [] : statusOptions}
         onMoreFiltersOpen={() => setGradesEnabled(true)}
       />
+
+      {/* ADR-348 / POLICY §129 — Pending-action queue toggle (Team Reviews) */}
+      {viewLevel === 'team' && (
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 rounded-md border border-border bg-muted/40 px-3 py-2">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="team-queue-toggle"
+              checked={isActionableQueueOn}
+              onCheckedChange={(checked) => setQueueFilter(checked ? 'actionable' : 'all')}
+              aria-label="Pending action only"
+            />
+            <Label htmlFor="team-queue-toggle" className="text-xs sm:text-sm font-medium cursor-pointer">
+              Pending action only
+            </Label>
+          </div>
+          {teamQueueCounts && (
+            <span className="text-xs text-muted-foreground">
+              {isActionableQueueOn ? (
+                <>
+                  Showing <span className="font-medium text-foreground">{teamQueueCounts.actionable}</span> of{' '}
+                  <span className="font-medium text-foreground">{teamQueueCounts.total}</span> team members with items
+                  awaiting your review — switch off to see your full downline
+                </>
+              ) : (
+                <>
+                  Showing all <span className="font-medium text-foreground">{teamQueueCounts.total}</span> mapped team
+                  members ({teamQueueCounts.actionable} with pending items)
+                </>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+
 
       {/* Employees Grid */}
       <Card>
