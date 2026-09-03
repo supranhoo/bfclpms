@@ -193,6 +193,8 @@ export function HealthCoverageTab() {
       {/* ADR-352a — one KPI split across several legacy names */}
       <SplitNameVariantsCard />
 
+      <CrossCategorySplitsCard />
+
       {/* Unlinked queue */}
       <Card>
         <CardHeader>
