@@ -2233,8 +2233,23 @@ export function EmployeeSelectorGrid({
         />
       )}
 
+      {/* ADR-348 fix — the "Pending action only" toggle must be visible to every
+          reviewer on Team Reviews, not just full-access roles. Without it the
+          default actionable filter silently hid the rest of the mapped downline. */}
+      {!isExploreMode && viewLevel === 'team' && !isFullAccess && (
+        <div className="-mt-2 flex flex-wrap items-center justify-end gap-3">
+          <TeamQueueToggle
+            checked={isActionableQueueOn}
+            onCheckedChange={(checked) => setQueueFilter(checked ? 'actionable' : 'all')}
+            actionableCount={teamQueueCounts?.actionable}
+            totalCount={teamQueueCounts?.total}
+          />
+        </div>
+      )}
+
       {/* v2.64.9 — Roster resolution diagnostic (admin / full-access only) */}
       {(isFullAccess && ((requiredStage && rosterMeta) || true)) && (
+
         <div className="-mt-2 flex flex-wrap items-center justify-between gap-2">
           {requiredStage && rosterMeta ? (
             <div className="text-xs text-muted-foreground flex items-center gap-2">
