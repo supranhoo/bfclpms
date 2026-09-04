@@ -15,7 +15,7 @@ import { useOrgKpiPeriodCounts } from '@/hooks/useOrgKpiPeriodCounts';
 import { resolvePendingStatuses, resolveReviewableStatuses, DEFAULT_WORKFLOW_STAGES } from '@/lib/workflowEngine';
 import { matchesTeamTile, type TeamTile } from '@/lib/teamReviewTileFilter';
 import { resolveReviewerRelationship } from '@/lib/review/resolveReviewerRelationship';
-import { isActionableForReviewer, normalizeTeamQueueFilter, DEFAULT_TEAM_QUEUE_FILTER } from '@/lib/review/actionableQueueFilter';
+import { isActionableForReviewer, hasAssignedKras, normalizeTeamQueueFilter, DEFAULT_TEAM_QUEUE_FILTER } from '@/lib/review/actionableQueueFilter';
 import { TeamQueueToggle } from '@/components/review/TeamQueueToggle';
 import { getScoreBadgeClass } from '@/lib/reviewConstants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -190,6 +190,7 @@ export function EmployeeSelectorGrid({
   const [queueFilterRaw, setQueueFilter] = useUrlFilterState('queue', DEFAULT_TEAM_QUEUE_FILTER);
   const queueFilter = normalizeTeamQueueFilter(queueFilterRaw);
   const isActionableQueueOn = viewLevel === 'team' && queueFilter === 'actionable';
+  const isAssignedQueueOn = viewLevel === 'team' && queueFilter === 'assigned';
   const isFullAccess = role === 'admin' || role === 'auditor' || role === 'management' || role === 'hr_pms';
   const isExplorerCapable = viewLevel === 'audit' || viewLevel === 'management';
   const exploreParam = searchParams.get('explore');
@@ -1010,9 +1011,15 @@ export function EmployeeSelectorGrid({
     // Composes AFTER the status pipeline so tile/status picks still work within
     // the actionable subset. `badge1` is the relationship-aware pending count
     // (direct → self_review, indirect → skip-reviewable, functional → FM stage).
+    // ADR-359 — default mode keeps every member who HAS KRAs for the period,
+    // even if all items sit at KRA Set. Only zero-KRA members are hidden.
     if (isActionableQueueOn) {
       filtered = filtered?.filter(m =>
         isActionableForReviewer(getEmployeeKpiStats(m.id, m.relationship))
+      );
+    } else if (isAssignedQueueOn) {
+      filtered = filtered?.filter(m =>
+        hasAssignedKras(getEmployeeKpiStats(m.id, m.relationship))
       );
     }
 
@@ -1134,10 +1141,13 @@ export function EmployeeSelectorGrid({
   const teamQueueCounts = useMemo(() => {
     if (viewLevel !== 'team' || !demographicFilteredMembers) return null;
     let actionable = 0;
+    let assigned = 0;
     for (const m of demographicFilteredMembers) {
-      if (isActionableForReviewer(getEmployeeKpiStats(m.id, m.relationship))) actionable++;
+      const s = getEmployeeKpiStats(m.id, m.relationship);
+      if (isActionableForReviewer(s)) actionable++;
+      if (hasAssignedKras(s)) assigned++;
     }
-    return { actionable, total: demographicFilteredMembers.length };
+    return { actionable, assigned, total: demographicFilteredMembers.length };
   }, [viewLevel, demographicFilteredMembers, periodKpis, workflowMap]);
 
   // Reset to page 1 when filters/sort/view change so users never land on an empty page.
@@ -2239,9 +2249,10 @@ export function EmployeeSelectorGrid({
       {!isExploreMode && viewLevel === 'team' && !isFullAccess && (
         <div className="-mt-2 flex flex-wrap items-center justify-end gap-3">
           <TeamQueueToggle
-            checked={isActionableQueueOn}
-            onCheckedChange={(checked) => setQueueFilter(checked ? 'actionable' : 'all')}
+            value={queueFilter}
+            onValueChange={(v) => setQueueFilter(v)}
             actionableCount={teamQueueCounts?.actionable}
+            assignedCount={teamQueueCounts?.assigned}
             totalCount={teamQueueCounts?.total}
           />
         </div>
@@ -2271,9 +2282,10 @@ export function EmployeeSelectorGrid({
               />
               {viewLevel === 'team' && (
                 <TeamQueueToggle
-                  checked={isActionableQueueOn}
-                  onCheckedChange={(checked) => setQueueFilter(checked ? 'actionable' : 'all')}
+                  value={queueFilter}
+                  onValueChange={(v) => setQueueFilter(v)}
                   actionableCount={teamQueueCounts?.actionable}
+                  assignedCount={teamQueueCounts?.assigned}
                   totalCount={teamQueueCounts?.total}
                 />
               )}
@@ -2604,6 +2616,23 @@ export function EmployeeSelectorGrid({
             // ADR-348 — the actionable queue legitimately resolves to zero when
             // every review is cleared. Say so explicitly and offer the full
             // downline instead of the misleading "No team members found".
+            if (isAssignedQueueOn && (teamQueueCounts?.total ?? 0) > 0 && !hasActiveFilters) {
+              return (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Users className="h-12 w-12 mx-auto mb-4 opacity-40" />
+                  <p className="font-medium text-foreground">No KRAs assigned this period</p>
+                  <p className="text-sm mt-1 max-w-md mx-auto">
+                    None of your mapped team members have KRAs/KPIs for the selected period.
+                  </p>
+                  <div className="mt-4">
+                    <Button variant="outline" size="sm" onClick={() => setQueueFilter('all')}>
+                      <Users className="h-4 w-4 mr-1.5" />
+                      Show all team members
+                    </Button>
+                  </div>
+                </div>
+              );
+            }
             if (isActionableQueueOn && (teamQueueCounts?.total ?? 0) > 0 && !hasActiveFilters) {
               return (
                 <div className="text-center py-12 text-muted-foreground">
