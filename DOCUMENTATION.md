@@ -1,6 +1,8 @@
 # Performance Management System (PMS) - Documentation
 
-> **Last Updated:** 2026-09-03 · **Version:** v2.66.354
+> **Last Updated:** 2026-09-04 · **Version:** v2.66.359
+>
+> **Version:** 2.66.359 — **Team Reviews shows everyone who has KRAs (ADR-359, 2026-09-04).** RCA: the ADR-348 default filter kept only members with `badge1 > 0`, so employees whose KRAs were all at KRA Set vanished from a reviewer's team list. CAPA: the `queue` view now has three modes — `assigned` (default: any member with KPIs for the period, any stage), `actionable` (legacy pending-only worklist) and `all` (includes zero-KRA members) — with a three-way segmented control, per-mode counts and a dedicated "No KRAs assigned this period" empty state. Presentation only; no schema/RPC/RLS/scoring change. Regression: `src/tests/actionableQueueFilter.test.ts` (6). See `docs/adr/ADR-359.md`.
 >
 > **Version:** 2.66.353 — **One KPI shown as several cards on Org KPI Data Entry (ADR-352a, 2026-09-03).** RCA: a Performance Console definition edit rewrites the structured columns but never the legacy `kpi_name` join key (ADR-334/337), while Org KPI Data Entry groups on `category_id + kra_name + kpi_name`; *Consumable cost* was stored under three different legacy names, so it rendered as three identical single-employee cards. CAPA: the open Aug/Sep 2026 rows were renamed to the canonical `Consumable cost.:` with a reversible `rename_kpis_range` audit record (locked and pre-May-2026 rows untouched, POLICY §88I), and a new read-only `list_split_kpi_name_variants()` powers a "Same KPI, Several Legacy Names" card on KPI Standardization -> Health with a one-click Normalise action running the existing `correct_kpis_range` engine. Regression: `src/test/splitKpiNameVariants.test.ts` (3). See `docs/adr/ADR-352a.md`.
 >
