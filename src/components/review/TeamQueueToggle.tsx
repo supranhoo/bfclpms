@@ -1,51 +1,65 @@
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import type { TeamQueueFilter } from '@/lib/review/actionableQueueFilter';
 
 interface TeamQueueToggleProps {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
+  value: TeamQueueFilter;
+  onValueChange: (value: TeamQueueFilter) => void;
   actionableCount?: number;
+  assignedCount?: number;
   totalCount?: number;
 }
 
+const MODES: { key: TeamQueueFilter; label: string }[] = [
+  { key: 'assigned', label: 'With KRAs' },
+  { key: 'actionable', label: 'Pending action' },
+  { key: 'all', label: 'All' },
+];
+
 /**
- * ADR-348 / POLICY §129 — Team Reviews queue toggle.
- * Switches between the default "Pending action only" actionable queue
- * and the full mapped downline.
+ * ADR-348 / ADR-359 — POLICY §129 Team Reviews queue selector.
+ * Default view shows every team member who has KRAs for the period, even when
+ * nothing is pending with this reviewer.
  */
 export function TeamQueueToggle({
-  checked,
-  onCheckedChange,
+  value,
+  onValueChange,
   actionableCount,
+  assignedCount,
   totalCount,
 }: TeamQueueToggleProps) {
+  const shown =
+    value === 'all' ? totalCount : value === 'actionable' ? actionableCount : assignedCount;
+
   return (
     <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-      <div className="flex items-center gap-2">
-        <Switch
-          id="team-queue-toggle"
-          checked={checked}
-          onCheckedChange={onCheckedChange}
-          aria-label="Pending action only"
-        />
-        <Label htmlFor="team-queue-toggle" className="text-xs sm:text-sm font-medium cursor-pointer">
-          Pending action only
-        </Label>
+      <div
+        role="group"
+        aria-label="Team list view"
+        className="inline-flex items-center rounded-md border bg-muted/40 p-0.5"
+      >
+        {MODES.map((m) => (
+          <Button
+            key={m.key}
+            type="button"
+            size="sm"
+            variant="ghost"
+            aria-pressed={value === m.key}
+            onClick={() => onValueChange(m.key)}
+            className={cn(
+              'h-8 px-2.5 text-xs font-medium',
+              value === m.key && 'bg-background shadow-sm text-foreground',
+            )}
+          >
+            {m.label}
+          </Button>
+        ))}
       </div>
-      {typeof actionableCount === 'number' && typeof totalCount === 'number' && (
+      {typeof shown === 'number' && typeof totalCount === 'number' && (
         <span className="text-xs text-muted-foreground">
-          {checked ? (
-            <>
-              Showing <span className="font-medium text-foreground">{actionableCount}</span> of{' '}
-              <span className="font-medium text-foreground">{totalCount}</span> team members with items
-              awaiting your review — switch off to see your full downline
-            </>
-          ) : (
-            <>
-              Showing all <span className="font-medium text-foreground">{totalCount}</span> mapped team
-              members ({actionableCount} with pending items)
-            </>
-          )}
+          Showing <span className="font-medium text-foreground">{shown}</span> of{' '}
+          <span className="font-medium text-foreground">{totalCount}</span> mapped members
+          {typeof actionableCount === 'number' && ` · ${actionableCount} pending your action`}
         </span>
       )}
     </div>
