@@ -7292,14 +7292,16 @@ Definition drift remains surfaced by the "N variants / Align" badges.
 ### §CONSOLE-FREQUENCY-DUE (amended, ADR-347)
 A multi-month KPI is locked in every month of its cycle except the terminal month, for ALL anchors — including anchors not present in the hardcoded cycle-option lists. Client-side lock resolution must mirror the DB trigger math for the whole 12-month rotation, never just the first window.
 
-## §129 — Team Reviews default queue visibility (ADR-348)
-The Team Reviews grid defaults to "Pending action only": only team members with
-at least one KPI pending at a stage the signed-in reviewer personally acts on
-are shown (direct → manager check, indirect → skip-level, functional → FM
-stage). Switching the filter off reveals the full mapped downline. The default
-is the canonical landing state; "show all" is an explicit, URL-persisted opt-out
-(`?queue=all`). Tile counters always reflect the full roster regardless of the
-toggle.
+## §129 — Team Reviews default queue visibility (ADR-348, amended ADR-359)
+The Team Reviews grid has three URL-persisted view modes (`?queue=`):
+`assigned` (DEFAULT) shows every mapped member holding at least one KPI for the
+period, whatever stage it sits at — KRA Set members stay visible; `actionable`
+shows only members with items pending at a stage the signed-in reviewer
+personally acts on (direct → manager check, indirect → skip-level, functional →
+FM stage); `all` shows the full mapped downline including members with no KRAs.
+Only members with zero KRAs are hidden by the default mode. Tile counters always
+reflect the full roster regardless of the selected mode.
+
 
 ### §KPI-HEADER-DISPLAY (amended, ADR-348b)
 For structured KPI rows the header paragraph renders the structured title only.
