@@ -45,12 +45,13 @@ export function matchesTeamTile(tile: TeamTile, ctx: TileContext): boolean {
 
   switch (tile) {
     case 'pending_kra_set':
-      // KRA-set is the universal first stage; allow direct managers always,
-      // and full-access roles when the employee has a self_review stage.
+      // ADR-360 — KRA Set means "waiting on the employee". Any reviewer who can
+      // see the person at all (direct, skip-level, functional, or full access)
+      // must see them under this tile; no stage requirement applies because
+      // kra_set is the universal first state.
       if (status !== 'kra_set') return false;
-      if (ctx.isDirect) return true;
-      if (ctx.isFullAccess && ctx.stages.includes('self_review')) return true;
-      return false;
+      return ctx.isDirect || ctx.isIndirect || !!ctx.isFunctional || ctx.isFullAccess;
+
 
     case 'pending_direct':
       if (status !== 'self_review') return false;
