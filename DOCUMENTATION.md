@@ -9773,3 +9773,15 @@ tooltip with labelled Description / Formula / Scoring Logic blocks.
 No schema, RLS, grant, scoring, workflow or write-path change.
 ADR: `docs/adr/ADR-358.md`. Policy: §KPI-TEXT-DISPLAY-SSOT (ADR-358 addendum).
 Tests: `src/tests/kpiEmployeeMatrixStructuredText.test.ts` (6/6 green).
+
+## v2.66.362 — Previous-month default on data-entry surfaces (ADR-362)
+New helper `getPreviousMonthPeriod(date?)` in `src/lib/previousPeriod.ts`
+returns the prior calendar month (January rolls to December of the prior year).
+Team Reviews (`useDefaultPeriodSelection` in `ReviewPeriodSelectorEnhanced.tsx`)
+and Org KPI Data Entry (`OrgKpiDataEntry.tsx`) now default to the previous
+month, matching how teams enter data and preventing accidental current-month
+submissions. Shared `useReviewPeriodDefaults` untouched — Audit Logs, Org KPI
+Overview and Org KPI Audit Review keep current-month defaults. URL deep links
+still override. No schema, RLS, RPC or workflow change.
+ADR: `docs/adr/ADR-362.md`. Policy: §133.
+Tests: `src/tests/previousPeriod.test.ts` (4/4 green).

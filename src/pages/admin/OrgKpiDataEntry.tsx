@@ -24,7 +24,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TableSkeleton } from '@/components/ui/LoadingSkeletons';
-import { ReviewPeriodSelector, useReviewPeriodDefaults } from '@/components/ui/ReviewPeriodSelector';
+import { ReviewPeriodSelector } from '@/components/ui/ReviewPeriodSelector';
+import { getPreviousMonthPeriod } from '@/lib/previousPeriod';
 import { OrgKpiProgressBar } from '@/components/admin/OrgKpiProgressBar';
 import { OrgKpiEntryCard, OrgKpiCardData } from '@/components/admin/OrgKpiEntryCard';
 import { OrgKpiBulkExport } from '@/components/admin/OrgKpiBulkExport';
@@ -62,7 +63,10 @@ export default function OrgKpiDataEntry() {
   const { profile, role, isAdminMode, naturalRole, toggleAdminMode, isReady, loading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { defaultPeriod, defaultYear } = useReviewPeriodDefaults();
+  // ADR-362 — default to the PREVIOUS month (teams enter data for the month
+  // just ended). Shared useReviewPeriodDefaults intentionally untouched so
+  // report/audit surfaces keep current-month defaults.
+  const [{ month: defaultPeriod, year: defaultYear }] = useState(() => getPreviousMonthPeriod());
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
   const [selectedYear, setSelectedYear] = useState(defaultYear);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');

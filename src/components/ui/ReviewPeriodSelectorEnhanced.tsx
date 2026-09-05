@@ -1,9 +1,10 @@
 import { useMemo, useCallback } from 'react';
-import { format } from 'date-fns';
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { getPreviousMonthPeriod } from '@/lib/previousPeriod';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -356,14 +357,16 @@ export function ReviewPeriodSelectorEnhanced({
  * Hook to get default period selection
  */
 export function useDefaultPeriodSelection(): PeriodSelection {
-  const currentMonth = format(new Date(), 'MMMM');
-  const currentYear = new Date().getFullYear();
-  
+  // ADR-362 — data-entry surfaces default to the PREVIOUS month; teams always
+  // enter data for the month just ended, so defaulting to the current month
+  // caused accidental current-month submissions.
+  const { month, year } = getPreviousMonthPeriod();
+
   return {
     mode: 'single',
-    selectedMonth: currentMonth,
-    selectedYear: currentYear,
-    months: [currentMonth],
-    periodRanges: [{ month: currentMonth, year: currentYear }],
+    selectedMonth: month,
+    selectedYear: year,
+    months: [month],
+    periodRanges: [{ month, year }],
   };
 }

@@ -7402,3 +7402,12 @@ The employee header on a scorecard must expose contact details through the share
 edit dialog (`/admin/users?edit=<id>`); duplicating master-field editing outside
 User Management is forbidden. Adding a contact attribute means widening the shared
 card, not the call sites.
+
+## §133 — Period default convention (ADR-362)
+Data-entry surfaces (Team Reviews, Org KPI Data Entry) MUST default their
+period selector to the previous calendar month via `getPreviousMonthPeriod()`
+(`src/lib/previousPeriod.ts`), including the January → prior-year December
+rollover. Report/audit surfaces (Audit Logs, Org KPI Overview, Org KPI Audit
+Review) MUST keep current-month defaults; the shared `useReviewPeriodDefaults`
+hook is reserved for them and must not be switched to previous-month. URL
+`?period=&year=` deep links always override any default.
