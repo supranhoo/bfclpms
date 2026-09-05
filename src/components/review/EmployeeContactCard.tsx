@@ -3,7 +3,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Mail, Phone, Copy, Check, ArrowRight } from 'lucide-react';
+import { Mail, Phone, Copy, Check, ArrowRight, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatEmployeeName } from '@/lib/utils';
 
@@ -19,9 +19,13 @@ interface EmployeeContactCardProps {
     employee_code?: string | null;
   };
   departmentName?: string | null;
-  onViewKpis: () => void;
+  /** Optional — when omitted the "View KPIs" action is hidden (e.g. already on the scorecard). */
+  onViewKpis?: () => void;
+  /** Optional admin shortcut — opens the existing Employee Master edit dialog. */
+  onEdit?: () => void;
   children: React.ReactNode;
 }
+
 
 function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
