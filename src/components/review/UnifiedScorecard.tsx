@@ -1605,20 +1605,40 @@ export function UnifiedScorecard({
                 {getInitials(employee.full_name)}
               </AvatarFallback>
             </Avatar>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg sm:text-xl font-bold truncate">{employee.full_name || employee.email}</h1>
-                {employee.employee_code && (
-                  <span className="text-xs sm:text-sm text-muted-foreground">({employee.employee_code})</span>
-                )}
-              </div>
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                {employee.designation || 'Employee'}
-                {employee.departments?.name && (
-                  <span><span className="text-border"> | </span>{employee.departments.name}</span>
-                )}
-              </p>
-            </div>
+            <EmployeeContactCard
+              employee={{
+                id: employee.id,
+                full_name: employee.full_name,
+                email: employee.email,
+                designation: employee.designation,
+                avatar_url: employee.avatar_url,
+                department_id: employee.department_id,
+                employee_code: employee.employee_code,
+                mobile_number: (employee as any).mobile_number ?? null,
+              }}
+              departmentName={employee.departments?.name}
+              onEdit={isAdmin ? () => navigate(`/admin/users?edit=${employee.id}`) : undefined}
+            >
+              <button
+                type="button"
+                className="min-w-0 text-left min-h-[44px] rounded-md px-1 -mx-1 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+                title="Click to view contact info"
+              >
+                <div className="flex items-center gap-2">
+                  <h1 className="text-lg sm:text-xl font-bold truncate">{employee.full_name || employee.email}</h1>
+                  {employee.employee_code && (
+                    <span className="text-xs sm:text-sm text-muted-foreground">({employee.employee_code})</span>
+                  )}
+                </div>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                  {employee.designation || 'Employee'}
+                  {employee.departments?.name && (
+                    <span><span className="text-border"> | </span>{employee.departments.name}</span>
+                  )}
+                </p>
+              </button>
+            </EmployeeContactCard>
+
           </div>
         )}
 
