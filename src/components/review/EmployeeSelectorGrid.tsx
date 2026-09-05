@@ -1013,15 +1013,19 @@ export function EmployeeSelectorGrid({
     // (direct → self_review, indirect → skip-reviewable, functional → FM stage).
     // ADR-359 — default mode keeps every member who HAS KRAs for the period,
     // even if all items sit at KRA Set. Only zero-KRA members are hidden.
-    if (isActionableQueueOn) {
+    // ADR-360 — a tile/status pick already defines the subset; the queue mode
+    // must not subtract from it (that produced "KRA Set 23" + empty list).
+    const tileSelected = viewLevel === 'team' && statusFilter !== 'all';
+    if (!tileSelected && isActionableQueueOn) {
       filtered = filtered?.filter(m =>
         isActionableForReviewer(getEmployeeKpiStats(m.id, m.relationship))
       );
-    } else if (isAssignedQueueOn) {
+    } else if (!tileSelected && isAssignedQueueOn) {
       filtered = filtered?.filter(m =>
         hasAssignedKras(getEmployeeKpiStats(m.id, m.relationship))
       );
     }
+
 
     // Auto-sort by urgency: most pending KPIs first
     filtered?.sort((a, b) => {
