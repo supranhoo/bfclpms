@@ -237,6 +237,8 @@ export function UnifiedScorecard({
   const isMobile = isMobileRaw || isTablet;
   const { user, effectiveRole } = useAuth();
   const isAdmin = effectiveRole === 'admin';
+  const navigate = useNavigate();
+
   const [zeroScoreDialogOpen, setZeroScoreDialogOpen] = useState(false);
   const [rolloverDialogOpen, setRolloverDialogOpen] = useState(false);
   const [copyKrasOpen, setCopyKrasOpen] = useState(false);
