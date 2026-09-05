@@ -113,23 +113,39 @@ export function EmployeeContactCard({ employee, departmentName, onViewKpis, onEd
         <Separator />
 
         {/* Actions */}
-        <div className="p-3 flex items-center justify-between gap-2">
+        <div className="p-3 flex items-center justify-between gap-2 flex-wrap">
           <div className="flex gap-1.5">
             <CopyButton value={employee.email} label="Email" />
             {employee.mobile_number && (
               <CopyButton value={employee.mobile_number} label="Mobile" />
             )}
           </div>
-          <Button
-            size="sm"
-            variant="default"
-            className="h-7 text-xs gap-1.5"
-            onClick={(e) => { e.stopPropagation(); onViewKpis(); }}
-          >
-            View KPIs
-            <ArrowRight className="h-3 w-3" />
-          </Button>
+          <div className="flex gap-1.5">
+            {onEdit && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1.5"
+                onClick={(e) => { e.stopPropagation(); onEdit(); }}
+              >
+                <Pencil className="h-3 w-3" />
+                Edit
+              </Button>
+            )}
+            {onViewKpis && (
+              <Button
+                size="sm"
+                variant="default"
+                className="h-7 text-xs gap-1.5"
+                onClick={(e) => { e.stopPropagation(); onViewKpis(); }}
+              >
+                View KPIs
+                <ArrowRight className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
         </div>
+
       </PopoverContent>
     </Popover>
   );
