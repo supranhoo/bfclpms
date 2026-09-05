@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 
 vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: vi.fn() }) }));
@@ -18,7 +17,7 @@ const employee = {
 
 async function open(ui: React.ReactElement) {
   render(ui);
-  await userEvent.click(screen.getByRole('button', { name: /Tanaaz/i }));
+  fireEvent.click(screen.getByRole('button', { name: /Tanaaz/i }));
 }
 
 describe('ADR-361 employee header contact card', () => {
@@ -49,7 +48,7 @@ describe('ADR-361 employee header contact card', () => {
         <button type="button">Tanaaz</button>
       </EmployeeContactCard>,
     );
-    await userEvent.click(await screen.findByRole('button', { name: /^Edit$/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Edit$/ }));
     expect(onEdit).toHaveBeenCalledTimes(1);
   });
 
