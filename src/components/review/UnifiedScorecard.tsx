@@ -129,7 +129,10 @@ interface EmployeeProfile {
   employee_code: string | null;
   avatar_url: string | null;
   department_id: string | null;
+  /** Optional — powers the header contact popover (ADR-361). */
+  mobile_number?: string | null;
   departments?: { id: string; name: string; code: string | null } | null;
+
 }
 
 // Import PeriodSelection type
