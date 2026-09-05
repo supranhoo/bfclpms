@@ -1168,65 +1168,27 @@ export function EmployeeSelectorGrid({
     const directIds = directIdSet;
 
     if (viewLevel === 'team') {
-      // Merged view: separate direct pending, skip-level pending, and reviewed counts
+      // ADR-360 — tile counters and the list filter share ONE predicate
+      // (`matchesTeamTile`), so a tile can never count a KPI the grid then
+      // hides. Previously the counter used its own inline rules, which is how
+      // "KRA Set 23" could coexist with an empty list.
       let directPending = 0, skipPending = 0, reviewed = 0, kraSetPending = 0, functionalPending = 0;
       relevantKpis.forEach(k => {
-        const isIndirect = skipIds.has(k.employee_id);
-        const isDirect = directIds.has(k.employee_id);
-        const isFunctional = functionalIdSet.has(k.employee_id);
-        // ADR-206 — functional pending is counted independently of the
-        // direct/skip branches below so an FM always sees their queue.
-        if (isFunctional || isFullAccess) {
-          const stages = getStages(k.employee_id);
-          if (stages.includes('functional_manager_check')) {
-            const fmReviewable = resolveReviewableStatuses('functional_manager', stages);
-            if (fmReviewable.includes(k.status || '')) functionalPending++;
-          }
-        }
-        if (isFunctional && !isDirect && !isIndirect) {
-          const stages = getStages(k.employee_id);
-          const fmIdx = stages.indexOf('functional_manager_check');
-          if (fmIdx >= 0 && stages.slice(fmIdx).includes(k.status || '')) reviewed++;
-          return;
-        }
-        // BUG-050: Full-access roles (admin/auditor/management/hr_pms) have no
-        // direct or skip-level reports — directIds/skipIds are empty — so the
-        // membership-based branch below leaves all three tiles at 0 even when
-        // the visible roster has hundreds of pending/reviewed KPIs. For these
-        // roles, classify each KPI by its resolved workflow position instead,
-        // matching the per-employee badge logic so tiles and card badges agree.
-        if (isFullAccess && !isDirect && !isIndirect) {
-          const status = k.status || '';
-          if (status === 'kra_set') {
-            kraSetPending++;
-          } else if (status === 'self_review') {
-            directPending++;
-          } else if (hasResolvedWorkflow(k.employee_id)) {
-            const stages = getStages(k.employee_id);
-            const skipReviewable = resolveReviewableStatuses('skip_level', stages);
-            if (skipReviewable.includes(status)) {
-              skipPending++;
-            } else if (!['kra_set', 'self_review'].includes(status)) {
-              reviewed++;
-            }
-          } else if (!['kra_set', 'self_review'].includes(status)) {
-            reviewed++;
-          }
-        } else if (isIndirect) {
-          const stages = getStages(k.employee_id);
-          const reviewable = resolveReviewableStatuses('skip_level', stages);
-          if (reviewable.includes(k.status || '')) skipPending++;
-          else {
-            const slIdx = stages.indexOf('skip_level_check');
-            if (slIdx >= 0 && stages.slice(slIdx).includes(k.status || '')) reviewed++;
-          }
-        } else if (isDirect) {
-          if (k.status === 'kra_set') kraSetPending++;
-          else if (k.status === 'self_review') directPending++;
-          else if (!['kra_set', 'self_review'].includes(k.status || '')) reviewed++;
-        }
-        // Employees with no reporting relationship (undefined) are excluded from direct/skip counts
+        const ctx = {
+          kpiStatus: k.status,
+          stages: getStages(k.employee_id),
+          isDirect: directIds.has(k.employee_id),
+          isIndirect: skipIds.has(k.employee_id),
+          isFunctional: functionalIdSet.has(k.employee_id),
+          isFullAccess,
+        };
+        if (matchesTeamTile('pending_kra_set', ctx)) kraSetPending++;
+        if (matchesTeamTile('pending_direct', ctx)) directPending++;
+        if (matchesTeamTile('pending_skip', ctx)) skipPending++;
+        if (matchesTeamTile('pending_functional', ctx)) functionalPending++;
+        if (matchesTeamTile('reviewed', ctx)) reviewed++;
       });
+
       return {
         totalEmployees: demographicFilteredMembers.length,
         stat0: kraSetPending,
