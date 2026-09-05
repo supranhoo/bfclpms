@@ -111,3 +111,10 @@
 - [x] KRA Set tile relationship-inclusive; no `self_review` stage requirement
 - [x] Queue mode skipped while a tile/status filter is active + dedicated empty state
 - [x] Tests (`teamReviewTileFilter.test.ts`), ADR-360, POLICY §129b, DOCUMENTATION
+
+## ADR-361 — Employee header contact card + admin Edit shortcut (done)
+- [x] Reuse `EmployeeContactCard` in the scorecard header (optional View KPIs)
+- [x] Admin-only Edit action deep-linking to `/admin/users?edit=<id>`
+- [x] `?edit=` deep link opens the existing Employee Master dialog
+- [x] Tests + ADR-361 + POLICY §132 + DOCUMENTATION
+
