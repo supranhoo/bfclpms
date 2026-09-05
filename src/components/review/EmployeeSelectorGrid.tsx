@@ -2579,6 +2579,28 @@ export function EmployeeSelectorGrid({
             const hasActiveFilters =
               !!searchQuery || !!selectedDepartment || !!selectedDesignation ||
               !!selectedGrade || !!selectedManager || statusFilter !== 'all';
+            // ADR-360 — a selected tile that resolves to nobody: say which tile
+            // is empty and offer the full team instead of a generic message.
+            if (viewLevel === 'team' && statusFilter !== 'all' && !searchQuery) {
+              return (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Users className="h-12 w-12 mx-auto mb-4 opacity-40" />
+                  <p className="font-medium text-foreground">
+                    No team members in this status right now
+                  </p>
+                  <p className="text-sm mt-1 max-w-md mx-auto">
+                    Nobody in your team currently sits in the selected status for this period.
+                  </p>
+                  <div className="mt-4">
+                    <Button variant="outline" size="sm" onClick={() => setStatusFilter('all')}>
+                      <Users className="h-4 w-4 mr-1.5" />
+                      Show all team members
+                    </Button>
+                  </div>
+                </div>
+              );
+            }
+
             // ADR-348 — the actionable queue legitimately resolves to zero when
             // every review is cleared. Say so explicitly and offer the full
             // downline instead of the misleading "No team members found".
