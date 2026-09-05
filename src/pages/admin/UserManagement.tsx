@@ -473,6 +473,20 @@ export default function UserManagement() {
     openAccessSheet(target, tab);
   }, [searchParams, profiles, accessUser]);
 
+  // Deep-link: /admin/users?edit=<user_id> — opens the existing edit dialog
+  // (ADR-361; used by the Team Reviews employee header "Edit" shortcut).
+  const editDeepLinkHandled = useRef<string | null>(null);
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (!editId || !profiles?.length) return;
+    if (editDeepLinkHandled.current === editId) return;
+    const target = profiles.find(p => p.id === editId);
+    if (!target) return;
+    editDeepLinkHandled.current = editId;
+    openEditDialog(target);
+  }, [searchParams, profiles]);
+
+
   // Filtered and paginated profiles
   // POLICY §120: debounce the search term so the 2,533-row in-memory filter
   // does not recompute on every keystroke. Other filters (role/dept/status)
