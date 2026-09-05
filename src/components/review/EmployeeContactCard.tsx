@@ -50,7 +50,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   );
 }
 
-export function EmployeeContactCard({ employee, departmentName, onViewKpis, children }: EmployeeContactCardProps) {
+export function EmployeeContactCard({ employee, departmentName, onViewKpis, onEdit, children }: EmployeeContactCardProps) {
   const getInitials = (name: string | null) => {
     if (!name) return 'U';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
