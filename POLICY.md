@@ -7302,6 +7302,16 @@ FM stage); `all` shows the full mapped downline including members with no KRAs.
 Only members with zero KRAs are hidden by the default mode. Tile counters always
 reflect the full roster regardless of the selected mode.
 
+### §129b — Tile / list parity (ADR-360)
+Team Reviews tile COUNTS and grid MEMBERSHIP must be produced by the same
+predicate, `matchesTeamTile` in `src/lib/teamReviewTileFilter.ts`. Inline
+counting rules inside `EmployeeSelectorGrid` are forbidden. The KRA Set tile is
+relationship-inclusive (direct, skip-level, functional, full access) and carries
+no `self_review` stage requirement, because `kra_set` is the universal first
+state. When a tile/status filter is active the queue mode
+(`assigned`/`actionable`/`all`) is NOT applied on top of it.
+
+
 
 ### §KPI-HEADER-DISPLAY (amended, ADR-348b)
 For structured KPI rows the header paragraph renders the structured title only.
