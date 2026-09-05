@@ -105,3 +105,9 @@
 - [x] Rows pivoted on category + KRA + resolved title (variant de-duplication)
 - [x] Four exportable registry columns + labelled tooltip blocks
 - [x] Tests (6/6), ADR-358, POLICY §KPI-TEXT-DISPLAY-SSOT addendum, DOCUMENTATION v2.66.358
+
+## ADR-360 — Team Reviews tile/list parity (done)
+- [x] `matchesTeamTile` is the single predicate for tile counts and grid membership
+- [x] KRA Set tile relationship-inclusive; no `self_review` stage requirement
+- [x] Queue mode skipped while a tile/status filter is active + dedicated empty state
+- [x] Tests (`teamReviewTileFilter.test.ts`), ADR-360, POLICY §129b, DOCUMENTATION
