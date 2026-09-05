@@ -7394,3 +7394,11 @@ and KPI title as separate lines when one duplicates the other (normalised
 40-char prefix match). Org-level provenance MUST be a single muted line, not
 stacked badges, and MUST NOT be duplicated by a header tooltip icon. Toolbars
 above card lists MUST wrap rather than overflow the viewport.
+
+## §132 — Employee header contact & admin edit shortcut (ADR-361)
+The employee header on a scorecard must expose contact details through the shared
+`EmployeeContactCard` — never a second contact UI. The "Edit" action is admin-only
+(`effectiveRole === 'admin'`) and must deep-link into the existing Employee Master
+edit dialog (`/admin/users?edit=<id>`); duplicating master-field editing outside
+User Management is forbidden. Adding a contact attribute means widening the shared
+card, not the call sites.

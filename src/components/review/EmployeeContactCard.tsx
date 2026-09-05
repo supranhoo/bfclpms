@@ -3,7 +3,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Mail, Phone, Copy, Check, ArrowRight } from 'lucide-react';
+import { Mail, Phone, Copy, Check, ArrowRight, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatEmployeeName } from '@/lib/utils';
 
@@ -19,9 +19,13 @@ interface EmployeeContactCardProps {
     employee_code?: string | null;
   };
   departmentName?: string | null;
-  onViewKpis: () => void;
+  /** Optional — when omitted the "View KPIs" action is hidden (e.g. already on the scorecard). */
+  onViewKpis?: () => void;
+  /** Optional admin shortcut — opens the existing Employee Master edit dialog. */
+  onEdit?: () => void;
   children: React.ReactNode;
 }
+
 
 function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -46,7 +50,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   );
 }
 
-export function EmployeeContactCard({ employee, departmentName, onViewKpis, children }: EmployeeContactCardProps) {
+export function EmployeeContactCard({ employee, departmentName, onViewKpis, onEdit, children }: EmployeeContactCardProps) {
   const getInitials = (name: string | null) => {
     if (!name) return 'U';
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -109,23 +113,39 @@ export function EmployeeContactCard({ employee, departmentName, onViewKpis, chil
         <Separator />
 
         {/* Actions */}
-        <div className="p-3 flex items-center justify-between gap-2">
+        <div className="p-3 flex items-center justify-between gap-2 flex-wrap">
           <div className="flex gap-1.5">
             <CopyButton value={employee.email} label="Email" />
             {employee.mobile_number && (
               <CopyButton value={employee.mobile_number} label="Mobile" />
             )}
           </div>
-          <Button
-            size="sm"
-            variant="default"
-            className="h-7 text-xs gap-1.5"
-            onClick={(e) => { e.stopPropagation(); onViewKpis(); }}
-          >
-            View KPIs
-            <ArrowRight className="h-3 w-3" />
-          </Button>
+          <div className="flex gap-1.5">
+            {onEdit && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1.5"
+                onClick={(e) => { e.stopPropagation(); onEdit(); }}
+              >
+                <Pencil className="h-3 w-3" />
+                Edit
+              </Button>
+            )}
+            {onViewKpis && (
+              <Button
+                size="sm"
+                variant="default"
+                className="h-7 text-xs gap-1.5"
+                onClick={(e) => { e.stopPropagation(); onViewKpis(); }}
+              >
+                View KPIs
+                <ArrowRight className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
         </div>
+
       </PopoverContent>
     </Popover>
   );

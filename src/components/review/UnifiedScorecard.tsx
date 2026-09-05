@@ -73,7 +73,10 @@ import {
   ArrowLeft, Target, CheckCircle2, Clock, 
   Info, Lock, MessageSquare, Undo2, Check, Eye, ChevronDown, ChevronUp, History, Edit2, Send, Shield, Briefcase, User, CalendarDays, UserCheck, ClipboardCheck, AlertTriangle, X, Ban, RefreshCw, Copy
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { EmployeeContactCard } from '@/components/review/EmployeeContactCard';
 import { SelfReviewSheet } from '@/components/review/SelfReviewSheet';
+
 import { ProfileCard } from '@/components/dashboard/ProfileCard';
 import { useKraCategories } from '@/hooks/useOrganization';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -126,7 +129,10 @@ interface EmployeeProfile {
   employee_code: string | null;
   avatar_url: string | null;
   department_id: string | null;
+  /** Optional — powers the header contact popover (ADR-361). */
+  mobile_number?: string | null;
   departments?: { id: string; name: string; code: string | null } | null;
+
 }
 
 // Import PeriodSelection type
@@ -231,6 +237,8 @@ export function UnifiedScorecard({
   const isMobile = isMobileRaw || isTablet;
   const { user, effectiveRole } = useAuth();
   const isAdmin = effectiveRole === 'admin';
+  const navigate = useNavigate();
+
   const [zeroScoreDialogOpen, setZeroScoreDialogOpen] = useState(false);
   const [rolloverDialogOpen, setRolloverDialogOpen] = useState(false);
   const [copyKrasOpen, setCopyKrasOpen] = useState(false);
@@ -1605,20 +1613,40 @@ export function UnifiedScorecard({
                 {getInitials(employee.full_name)}
               </AvatarFallback>
             </Avatar>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg sm:text-xl font-bold truncate">{employee.full_name || employee.email}</h1>
-                {employee.employee_code && (
-                  <span className="text-xs sm:text-sm text-muted-foreground">({employee.employee_code})</span>
-                )}
-              </div>
-              <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                {employee.designation || 'Employee'}
-                {employee.departments?.name && (
-                  <span><span className="text-border"> | </span>{employee.departments.name}</span>
-                )}
-              </p>
-            </div>
+            <EmployeeContactCard
+              employee={{
+                id: employee.id,
+                full_name: employee.full_name,
+                email: employee.email,
+                designation: employee.designation,
+                avatar_url: employee.avatar_url,
+                department_id: employee.department_id,
+                employee_code: employee.employee_code,
+                mobile_number: (employee as any).mobile_number ?? null,
+              }}
+              departmentName={employee.departments?.name}
+              onEdit={isAdmin ? () => navigate(`/admin/users?edit=${employee.id}`) : undefined}
+            >
+              <button
+                type="button"
+                className="min-w-0 text-left min-h-[44px] rounded-md px-1 -mx-1 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+                title="Click to view contact info"
+              >
+                <div className="flex items-center gap-2">
+                  <h1 className="text-lg sm:text-xl font-bold truncate">{employee.full_name || employee.email}</h1>
+                  {employee.employee_code && (
+                    <span className="text-xs sm:text-sm text-muted-foreground">({employee.employee_code})</span>
+                  )}
+                </div>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                  {employee.designation || 'Employee'}
+                  {employee.departments?.name && (
+                    <span><span className="text-border"> | </span>{employee.departments.name}</span>
+                  )}
+                </p>
+              </button>
+            </EmployeeContactCard>
+
           </div>
         )}
 
